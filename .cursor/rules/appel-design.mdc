@@ -1,0 +1,14 @@
+---
+description: Apple-like UI. Interdit les thèmes dégradés génériques (IA) sur les écrans.
+globs: **/*.{tsx,jsx}
+alwaysApply: false
+---
+
+# Appel design
+
+Read and follow `~/.cursor/skills/appel-design/SKILL.md` when changing UI.
+
+- No rainbow / pink-orange gradients on screens, headers, or lists
+- Buy CTA gradient only on the actual pay/buy button
+- Use `useColors()` / `src/theme.ts` — no new palette
+- Full labels, contrast in light and dark, 44pt hits, safe area

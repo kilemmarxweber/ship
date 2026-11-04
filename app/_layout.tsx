@@ -1,56 +1,135 @@
-import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
+import "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { AuthSheet } from "@/components/auth/AuthSheet";
+import { ToastHost } from "@/components/Toast";
+import { api } from "@/src/api";
+import { useCart } from "@/src/cart-store";
+import { hydrateOffline } from "@/src/offline/hydrate";
+import { injectSnapshots } from "@/src/offline/persist";
+import { startSilentSync } from "@/src/offline/sync";
+import { usePrefs } from "@/src/prefs";
+import { useSession } from "@/src/session";
+import { paletteOf } from "@/src/theme";
+import { watchStoreUpdates } from "@/src/updates";
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from "expo-router";
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  anchor: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 45_000,
+      gcTime: 24 * 60 * 60 * 1000,
+      networkMode: "offlineFirst",
+      retry: 1,
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  const hydrate = useSession((state) => state.hydrate);
+  const token = useSession((state) => state.token);
+  const refreshCart = useCart((state) => state.refresh);
+  const hydratePrefs = usePrefs((state) => state.hydrate);
+  const applyRemote = usePrefs((state) => state.applyRemote);
+  const theme = usePrefs((state) => state.theme);
+  const palette = paletteOf(theme);
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+    let stopSync: (() => void) | undefined;
+    void Promise.all([hydrate(), hydratePrefs()])
+      .then(() => hydrateOffline(queryClient))
+      .catch(() => undefined)
+      .finally(() => {
+        void SplashScreen.hideAsync();
+        stopSync = startSilentSync(queryClient);
+      });
+    return () => stopSync?.();
+  }, [hydrate, hydratePrefs]);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    injectSnapshots(queryClient, token);
+  }, [token]);
 
-  if (!loaded) {
-    return null;
-  }
+  useEffect(() => {
+    if (!token) return;
+    void api<{ user?: { locale?: string | null; theme?: string | null } }>(
+      "/api/profile",
+    )
+      .then((data) => {
+        if (data.user) {
+          void applyRemote({
+            locale: data.user.locale,
+            theme: data.user.theme,
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, [applyRemote, token]);
 
-  return <RootLayoutNav />;
-}
+  useEffect(() => {
+    if (__DEV__) return;
+    return watchStoreUpdates();
+  }, []);
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    void refreshCart();
+  }, [token, refreshCart]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor: palette.background }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style={theme === "light" ? "dark" : "light"} />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.background },
+          }}
+        >
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="profile" />
+          <Stack.Screen name="events/[id]" />
+          <Stack.Screen name="tickets" />
+          <Stack.Screen name="profile/ticket-scan" />
+          <Stack.Screen name="community" />
+          <Stack.Screen name="live" />
+          <Stack.Screen name="kyc" />
+          <Stack.Screen name="modal" />
+          <Stack.Screen name="wallet" />
+          <Stack.Screen name="orders" />
+          <Stack.Screen name="wanted/[id]" />
+          <Stack.Screen name="product/[id]" />
+          <Stack.Screen name="courier" />
+          <Stack.Screen name="seller/products" />
+          <Stack.Screen name="seller/reports" />
+          <Stack.Screen name="shops/index" />
+          <Stack.Screen name="shops/contacts" />
+          <Stack.Screen name="shops/orders" />
+          <Stack.Screen name="shops/delivery" />
+          <Stack.Screen name="shops/kyc" />
+          <Stack.Screen name="shops/messaging" />
+          <Stack.Screen name="shops/admin/[page]" />
+          <Stack.Screen name="creator" />
+          <Stack.Screen name="legal/cgu" />
+          <Stack.Screen name="legal/aide" />
+          <Stack.Screen name="legal/shiprewards" />
+          <Stack.Screen name="legal/confidentialite" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <AuthSheet />
+        <ToastHost />
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -374,7 +374,22 @@ export function ChallengeCard({
       >
         {challenge.body}
       </Text>
-      {challenge.product ? (
+      {challenge.event ? (
+        <View style={styles.cue}>
+          <Text style={styles.chipEmoji}>🎟️</Text>
+          <Text style={styles.cueText} numberOfLines={1}>
+            Billet · {challenge.event.title}
+          </Text>
+          {challenge.event.fromPriceCents != null ? (
+            <Text style={styles.cuePrice}>
+              {formatMoney(
+                challenge.event.fromPriceCents,
+                challenge.event.currency,
+              )}
+            </Text>
+          ) : null}
+        </View>
+      ) : challenge.product ? (
         <View style={styles.cue}>
           <Text style={styles.chipEmoji}>🛍️</Text>
           <Text style={styles.cueText} numberOfLines={1}>

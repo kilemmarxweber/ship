@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ReelGallery } from "@/components/feed/ReelGallery";
 import { ReelCover, ReelSoundtrack } from "@/components/feed/ReelVideo";
@@ -19,7 +18,6 @@ export function DiscoverCard({
   playing,
   muted,
   videoBadge,
-  delay,
   onFocus,
   onMute,
   onBuy,
@@ -30,7 +28,6 @@ export function DiscoverCard({
   playing: boolean;
   muted: boolean;
   videoBadge?: boolean;
-  delay?: number;
   onFocus: () => void;
   onMute: () => void;
   onBuy: () => void;
@@ -47,13 +44,7 @@ export function DiscoverCard({
         : null;
 
   return (
-    <Animated.View
-      entering={FadeInDown.delay(delay ?? 0)
-        .springify()
-        .damping(16)
-        .stiffness(160)}
-      style={[styles.wrap, { width, height }]}
-    >
+    <View style={[styles.wrap, { width, height }]}>
       {playing ? (
         <ReelGallery
           urls={urls}
@@ -155,7 +146,7 @@ export function DiscoverCard({
           )}
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 

@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EventPoster } from "@/components/events/EventPoster";
 import { api, apiPayment } from "@/src/api";
 import { formatMoney } from "@/src/format";
+import { convertCents, eventFxRates } from "@/src/fx";
 import { useT } from "@/src/i18n";
 import {
     clearPaymentIdempotencyKey,
@@ -16,6 +17,7 @@ import { useSession } from "@/src/session";
 import type { PublicEvent } from "@/src/tickets";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
+import { parseWalletCurrency } from "@/src/wallet";
 
 export function EventScreen({ eventId }: { eventId: string }) {
   const insets = useSafeAreaInsets();
@@ -32,8 +34,25 @@ export function EventScreen({ eventId }: { eventId: string }) {
     queryKey: ["event", eventId],
     queryFn: () => api<{ event: PublicEvent }>(`/api/events/${eventId}`),
   });
+  const wallet = useQuery({
+    queryKey: ["wallet", token ?? "guest"],
+    enabled: Boolean(token),
+    queryFn: () =>
+      api<{ displayCurrency?: string; wallet?: { currency?: string } }>(
+        "/api/wallet",
+      ),
+  });
+  const displayCurrency = parseWalletCurrency(
+    wallet.data?.displayCurrency ?? wallet.data?.wallet?.currency,
+  );
   const row = event.data?.event;
   const selected = typeId ?? row?.ticketTypes[0]?.id ?? null;
+  const fx = eventFxRates(row);
+  const fromCents =
+    row?.fromPriceCents ??
+    (row?.ticketTypes.length
+      ? Math.min(...row.ticketTypes.map((type) => type.priceCents))
+      : null);
 
   async function buy() {
     if (!token) {
@@ -82,26 +101,53 @@ export function EventScreen({ eventId }: { eventId: string }) {
         paddingTop: insets.top + 12,
         padding: 16,
         gap: 12,
+        paddingBottom: insets.bottom + 28,
       }}
     >
       <Pressable onPress={() => router.back()}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
-      {row?.imageUrl ? (
-        <Image
-          source={{ uri: row.imageUrl }}
+      {row ? (
+        <EventPoster
+          eventId={row.id}
+          imageUrl={row.imageUrl}
+          title={row.title}
+          organizerName={row.organizerName}
+          kind={row.organizerKind}
+          tall
+          priceLabel={
+            fromCents != null
+              ? `dès ${formatMoney(
+                  convertCents(fromCents, row.currency, displayCurrency, fx),
+                  displayCurrency,
+                )}`
+              : null
+          }
+          buyLabel="Acheter billet"
           style={styles.cover}
-          contentFit="cover"
         />
-      ) : null}
+      ) : (
+        <View style={[styles.cover, { backgroundColor: c.card }]} />
+      )}
       <Text style={[styles.kicker, { color: c.textMuted }]}>
+        {row?.organizerKind === "ORGANIZATION" ? "Organisation" : "Artiste"} ·{" "}
         {row?.organizerName}
       </Text>
       <Text style={[styles.title, { color: c.text }]}>{row?.title ?? "…"}</Text>
       <Text style={{ color: c.textMuted }}>
         {row ? `${row.venue}, ${row.city}` : ""}
       </Text>
-      <Text style={{ color: c.textMuted }}>{row?.description}</Text>
+      {row?.description ? (
+        <Text style={{ color: c.textMuted }}>{row.description}</Text>
+      ) : null}
+      {row ? (
+        <Text style={{ color: c.textMuted, fontSize: 12 }}>
+          Taux du jour figé · 1 $US = {fx.cdfPerUsd} CDF
+          {row.currency !== displayCurrency
+            ? ` · prix affichés en ${displayCurrency}`
+            : ""}
+        </Text>
+      ) : null}
       {row?.ticketTypes.map((type) => (
         <Pressable
           key={type.id}
@@ -116,9 +162,19 @@ export function EventScreen({ eventId }: { eventId: string }) {
           ]}
         >
           <Text style={{ color: c.text, fontWeight: "700" }}>{type.name}</Text>
-          <Text style={{ color: c.emerald }}>
-            {formatMoney(type.priceCents, row.currency)}
-          </Text>
+          <View style={{ alignItems: "flex-end", gap: 2 }}>
+            <Text style={{ color: c.emerald, fontWeight: "800" }}>
+              {formatMoney(
+                convertCents(type.priceCents, row.currency, displayCurrency, fx),
+                displayCurrency,
+              )}
+            </Text>
+            {row.currency !== displayCurrency ? (
+              <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                {formatMoney(type.priceCents, row.currency)}
+              </Text>
+            ) : null}
+          </View>
         </Pressable>
       ))}
       <Pressable onPress={() => setAccepted((v) => !v)} style={styles.check}>
@@ -139,8 +195,8 @@ export function EventScreen({ eventId }: { eventId: string }) {
 }
 
 const styles = StyleSheet.create({
-  cover: { width: "100%", height: 180, borderRadius: 18 },
-  kicker: { fontSize: 12, textTransform: "uppercase" },
+  cover: { width: "100%", height: 240, borderRadius: 20 },
+  kicker: { fontSize: 12, textTransform: "uppercase", fontWeight: "700" },
   title: { fontSize: 24, fontWeight: "800", includeFontPadding: false },
   type: {
     borderWidth: 1,

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,8 +11,12 @@ import {
     View,
 } from "react-native";
 
-import { api } from "@/src/api";
+import { EventPoster } from "@/components/events/EventPoster";
+import { api, apiUpload, mediaUrl } from "@/src/api";
+import { EVENT_POSTERS, eventPosterUrl } from "@/src/event-poster";
 import { formatMoney } from "@/src/format";
+import { pickMediaLibrary } from "@/src/pick-media";
+import { DEFAULT_FX_CDF } from "@/src/product-options";
 import {
     FLASH_DATE_PLACEHOLDER,
     FLASH_TIME_PLACEHOLDER,
@@ -23,6 +28,7 @@ import {
 import { HAIRLINE } from "@/src/theme";
 import type { PublicEvent } from "@/src/tickets";
 import { showToast } from "@/src/toast";
+import { appendUploadFile } from "@/src/upload-file";
 import { useColors } from "@/src/use-colors";
 
 type Sales = {
@@ -126,6 +132,9 @@ export function EventTicketSettings() {
   const [price, setPrice] = useState("10");
   const [quota, setQuota] = useState("100");
   const [currency, setCurrency] = useState("USD");
+  const [fxCdf, setFxCdf] = useState(String(DEFAULT_FX_CDF));
+  const [fxConfirmed, setFxConfirmed] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
 
   const load = useCallback(async () => {
     const [ev, rf] = await Promise.all([
@@ -220,6 +229,9 @@ export function EventTicketSettings() {
     setPrice("10");
     setQuota("100");
     setCurrency("USD");
+    setFxCdf(String(DEFAULT_FX_CDF));
+    setFxConfirmed(false);
+    setImageUrl("");
   }
 
   function fill(event: PublicEvent) {
@@ -227,6 +239,7 @@ export function EventTicketSettings() {
     setTitle(event.title);
     setVenue(event.venue);
     setCity(event.city);
+    setImageUrl(event.imageUrl ?? "");
     setOrganizerKind(
       event.organizerKind === "ORGANIZATION" ? "ORGANIZATION" : "ARTIST",
     );
@@ -245,6 +258,8 @@ export function EventTicketSettings() {
     setEndDate(end.date);
     setEndTime(end.time);
     setCurrency(event.currency);
+    setFxCdf(String(event.fxCdfPerUsd ?? DEFAULT_FX_CDF));
+    setFxConfirmed(true);
     const type = event.ticketTypes[0];
     if (type) {
       setPrice(String(type.priceCents / 100));
@@ -271,6 +286,11 @@ export function EventTicketSettings() {
         showToast("Indique début et fin");
         return;
       }
+      if (!fxConfirmed) {
+        showToast("Valide le taux de change du jour");
+        return;
+      }
+      const fxCdfPerUsd = Number.parseInt(fxCdf, 10) || DEFAULT_FX_CDF;
       const data = await api<{ event?: PublicEvent; error?: string }>(
         "/api/admin/events",
         {
@@ -281,8 +301,12 @@ export function EventTicketSettings() {
             venue,
             city,
             currency,
+            fxCdfPerUsd,
             organizerKind,
             organizerName: typed,
+            imageUrl:
+              imageUrl.trim() ||
+              eventPosterUrl(null, `${title}|${organizerName}|${Date.now()}`),
             ...(userId ? { organizerUserId: userId } : {}),
             platformFeeMode: feeMode,
             platformFeeBps: Math.round(Number(feePct) * 100),
@@ -344,6 +368,33 @@ export function EventTicketSettings() {
       await load();
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Impossible");
+    }
+  }
+
+  async function uploadPoster() {
+    try {
+      setBusy(true);
+      const assets = await pickMediaLibrary({ kind: "images", limit: 1 });
+      const asset = assets[0];
+      if (!asset) return;
+      const form = new FormData();
+      appendUploadFile(form, asset);
+      form.append("variant", "product");
+      const uploaded = await apiUpload<{ url?: string }>("/api/upload", form);
+      if (!uploaded.url) throw new Error("Affiche non reçue");
+      setImageUrl(uploaded.url);
+      if (selectedId && selectedId !== "new") {
+        await api(`/api/admin/events/${selectedId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ imageUrl: uploaded.url }),
+        });
+        await load();
+      }
+      showToast("Affiche ajoutée");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Import impossible");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -552,6 +603,77 @@ export function EventTicketSettings() {
             </Pressable>
           ))}
 
+          <Text style={[styles.label, { color: c.text }]}>Affiche</Text>
+          <EventPoster
+            eventId={
+              selectedId === "new"
+                ? title || organizerName || "new"
+                : selectedId
+            }
+            imageUrl={imageUrl || null}
+            title={title || "Aperçu"}
+            organizerName={organizerName || undefined}
+            kind={organizerKind}
+            tall
+            style={styles.posterPreview}
+          />
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.posterStrip}
+          >
+            <Pressable
+              onPress={() => void uploadPoster()}
+              disabled={busy}
+              style={[styles.posterPick, { borderColor: c.buyStart }]}
+            >
+              <Ionicons name="image-outline" size={20} color={c.buyStart} />
+              <Text style={[styles.posterPickText, { color: c.buyStart }]}>
+                Importer
+              </Text>
+            </Pressable>
+            {EVENT_POSTERS.map((url) => {
+              const on = imageUrl === url;
+              return (
+                <Pressable
+                  key={url}
+                  onPress={() => {
+                    setImageUrl(url);
+                    if (selectedId && selectedId !== "new") {
+                      void api(`/api/admin/events/${selectedId}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ imageUrl: url }),
+                      })
+                        .then(() => {
+                          showToast("Affiche enregistrée");
+                          return load();
+                        })
+                        .catch(() => showToast("Affiche non sauvée"));
+                    }
+                  }}
+                  style={[
+                    styles.posterThumbWrap,
+                    on && { borderColor: c.buyStart },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: mediaUrl(url) ?? url }}
+                    style={styles.posterThumb}
+                    contentFit="cover"
+                  />
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {imageUrl ? (
+            <Pressable onPress={() => setImageUrl("")}>
+              <Text style={{ color: c.textMuted, fontSize: 12 }}>
+                Retirer l’affiche (affiche auto)
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Text style={[styles.label, { color: c.text }]}>Événement</Text>
           <TextInput
             value={title}
@@ -663,6 +785,35 @@ export function EventTicketSettings() {
               );
             })}
           </View>
+          <Text style={[styles.label, { color: c.text }]}>
+            Taux du jour (1 $US = N CDF)
+          </Text>
+          <TextInput
+            value={fxCdf}
+            onChangeText={(value) => {
+              setFxCdf(value.replace(/[^\d]/g, ""));
+              setFxConfirmed(false);
+            }}
+            keyboardType="number-pad"
+            placeholder={String(DEFAULT_FX_CDF)}
+            placeholderTextColor={c.textMuted}
+            style={inputStyle}
+            editable={selectedId === "new"}
+          />
+          {selectedId === "new" ? (
+            <Pressable
+              onPress={() => setFxConfirmed((v) => !v)}
+              style={styles.check}
+            >
+              <Text style={{ color: c.text }}>
+                {fxConfirmed ? "☑ " : "☐ "}Je valide le taux du jour
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={{ color: c.textMuted, fontSize: 12 }}>
+              Taux figé à la création — utilisé pour payer en $US / CDF / KW
+            </Text>
+          )}
           <View style={styles.row}>
             <TextInput
               value={price}
@@ -876,6 +1027,33 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: "800", includeFontPadding: false },
   hint: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   label: { fontSize: 13, fontWeight: "800", includeFontPadding: false },
+  posterPreview: {
+    width: "100%",
+    height: 200,
+    borderRadius: 18,
+    minHeight: 200,
+  },
+  posterStrip: { gap: 8, paddingRight: 8 },
+  posterPick: {
+    width: 72,
+    height: 96,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  posterPickText: { fontSize: 10, fontWeight: "800" },
+  posterThumbWrap: {
+    width: 72,
+    height: 96,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  posterThumb: { width: "100%", height: "100%" },
   chips: { flexDirection: "row", gap: 8, paddingRight: 8 },
   chip: {
     minHeight: 36,
@@ -967,6 +1145,7 @@ const styles = StyleSheet.create({
   },
   ghostText: { fontWeight: "800", fontSize: 13, includeFontPadding: false },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  check: { paddingVertical: 4 },
   kpis: { borderRadius: 14, borderWidth: 1, padding: 12, gap: 4 },
   kpiValue: { fontSize: 22, fontWeight: "800" },
   refund: { borderRadius: 14, borderWidth: 1, padding: 12, gap: 6 },

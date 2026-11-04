@@ -4,9 +4,11 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useIsFocused, type Href } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -15,15 +17,16 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DiscoverCard } from "@/components/discover/DiscoverCard";
+import { EventPoster } from "@/components/events/EventPoster";
 import { BuySheet } from "@/components/feed/Sheets";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { api, mediaUrl } from "@/src/api";
 import { templateFor } from "@/src/challenge-place";
-import { compactCount } from "@/src/format";
+import { compactCount, formatMoney } from "@/src/format";
+import { convertCents, eventFxRates } from "@/src/fx";
 import { coverOf, mediaList, productHasAudio } from "@/src/media";
 import { useSession } from "@/src/session";
 import { isListableProduct } from "@/src/stock";
@@ -36,6 +39,7 @@ import type {
     GrowthSurface,
     Product,
 } from "@/src/types";
+import { parseWalletCurrency } from "@/src/wallet";
 
 function asProduct(product: Product): Product {
   return {
@@ -64,10 +68,7 @@ function CategoryChip({
   const look = categoryLooks[name];
   return (
     <Pressable onPress={onPress} style={styles.catWrap}>
-      <Animated.View
-        entering={FadeInDown.springify().damping(16)}
-        style={styles.catInner}
-      >
+      <View style={styles.catInner}>
         <View
           style={[
             styles.catOrb,
@@ -89,7 +90,7 @@ function CategoryChip({
         >
           {name}
         </Text>
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -105,6 +106,7 @@ export function DiscoverScreen() {
   const [buyProduct, setBuyProduct] = useState<Product | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const stripFocusLock = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 220);
@@ -128,6 +130,18 @@ export function DiscoverScreen() {
     queryKey: ["public-events"],
     queryFn: () => api<{ events: PublicEvent[] }>("/api/events"),
   });
+
+  const wallet = useQuery({
+    queryKey: ["wallet", token ?? "guest"],
+    enabled: Boolean(token),
+    queryFn: () =>
+      api<{ displayCurrency?: string; wallet?: { currency?: string } }>(
+        "/api/wallet",
+      ),
+  });
+  const displayCurrency = parseWalletCurrency(
+    wallet.data?.displayCurrency ?? wallet.data?.wallet?.currency,
+  );
 
   const deals = useInfiniteQuery({
     queryKey: ["discover-deals"],
@@ -192,6 +206,7 @@ export function DiscoverScreen() {
 
   const stripW = Math.min(270, Math.round(width * 0.67));
   const stripH = 330;
+  const stripGap = 12;
   const colW = width / 2 - 12;
   const colH = colW * 1.42;
   const playing = Boolean(focused);
@@ -199,17 +214,75 @@ export function DiscoverScreen() {
   const highlights = surface.data?.highlights ?? [];
   const stories = surface.data?.stories ?? [];
 
+  const focusStrip = useCallback(
+    (prefix: string, items: Product[], offsetX: number) => {
+      if (!items.length) return;
+      const index = Math.max(
+        0,
+        Math.min(items.length - 1, Math.round(offsetX / (stripW + stripGap))),
+      );
+      const item = items[index];
+      if (!item) return;
+      const key = `${prefix}:${item.id}`;
+      stripFocusLock.current = true;
+      setFocusKey((current) => (current === key ? current : key));
+    },
+    [stripW],
+  );
+
+  const onViewableItemsChanged = useRef(
+    ({
+      viewableItems,
+    }: {
+      viewableItems: { isViewable: boolean; item?: Product }[];
+    }) => {
+      if (stripFocusLock.current) return;
+      const visible = viewableItems
+        .filter((row) => row.isViewable && row.item)
+        .map((row) => row.item as Product);
+      if (!visible.length) return;
+      const withSound = visible.find((item) => productHasAudio(item));
+      const pick = withSound ?? visible[0];
+      if (!pick) return;
+      const key = `results:${pick.id}`;
+      setFocusKey((current) => (current === key ? current : key));
+    },
+  ).current;
+
   async function joinChallenge(item: GrowthChallenge) {
     try {
-      await api("/api/growth/challenge", {
-        method: "POST",
-        body: JSON.stringify({ challengeId: item.id }),
-      });
+      const data = await api<{ eventId?: string | null; event?: { id: string } | null }>(
+        "/api/growth/challenge",
+        {
+          method: "POST",
+          body: JSON.stringify({ challengeId: item.id }),
+        },
+      );
       showToast("Challenge relevé.", "success");
       void surface.refetch();
+      const eventId = data.eventId ?? data.event?.id ?? item.event?.id;
+      if (eventId) {
+        router.push(`/events/${eventId}` as Href);
+      }
     } catch {
       showToast("Connecte-toi pour relever le challenge.", "info");
     }
+  }
+
+  function eventPriceLabel(event: PublicEvent) {
+    const cents =
+      event.fromPriceCents ??
+      (event.ticketTypes?.length
+        ? Math.min(...event.ticketTypes.map((type) => type.priceCents))
+        : null);
+    if (cents == null) return null;
+    const converted = convertCents(
+      cents,
+      event.currency,
+      displayCurrency,
+      eventFxRates(event),
+    );
+    return `dès ${formatMoney(converted, displayCurrency)}`;
   }
 
   function renderStrip(
@@ -219,6 +292,9 @@ export function DiscoverScreen() {
     videoBadge = false,
   ) {
     if (!items.length) return null;
+    const onStripScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      focusStrip(prefix, items, event.nativeEvent.contentOffset.x);
+    };
     return (
       <View style={styles.section}>
         <Text style={styles.kicker}>{title}</Text>
@@ -226,8 +302,16 @@ export function DiscoverScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.strip}
+          decelerationRate="fast"
+          snapToInterval={stripW + stripGap}
+          snapToAlignment="start"
+          disableIntervalMomentum
+          onScroll={onStripScroll}
+          scrollEventThrottle={64}
+          onMomentumScrollEnd={onStripScroll}
+          onScrollEndDrag={onStripScroll}
         >
-          {items.map((item, index) => {
+          {items.map((item) => {
             const key = `${prefix}:${item.id}`;
             return (
               <DiscoverCard
@@ -235,7 +319,6 @@ export function DiscoverScreen() {
                 product={item}
                 width={stripW}
                 height={stripH}
-                delay={index * 40}
                 videoBadge={videoBadge}
                 playing={playing && activeFocus === key}
                 muted={muted || activeFocus !== key}
@@ -255,7 +338,7 @@ export function DiscoverScreen() {
 
   const header = (
     <View style={{ paddingTop: insets.top + 8 }}>
-      <Animated.View entering={FadeInDown.springify().damping(16)}>
+      <View>
         <Text style={styles.hero}>Découvrir</Text>
         <View style={styles.search}>
           <Ionicons name="search" size={18} color="rgba(255,255,255,0.55)" />
@@ -267,7 +350,7 @@ export function DiscoverScreen() {
             style={styles.searchInput}
           />
         </View>
-      </Animated.View>
+      </View>
 
       {!searching && (liveEvents.data?.events?.length ?? 0) > 0 ? (
         <View style={styles.section}>
@@ -283,21 +366,16 @@ export function DiscoverScreen() {
                 style={styles.eventCard}
                 onPress={() => router.push(`/events/${event.id}` as Href)}
               >
-                {event.imageUrl ? (
-                  <Image
-                    source={{ uri: mediaUrl(event.imageUrl) ?? event.imageUrl }}
-                    style={styles.eventCover}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View style={styles.eventCover} />
-                )}
-                <Text style={styles.eventTitle} numberOfLines={1}>
-                  {event.title}
-                </Text>
-                <Text style={styles.eventMeta} numberOfLines={1}>
-                  {event.organizerName}
-                </Text>
+                <EventPoster
+                  eventId={event.id}
+                  imageUrl={event.imageUrl}
+                  title={event.title}
+                  organizerName={event.organizerName}
+                  kind={event.organizerKind}
+                  priceLabel={eventPriceLabel(event)}
+                  buyLabel="Acheter billet"
+                  style={styles.eventCover}
+                />
               </Pressable>
             ))}
           </ScrollView>
@@ -307,10 +385,7 @@ export function DiscoverScreen() {
       {searching ? <Text style={styles.sectionHead}>Résultats</Text> : null}
 
       {!searching && challenge ? (
-        <Animated.View
-          entering={FadeInRight.springify().damping(16)}
-          style={styles.challengeCard}
-        >
+        <View style={styles.challengeCard}>
           <ChallengeCard
             challenge={challenge}
             template={templateFor(challenge.id, 0)}
@@ -318,7 +393,7 @@ export function DiscoverScreen() {
             compact
             onJoin={() => void joinChallenge(challenge)}
           />
-        </Animated.View>
+        </View>
       ) : null}
 
       {!searching && highlights.length ? (
@@ -335,13 +410,7 @@ export function DiscoverScreen() {
               );
               const cover = urls[0];
               return (
-                <Animated.View
-                  key={item.id}
-                  entering={FadeInDown.delay(index * 60)
-                    .springify()
-                    .damping(16)}
-                  style={styles.highlight}
-                >
+                <View key={item.id} style={styles.highlight}>
                   {cover ? (
                     <Image
                       source={{ uri: cover }}
@@ -364,7 +433,7 @@ export function DiscoverScreen() {
                   <Text style={styles.highlightMeta}>
                     {compactCount(item.viewsCount)} vues
                   </Text>
-                </Animated.View>
+                </View>
               );
             })}
           </View>
@@ -514,11 +583,22 @@ export function DiscoverScreen() {
             if (feed.hasNextPage && !feed.isFetchingNextPage)
               void feed.fetchNextPage();
           }}
+          onScroll={(event) => {
+            if (event.nativeEvent.contentOffset.y > 80) {
+              stripFocusLock.current = false;
+            }
+          }}
+          scrollEventThrottle={80}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{
+            itemVisiblePercentThreshold: 55,
+            waitForInteraction: false,
+          }}
           ListEmptyComponent={
             <Text style={styles.emptyText}>Aucun résultat</Text>
           }
           extraData={{ activeFocus, muted, playing }}
-          renderItem={({ item, index }) => {
+          renderItem={({ item }) => {
             const key = `results:${item.id}`;
             return (
               <View style={styles.gridItem}>
@@ -526,7 +606,6 @@ export function DiscoverScreen() {
                   product={item}
                   width={colW}
                   height={colH}
-                  delay={(index % 6) * 30}
                   playing={playing && activeFocus === key}
                   muted={muted || activeFocus !== key}
                   onFocus={() => setFocusKey(key)}
@@ -635,16 +714,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   strip: { paddingHorizontal: 16, gap: 12 },
-  eventCard: { width: 148 },
+  eventCard: { width: 168 },
   eventCover: {
-    width: 148,
-    height: 92,
-    borderRadius: 16,
+    width: 168,
+    height: 210,
+    borderRadius: 18,
     backgroundColor: "#16161F",
-    marginBottom: 6,
   },
-  eventTitle: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  eventMeta: { color: "rgba(255,255,255,0.55)", fontSize: 11 },
   highlightGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

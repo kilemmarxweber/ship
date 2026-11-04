@@ -227,11 +227,14 @@ export function FeedScreen() {
     return false;
   }, [openAuth, token]);
 
-  async function joinChallenge(id: string) {
+  async function joinChallenge(id: string, eventId?: string | null) {
     if (!requireAuth()) return;
     setBusyChallengeId(id);
     try {
-      await api("/api/growth/challenge", {
+      const data = await api<{
+        eventId?: string | null;
+        event?: { id: string } | null;
+      }>("/api/growth/challenge", {
         method: "POST",
         body: JSON.stringify({ challengeId: id }),
       });
@@ -246,6 +249,10 @@ export function FeedScreen() {
           : current,
       );
       showToast("Challenge relevé.", "success");
+      const nextEventId = data.eventId ?? data.event?.id ?? eventId;
+      if (nextEventId) {
+        router.push(`/events/${nextEventId}` as Href);
+      }
     } catch {
       showToast("Connecte-toi pour relever le challenge.", "info");
     } finally {
@@ -726,7 +733,12 @@ export function FeedScreen() {
                       playing={index === active && focused && !paused}
                       busy={busyChallengeId === row.challenge.id}
                       bottomGutter={bottom}
-                      onJoin={() => void joinChallenge(row.challenge.id)}
+                      onJoin={() =>
+                        void joinChallenge(
+                          row.challenge.id,
+                          row.challenge.event?.id,
+                        )
+                      }
                     />
                   </View>
                 );

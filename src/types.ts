@@ -89,6 +89,18 @@ export type GrowthChallenge = {
     image: string | null;
     href: string | null;
   } | null;
+  event?: {
+    id: string;
+    title: string;
+    imageUrl?: string | null;
+    currency: string;
+    fxCdfPerUsd?: number;
+    fxKwPerUsd?: number;
+    organizerName?: string;
+    organizerKind?: string;
+    status?: string;
+    fromPriceCents?: number | null;
+  } | null;
 };
 
 export type GrowthLive = {

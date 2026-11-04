@@ -16,6 +16,10 @@ export type PublicEvent = {
   venue: string;
   city: string;
   currency: string;
+  fxCdfPerUsd?: number;
+  fxKwPerUsd?: number;
+  fxRateUpdatedAt?: string | null;
+  fromPriceCents?: number | null;
   status: string;
   organizerKind: string;
   organizerName: string;

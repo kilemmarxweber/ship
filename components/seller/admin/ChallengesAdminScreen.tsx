@@ -43,6 +43,14 @@ type ChallengeRow = {
   completions: number;
   productFocus?: Focus | string | null;
   productId?: string | null;
+  eventId?: string | null;
+  event?: {
+    id: string;
+    title: string;
+    imageUrl?: string | null;
+    currency?: string;
+    organizerName?: string;
+  } | null;
   productTeaser?: {
     title?: string;
     image?: string | null;
@@ -61,6 +69,14 @@ type ChallengeRow = {
     category: string;
     shop: { name: string };
   } | null;
+};
+
+type EventHit = {
+  id: string;
+  title: string;
+  status?: string;
+  organizerName?: string;
+  currency?: string;
 };
 
 type CatalogItem = { title: string; body: string; category: string };
@@ -111,6 +127,7 @@ export function ChallengesAdminScreen() {
   const [teaserNote, setTeaserNote] = useState("");
   const [teaserImage, setTeaserImage] = useState<string[]>([]);
   const [spotlight, setSpotlight] = useState<string[]>([]);
+  const [eventId, setEventId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
 
@@ -125,6 +142,14 @@ export function ChallengesAdminScreen() {
       }>("/api/admin/challenges"),
     retry: false,
   });
+
+  const eventsQ = useQuery({
+    queryKey: ["admin-events-for-challenge", token ?? "guest"],
+    enabled: Boolean(token),
+    queryFn: () => api<{ events?: EventHit[] }>("/api/admin/events"),
+    retry: false,
+  });
+  const eventOptions = eventsQ.data?.events ?? [];
 
   const active = q.data?.active ?? [];
   const recent = q.data?.recent ?? [];
@@ -147,6 +172,7 @@ export function ChallengesAdminScreen() {
     setTeaserNote("");
     setTeaserImage([]);
     setSpotlight([]);
+    setEventId(null);
   }
 
   function startEdit(row: ChallengeRow) {
@@ -156,6 +182,7 @@ export function ChallengesAdminScreen() {
     setCategory((row.category as (typeof categories)[number]) || "Mode");
     setCity(row.city || "Kinshasa");
     setHours("24");
+    setEventId(row.eventId ?? row.event?.id ?? null);
     const f = focusOf(row);
     setFocus(f);
     if (f === "catalog" && row.product) {
@@ -256,6 +283,7 @@ export function ChallengesAdminScreen() {
             body: body.trim() || undefined,
             category,
             city: city.trim() || "Kinshasa",
+            eventId,
             ...focusPayload,
             ...spotlightPayload,
           }),
@@ -270,6 +298,7 @@ export function ChallengesAdminScreen() {
             category,
             city: city.trim() || "Kinshasa",
             hours: Number.parseInt(hours, 10) || 24,
+            eventId,
             ...focusPayload,
             ...spotlightPayload,
           }),
@@ -397,11 +426,13 @@ export function ChallengesAdminScreen() {
               {row.completions} complétions
             </Text>
             <Text style={{ color: c.primary, fontSize: 11, fontWeight: "700" }}>
-              {focusOf(row) === "catalog" && row.product
-                ? `Boutique · ${row.product.title}`
-                : focusOf(row) === "teaser"
-                  ? `Aperçu · ${row.productTeaser?.title ?? ""}`
-                  : "Mission libre"}
+              {row.event?.title
+                ? `🎟️ Event · ${row.event.title}`
+                : focusOf(row) === "catalog" && row.product
+                  ? `Boutique · ${row.product.title}`
+                  : focusOf(row) === "teaser"
+                    ? `Aperçu · ${row.productTeaser?.title ?? ""}`
+                    : "Mission libre"}
             </Text>
           </View>
         </View>
@@ -612,6 +643,67 @@ export function ChallengesAdminScreen() {
             <Text style={{ color: c.textMuted, fontSize: 11 }}>
               {FOCUS_OPTIONS.find((o) => o.id === focus)?.hint}
             </Text>
+
+            <Text style={[styles.label, { color: c.textMuted }]}>
+              Event billet (optionnel)
+            </Text>
+            <Text style={{ color: c.textMuted, fontSize: 11 }}>
+              « Je relève » ouvre la fiche Event pour acheter un billet
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <Pressable
+                  onPress={() => setEventId(null)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: !eventId
+                        ? c.primary
+                        : "rgba(127,127,140,0.12)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: !eventId ? c.primaryForeground : c.textMuted,
+                      fontWeight: "700",
+                      fontSize: 11,
+                    }}
+                  >
+                    Aucun
+                  </Text>
+                </Pressable>
+                {eventOptions.map((event) => {
+                  const on = eventId === event.id;
+                  return (
+                    <Pressable
+                      key={event.id}
+                      onPress={() => setEventId(event.id)}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: on
+                            ? c.emerald
+                            : "rgba(127,127,140,0.12)",
+                          maxWidth: 180,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: on ? "#04140E" : c.text,
+                          fontWeight: "700",
+                          fontSize: 11,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {event.title}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
 
             {focus === "catalog" ? (
               <AdminProductPicker

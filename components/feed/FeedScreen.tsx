@@ -95,6 +95,9 @@ export function FeedScreen() {
   const [active, setActive] = useState(0);
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
   const weaveMemory = useRef(emptyWeaveMemory());
+  const activeRowKeyRef = useRef<string | null>(null);
+  const restoreRowKeyRef = useRef<string | null>(null);
+  const wasOnlineRef = useRef(online);
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -195,14 +198,67 @@ export function FeedScreen() {
 
   useEffect(() => {
     const row = feedRows[active];
-    if (row?.kind === "item") kvSet("lastProductId", row.item.id);
+    if (!row) return;
+    activeRowKeyRef.current = row.key;
+    if (row.kind === "item") kvSet("lastProductId", row.item.id);
   }, [active, feedRows]);
+
+  // Reconnexion: garder le produit / challenge actif après le refresh auto.
+  useEffect(() => {
+    const becameOnline = !wasOnlineRef.current && online;
+    wasOnlineRef.current = online;
+    if (becameOnline) {
+      restoreRowKeyRef.current =
+        activeRowKeyRef.current ?? feedRows[active]?.key ?? null;
+    }
+  }, [online, active, feedRows]);
+
+  useEffect(() => {
+    const targetKey = restoreRowKeyRef.current;
+    if (!online || !targetKey || !isReelTab) return;
+    if (feed.isFetching && !feed.data) return;
+
+    const index = feedRows.findIndex((row) => row.key === targetKey);
+    if (index < 0) {
+      // Produit encore absent (pages suivantes) — on retentera au prochain update.
+      return;
+    }
+
+    restoreRowKeyRef.current = null;
+    if (index === active) return;
+
+    setActive(index);
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToIndex({
+          index,
+          animated: false,
+          viewPosition: 0,
+        });
+      } catch {
+        listRef.current?.scrollToOffset({
+          offset: index * height,
+          animated: false,
+        });
+      }
+    });
+  }, [
+    online,
+    feedRows,
+    feed.isFetching,
+    feed.dataUpdatedAt,
+    feed.data,
+    active,
+    isReelTab,
+    height,
+  ]);
 
   function selectTab(next: FeedTab) {
     setTab(next);
     setActive(0);
     setPaused(false);
     setMuted(false);
+    restoreRowKeyRef.current = null;
   }
 
   const settleCard = useCallback(

@@ -1,6 +1,6 @@
 /** Web fallback: in-memory only (expo-sqlite wasm is unavailable in this Metro setup). */
 
-const SCHEMA = 1;
+const SCHEMA = 2;
 const SNAPSHOT_CAP = 400_000;
 
 export type OutboxRow = {
@@ -13,9 +13,22 @@ export type OutboxRow = {
   tries: number;
 };
 
+export type MediaCacheKind = "image" | "video" | "audio";
+
+export type MediaCacheRow = {
+  remoteUrl: string;
+  localUri: string;
+  kind: MediaCacheKind;
+  mimeType: string;
+  ext: string;
+  bytes: number;
+  updatedAt: number;
+};
+
 const memKv = new Map<string, string>();
 const memSnap = new Map<string, string>();
 const memOutbox: OutboxRow[] = [];
+const memMedia = new Map<string, MediaCacheRow>();
 
 let opened = false;
 
@@ -80,7 +93,28 @@ export function outboxRemove(id: string) {
   if (index >= 0) memOutbox.splice(index, 1);
 }
 
+export function mediaCacheGet(remoteUrl: string): MediaCacheRow | null {
+  return memMedia.get(remoteUrl) ?? null;
+}
+
+export function mediaCacheUpsert(row: MediaCacheRow) {
+  memMedia.set(row.remoteUrl, row);
+}
+
+export function mediaCacheList(): MediaCacheRow[] {
+  return [...memMedia.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function mediaCacheRemove(remoteUrl: string) {
+  memMedia.delete(remoteUrl);
+}
+
+export function mediaCacheClear() {
+  memMedia.clear();
+}
+
 export function wipeUserCache() {
   memSnap.clear();
   memOutbox.length = 0;
+  memMedia.clear();
 }

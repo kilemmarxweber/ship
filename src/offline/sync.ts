@@ -1,14 +1,129 @@
 import { onlineManager, type QueryClient } from "@tanstack/react-query";
 import { AppState, type AppStateStatus } from "react-native";
 
+import { api } from "@/src/api";
 import { kvSet } from "@/src/offline/db";
 import { isOnline, watchNetwork } from "@/src/offline/network";
 import { drainOutbox } from "@/src/offline/outbox";
+import { persistFeed } from "@/src/offline/persist";
+import { useSession } from "@/src/session";
+import type { FeedPage, Product } from "@/src/types";
 
 let syncing = false;
 let bootstrapped = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let retries = 0;
+
+type FeedInfinite = {
+  pages: FeedPage[];
+  pageParams: unknown[];
+};
+
+function mergeProductsPreserveOrder(
+  current: Product[],
+  freshById: Map<string, Product>,
+) {
+  const kept = current.map((item) => freshById.get(item.id) ?? item);
+  const seen = new Set(kept.map((item) => item.id));
+  const newcomers: Product[] = [];
+  for (const item of freshById.values()) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    newcomers.push(item);
+  }
+  return [...kept, ...newcomers];
+}
+
+/** Refresh feed pages in place so the active reel index stays valid. */
+async function softRefreshFeeds(queryClient: QueryClient) {
+  const entries = queryClient.getQueriesData<FeedInfinite>({
+    queryKey: ["feed"],
+  });
+
+  if (!entries.length) {
+    await queryClient.invalidateQueries({ queryKey: ["feed"] });
+    return;
+  }
+
+  await Promise.all(
+    entries.map(async ([queryKey, current]) => {
+      const tab = String(queryKey[1] ?? "foryou");
+      const tokenSlot = queryKey[2];
+      const following = tab === "following";
+
+      try {
+        const pageCount = Math.max(1, current?.pages?.length ?? 1);
+        const freshPages: FeedPage[] = [];
+        let cursor = "";
+
+        for (let i = 0; i < pageCount; i += 1) {
+          const params = new URLSearchParams({
+            status: "ACTIVE",
+            limit: "12",
+          });
+          if (cursor) params.set("cursor", cursor);
+          if (following) params.set("following", "1");
+          const page = await api<FeedPage>(
+            `/api/products?${params.toString()}`,
+          );
+          freshPages.push(page);
+          cursor = page.nextCursor ?? "";
+          if (!cursor) break;
+        }
+
+        const freshById = new Map<string, Product>();
+        for (const page of freshPages) {
+          for (const product of page.products ?? []) {
+            freshById.set(product.id, product);
+          }
+        }
+
+        if (!current?.pages?.length) {
+          queryClient.setQueryData<FeedInfinite>(queryKey, {
+            pages: freshPages,
+            pageParams: freshPages.map((_, index) =>
+              index === 0 ? "" : (freshPages[index - 1]?.nextCursor ?? ""),
+            ),
+          });
+        } else {
+          const flat = current.pages.flatMap((page) => page.products ?? []);
+          const merged = mergeProductsPreserveOrder(flat, freshById);
+          // Rebuild pages with same page size as before to keep FlashList stable.
+          const size = Math.max(1, current.pages[0]?.products?.length || 12);
+          const apiCursor =
+            freshPages[freshPages.length - 1]?.nextCursor ?? null;
+          const pages: FeedPage[] = [];
+          for (let i = 0; i < merged.length; i += size) {
+            const slice = merged.slice(i, i + size);
+            const isLast = i + size >= merged.length;
+            pages.push({
+              products: slice,
+              nextCursor: isLast ? apiCursor : `local-${i + size}`,
+            });
+          }
+          if (!pages.length) {
+            pages.push(...freshPages);
+          }
+          queryClient.setQueryData<FeedInfinite>(queryKey, {
+            pages,
+            pageParams: current.pageParams.slice(0, pages.length),
+          });
+        }
+
+        if (tab === "foryou") {
+          const token =
+            typeof tokenSlot === "string" && tokenSlot !== "guest"
+              ? tokenSlot
+              : useSession.getState().token;
+          const data = queryClient.getQueryData<FeedInfinite>(queryKey);
+          persistFeed(token, data?.pages);
+        }
+      } catch {
+        await queryClient.invalidateQueries({ queryKey });
+      }
+    }),
+  );
+}
 
 async function runSync(
   queryClient: QueryClient,
@@ -19,18 +134,41 @@ async function runSync(
   syncing = true;
   try {
     if (reason === "reconnect") await drainOutbox(queryClient);
-    await queryClient.invalidateQueries({
-      predicate: (query) => {
-        const key = query.queryKey[0];
-        return (
-          key === "feed" ||
-          key === "cart" ||
-          key === "inbox" ||
-          key === "conversation" ||
-          key === "wanted-changes"
-        );
-      },
-    });
+
+    if (reason === "reconnect") {
+      await softRefreshFeeds(queryClient);
+      await queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return (
+            key === "cart" ||
+            key === "inbox" ||
+            key === "conversation" ||
+            key === "wanted-changes" ||
+            key === "seller-products" ||
+            key === "lives" ||
+            key === "growth-surface"
+          );
+        },
+      });
+    } else {
+      await queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return (
+            key === "feed" ||
+            key === "cart" ||
+            key === "inbox" ||
+            key === "conversation" ||
+            key === "wanted-changes" ||
+            key === "seller-products" ||
+            key === "lives" ||
+            key === "growth-surface"
+          );
+        },
+      });
+    }
+
     kvSet("lastSyncAt", String(Date.now()));
     retries = 0;
   } catch {
@@ -56,7 +194,7 @@ function schedule(
       debounceTimer = null;
       void runSync(queryClient, reason);
     },
-    reason === "reconnect" ? 400 : 2000,
+    reason === "reconnect" ? 350 : 2000,
   );
 }
 

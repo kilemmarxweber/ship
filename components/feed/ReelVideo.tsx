@@ -1,12 +1,9 @@
 import { useEventListener } from "expo";
+import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { Image } from "expo-image";
-import {
-    setAudioModeAsync,
-    useAudioPlayer,
-} from "expo-audio";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
-import { Image as RNImage, Platform, StyleSheet, View } from "react-native";
+import { Platform, Image as RNImage, StyleSheet, View } from "react-native";
 
 let audioModeReady = false;
 
@@ -156,9 +153,11 @@ export function ReelSoundtrack({
     ensureFeedAudioMode();
   }, [uri]);
 
+  const localFile = uri.startsWith("file://") || uri.startsWith("content://");
   const player = useAudioPlayer(uri, {
     updateInterval: 1000,
-    downloadFirst: true,
+    // Already on disk via SQLite media_cache — skip a second download.
+    downloadFirst: !localFile,
   });
 
   useEffect(() => {

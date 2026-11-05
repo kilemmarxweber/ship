@@ -22,6 +22,7 @@ export type CompactProduct = {
   shopName: string;
   poster: string | null;
   videoUrl: string | null;
+  audioUrl: string | null;
   colors?: string[];
   sizes?: string[];
   viewsCount?: number;
@@ -86,15 +87,19 @@ function num(value: unknown, fallback = 0) {
   return Number.isFinite(next) ? next : fallback;
 }
 
+const VIDEO_RE = /\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i;
+const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|opus|flac|caf)(\?|$)/i;
+
 export function compactProduct(product: Product): CompactProduct {
   const images = Array.isArray(product.images) ? product.images : [];
   const poster =
-    images.find((url) => url && !/\.(mp4|webm|mov|m4v|mkv)(\?|$)/i.test(url)) ??
+    images.find((url) => url && !VIDEO_RE.test(url) && !AUDIO_RE.test(url)) ??
     images[0] ??
     null;
-  const videoUrl =
-    images.find((url) => /\.(mp4|webm|mov|m4v|mkv)(\?|$)/i.test(url)) ??
-    product.soundtrack?.audioUrl ??
+  const videoUrl = images.find((url) => url && VIDEO_RE.test(url)) ?? null;
+  const audioUrl =
+    product.soundtrack?.audioUrl?.trim() ||
+    images.find((url) => url && AUDIO_RE.test(url)) ||
     null;
   return {
     id: product.id,
@@ -106,6 +111,7 @@ export function compactProduct(product: Product): CompactProduct {
     shopName: str(product.shop?.name, "Boutique"),
     poster,
     videoUrl,
+    audioUrl,
     colors: (product.colors ?? []).slice(0, 5),
     sizes: (product.sizes ?? []).slice(0, 4),
     viewsCount: Math.max(0, num(product.viewsCount, 0)),
@@ -131,6 +137,9 @@ export function expandProduct(row: CompactProduct): Product {
     commentsCount: 0,
     viewsCount: row.viewsCount ?? 0,
     likedByMe: false,
+    soundtrack: row.audioUrl
+      ? { audioUrl: row.audioUrl, title: undefined }
+      : null,
     shop: {
       id: row.shopId,
       name: row.shopName,

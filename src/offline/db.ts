@@ -1,4 +1,4 @@
-const SCHEMA = 1;
+const SCHEMA = 2;
 const SNAPSHOT_CAP = 400_000;
 
 export type OutboxRow = {
@@ -11,6 +11,18 @@ export type OutboxRow = {
   tries: number;
 };
 
+export type MediaCacheKind = "image" | "video" | "audio";
+
+export type MediaCacheRow = {
+  remoteUrl: string;
+  localUri: string;
+  kind: MediaCacheKind;
+  mimeType: string;
+  ext: string;
+  bytes: number;
+  updatedAt: number;
+};
+
 type SqliteHandle = {
   execSync: (sql: string) => void;
   getAllSync: <T>(sql: string, params?: unknown[]) => T[];
@@ -20,6 +32,7 @@ type SqliteHandle = {
 const memKv = new Map<string, string>();
 const memSnap = new Map<string, string>();
 const memOutbox: OutboxRow[] = [];
+const memMedia = new Map<string, MediaCacheRow>();
 
 let sqlite: SqliteHandle | null = null;
 let opened = false;
@@ -50,6 +63,17 @@ export async function openOfflineDb() {
         createdAt INTEGER NOT NULL,
         tries INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS media_cache (
+        remoteUrl TEXT PRIMARY KEY NOT NULL,
+        localUri TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        mimeType TEXT NOT NULL,
+        ext TEXT NOT NULL,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS media_cache_updated
+        ON media_cache (updatedAt DESC);
     `);
     sqlite = db as unknown as SqliteHandle;
     const row = sqlite.getAllSync<{ value: string }>(
@@ -205,6 +229,73 @@ export function outboxRemove(id: string) {
   }
 }
 
+export function mediaCacheGet(remoteUrl: string): MediaCacheRow | null {
+  try {
+    if (sqlite) {
+      return (
+        sqlite.getAllSync<MediaCacheRow>(
+          "SELECT remoteUrl, localUri, kind, mimeType, ext, bytes, updatedAt FROM media_cache WHERE remoteUrl = ?",
+          [remoteUrl],
+        )[0] ?? null
+      );
+    }
+  } catch {
+    return memMedia.get(remoteUrl) ?? null;
+  }
+  return memMedia.get(remoteUrl) ?? null;
+}
+
+export function mediaCacheUpsert(row: MediaCacheRow) {
+  memMedia.set(row.remoteUrl, row);
+  try {
+    sqlite?.runSync(
+      "INSERT OR REPLACE INTO media_cache (remoteUrl, localUri, kind, mimeType, ext, bytes, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        row.remoteUrl,
+        row.localUri,
+        row.kind,
+        row.mimeType,
+        row.ext,
+        row.bytes,
+        row.updatedAt,
+      ],
+    );
+  } catch {
+    /* memory only */
+  }
+}
+
+export function mediaCacheList(): MediaCacheRow[] {
+  try {
+    if (sqlite) {
+      return sqlite.getAllSync<MediaCacheRow>(
+        "SELECT remoteUrl, localUri, kind, mimeType, ext, bytes, updatedAt FROM media_cache ORDER BY updatedAt DESC",
+      );
+    }
+  } catch {
+    return [...memMedia.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  return [...memMedia.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function mediaCacheRemove(remoteUrl: string) {
+  memMedia.delete(remoteUrl);
+  try {
+    sqlite?.runSync("DELETE FROM media_cache WHERE remoteUrl = ?", [remoteUrl]);
+  } catch {
+    /* memory only */
+  }
+}
+
+export function mediaCacheClear() {
+  memMedia.clear();
+  try {
+    sqlite?.execSync("DELETE FROM media_cache;");
+  } catch {
+    /* memory only */
+  }
+}
+
 export function wipeUserCache() {
   memSnap.clear();
   memOutbox.length = 0;
@@ -213,4 +304,9 @@ export function wipeUserCache() {
   } catch {
     /* memory only */
   }
+  void import("@/src/offline/media-cache")
+    .then((mod) => mod.clearMediaCacheFiles())
+    .catch(() => {
+      mediaCacheClear();
+    });
 }

@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 
+import { remoteMediaUrl } from "@/src/api";
 import { parseCart, type CartPayload } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import type { InboxSnapshot } from "@/src/inbox";
@@ -27,6 +28,7 @@ import {
     inboxSnapKey,
     threadSnapKey,
 } from "@/src/offline/keys";
+import { enqueueMediaCache } from "@/src/offline/media-cache";
 import type { CommentItem, FeedPage } from "@/src/types";
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -47,6 +49,20 @@ function later(key: string, write: () => void) {
   );
 }
 
+function prefetchFeedAvMedia(products: CompactProduct[]) {
+  const posters = products
+    .map((row) => remoteMediaUrl(row.poster))
+    .filter((url): url is string => Boolean(url));
+  if (posters.length) void Image.prefetch(posters);
+
+  enqueueMediaCache(
+    products.flatMap((row) => [
+      { url: remoteMediaUrl(row.videoUrl), kind: "video" as const },
+      { url: remoteMediaUrl(row.audioUrl), kind: "audio" as const },
+    ]),
+  );
+}
+
 export function persistFeed(
   token: string | null | undefined,
   pages: FeedPage[] | undefined,
@@ -54,10 +70,7 @@ export function persistFeed(
   later(feedSnapKey(token), () => {
     const compact = compactFeedPages(pages);
     snapshotSet(feedSnapKey(token), compact);
-    const posters = compact.products
-      .map((row) => row.poster)
-      .filter((url): url is string => Boolean(url));
-    if (posters.length) void Image.prefetch(posters);
+    prefetchFeedAvMedia(compact.products);
   });
 }
 
@@ -107,6 +120,8 @@ export function injectSnapshots(
   const feed = snapshotGet<{ products?: CompactProduct[] }>(feedSnapKey(token));
   if (feed?.products?.length) {
     queryClient.setQueryData(feedQueryKey(token), expandFeedPages(feed));
+    // Resume video/audio downloads for offline playback after relaunch.
+    prefetchFeedAvMedia(feed.products);
   }
   const cart = snapshotGet<CompactCartLine[]>(cartSnapKey(token));
   if (cart) {

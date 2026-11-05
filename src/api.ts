@@ -28,10 +28,36 @@ export function apiOrigin() {
   return `http://${devHost()}:3000`;
 }
 
-export function mediaUrl(path: string | null | undefined) {
+let resolveCachedMediaFn: ((url: string) => string | null) | null | undefined;
+
+function localCachedMedia(remote: string) {
+  if (resolveCachedMediaFn === undefined) {
+    try {
+      // Lazy require avoids a hard cycle during module init on web.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require("@/src/offline/media-cache") as {
+        resolveCachedMedia: (url: string) => string | null;
+      };
+      resolveCachedMediaFn = mod.resolveCachedMedia;
+    } catch {
+      resolveCachedMediaFn = null;
+    }
+  }
+  return resolveCachedMediaFn?.(remote) ?? null;
+}
+
+/** Absolute remote URL only (never rewritten to a local offline file). */
+export function remoteMediaUrl(path: string | null | undefined) {
   if (!path) return null;
   const trimmed = path.trim();
   if (!trimmed) return null;
+  if (
+    trimmed.startsWith("file://") ||
+    trimmed.startsWith("content://") ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed;
+  }
   if (trimmed.startsWith("//")) return `https:${trimmed}`;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed)) {
     return trimmed.replace(
@@ -44,8 +70,26 @@ export function mediaUrl(path: string | null | undefined) {
   return `${origin}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
 }
 
+export function mediaUrl(path: string | null | undefined) {
+  const remote = remoteMediaUrl(path);
+  if (!remote) return null;
+  if (
+    remote.startsWith("file://") ||
+    remote.startsWith("content://") ||
+    remote.startsWith("data:")
+  ) {
+    return remote;
+  }
+  // Prefer locally cached video/audio for offline playback while sync waits.
+  return localCachedMedia(remote) ?? remote;
+}
+
 export function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i.test(url);
+}
+
+export function isAudioUrl(url: string) {
+  return /\.(mp3|m4a|aac|wav|ogg|opus|flac|caf)(\?|$)/i.test(url);
 }
 
 export class ApiError extends Error {

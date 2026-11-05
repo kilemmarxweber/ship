@@ -98,7 +98,10 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="profile" />
+          <Stack.Screen
+            name="profile"
+            options={{ animation: "fade", animationDuration: 160 }}
+          />
           <Stack.Screen name="events/[id]" />
           <Stack.Screen name="tickets" />
           <Stack.Screen name="profile/ticket-scan" />

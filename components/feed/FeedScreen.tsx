@@ -10,8 +10,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useIsFocused, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Pressable,
+    RefreshControl,
     Share,
     StyleSheet,
     Text,
@@ -33,18 +33,21 @@ import {
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
+import { SoftSpinner } from "@/components/ui/SoftSpinner";
 import { api, ApiError, apiOrigin, mediaUrl } from "@/src/api";
 import {
     emptyWeaveMemory,
     weaveChallenges,
     type MixedRow,
 } from "@/src/challenge-place";
+import { colorHex } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
 import { useInbox } from "@/src/inbox";
 import { matchOpenLive } from "@/src/live";
 import { isSellerOfShop, useMe } from "@/src/me";
 import { coverOf, mediaList } from "@/src/media";
 import { kvGet, kvSet } from "@/src/offline/db";
+import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import { useSession } from "@/src/session";
@@ -98,6 +101,7 @@ export function FeedScreen() {
   const [startingLiveId, setStartingLiveId] = useState<string | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [railEpoch, setRailEpoch] = useState(0);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const inbox = useInbox();
   const inboxBadge = inbox.data?.badge ?? 0;
   const inboxUrgent = (inbox.data?.urgentCount ?? 0) > 0;
@@ -113,7 +117,7 @@ export function FeedScreen() {
   useWantedOfferSync(Boolean(token) && focused);
 
   const feed = useInfiniteQuery({
-    queryKey: ["feed", tab, token ?? "guest"],
+    queryKey: feedQueryKey(token, tab === "following" ? "following" : "foryou"),
     enabled: tab !== "search" && (tab !== "following" || Boolean(token)),
     initialPageParam: "",
     staleTime: 45_000,
@@ -226,6 +230,30 @@ export function FeedScreen() {
     openAuth();
     return false;
   }, [openAuth, token]);
+
+  const onPullRefresh = useCallback(async () => {
+    if (pullRefreshing) return;
+    setPullRefreshing(true);
+    try {
+      if (tab === "search") {
+        await wanted.refetch();
+      } else {
+        await Promise.all([
+          feed.refetch(),
+          surface.refetch(),
+          lives.refetch(),
+          token ? inbox.refetch() : Promise.resolve(),
+        ]);
+        setActive(0);
+        setPaused(false);
+        requestAnimationFrame(() => {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        });
+      }
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [pullRefreshing, tab, wanted, feed, surface, lives, token, inbox]);
 
   async function joinChallenge(id: string, eventId?: string | null) {
     if (!requireAuth()) return;
@@ -503,21 +531,28 @@ export function FeedScreen() {
     <View style={[styles.root, { backgroundColor: c.background }]}>
       {tab === "search" ? (
         <View style={[styles.wantedPane, { paddingTop: wantedHeaderPad }]}>
-          {wanted.isLoading ? (
+          {wanted.isPending && wantedItems.length === 0 ? (
             <View style={styles.center}>
-              <ActivityIndicator color={c.emerald} />
+              <SoftSpinner color={c.emerald} />
             </View>
-          ) : wanted.isError ? (
+          ) : wanted.isError && wantedItems.length === 0 ? (
             <View style={styles.center}>
               <Text style={[styles.emptyTitle, { color: c.text }]}>
-                Demandes indisponibles
+                {online ? "Demandes indisponibles" : "Hors ligne"}
               </Text>
-              <Pressable
-                style={styles.retry}
-                onPress={() => void wanted.refetch()}
-              >
-                <Text style={styles.retryText}>Réessayer</Text>
-              </Pressable>
+              <Text style={[styles.emptyText, { color: c.textMuted }]}>
+                {online
+                  ? "Impossible de charger les demandes."
+                  : "Reconnecte-toi pour voir les nouvelles demandes."}
+              </Text>
+              {online ? (
+                <Pressable
+                  style={styles.retry}
+                  onPress={() => void wanted.refetch()}
+                >
+                  <Text style={styles.retryText}>Réessayer</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : wantedItems.length === 0 ? (
             <View style={styles.center}>
@@ -534,6 +569,15 @@ export function FeedScreen() {
                 paddingHorizontal: 16,
                 paddingBottom: 100,
               }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={pullRefreshing}
+                  onRefresh={() => void onPullRefresh()}
+                  tintColor={c.emerald}
+                  colors={[c.emerald]}
+                  progressBackgroundColor={c.card}
+                />
+              }
               renderItem={({ item }) => {
                 const cover = item.images[0];
                 const offerRows = item.offers ?? [];
@@ -661,19 +705,30 @@ export function FeedScreen() {
             <Text style={styles.retryText}>Se connecter</Text>
           </Pressable>
         </View>
-      ) : feed.isLoading ? (
+      ) : feed.isPending && products.length === 0 ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.emerald} />
+          <SoftSpinner />
         </View>
-      ) : feed.isError ? (
+      ) : feed.isError && products.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Fil indisponible</Text>
-          <Text style={styles.emptyText}>
-            {feed.error instanceof Error ? feed.error.message : "Erreur réseau"}
+          <Ionicons
+            name={online ? "alert-circle-outline" : "cloud-offline-outline"}
+            size={36}
+            color="rgba(255,255,255,0.45)"
+          />
+          <Text style={styles.emptyTitle}>
+            {online ? "Fil indisponible" : "Hors ligne"}
           </Text>
-          <Pressable style={styles.retry} onPress={() => void feed.refetch()}>
-            <Text style={styles.retryText}>Réessayer</Text>
-          </Pressable>
+          <Text style={styles.emptyText}>
+            {online
+              ? "Impossible de charger le fil pour le moment."
+              : "Aucun contenu en mémoire. Reconnecte-toi pour synchroniser."}
+          </Text>
+          {online ? (
+            <Pressable style={styles.retry} onPress={() => void feed.refetch()}>
+              <Text style={styles.retryText}>Réessayer</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <View style={[styles.reel, { height }]}>
@@ -687,11 +742,21 @@ export function FeedScreen() {
             snapToAlignment="start"
             decelerationRate={isReelTab ? "fast" : "normal"}
             disableIntervalMomentum={isReelTab}
-            bounces={false}
-            overScrollMode="never"
+            bounces
+            overScrollMode="auto"
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.key}
             drawDistance={height * 2}
+            refreshControl={
+              <RefreshControl
+                refreshing={pullRefreshing}
+                onRefresh={() => void onPullRefresh()}
+                tintColor={colors.emerald}
+                colors={[colors.emerald]}
+                progressBackgroundColor="#1a1a1e"
+                progressViewOffset={insets.top + 52}
+              />
+            }
             onMomentumScrollEnd={onMomentumScrollEnd}
             onEndReached={() => {
               if (feed.hasNextPage && !feed.isFetchingNextPage)
@@ -714,6 +779,7 @@ export function FeedScreen() {
               meId: me.data?.id,
               railEpoch,
               busyChallengeId,
+              pullRefreshing,
             }}
             ListEmptyComponent={
               <View style={[styles.center, { paddingTop: 180 }]}>
@@ -976,6 +1042,39 @@ export function FeedScreen() {
                           </Text>
                         </Pressable>
                       </View>
+                      <Text style={styles.viewsLine}>
+                        {compactCount(item.viewsCount ?? item.likesCount ?? 0)}{" "}
+                        vues
+                      </Text>
+                      {(item.colors?.length ?? 0) > 0 ||
+                      (item.sizes?.length ?? 0) > 0 ? (
+                        <View style={styles.optionsBlock}>
+                          {(item.colors?.length ?? 0) > 0 ? (
+                            <View style={styles.optionsRow}>
+                              {(item.colors ?? []).slice(0, 5).map((swatch) => (
+                                <View
+                                  key={swatch}
+                                  style={[
+                                    styles.colorDot,
+                                    { backgroundColor: colorHex(swatch) },
+                                  ]}
+                                />
+                              ))}
+                            </View>
+                          ) : null}
+                          {(item.sizes?.length ?? 0) > 0 ? (
+                            <View style={styles.optionsRow}>
+                              {(item.sizes ?? []).slice(0, 4).map((size) => (
+                                <View key={size} style={styles.sizeChip}>
+                                  <Text style={styles.sizeChipText}>
+                                    {size}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
                       {item.description ? (
                         <Pressable
                           onPress={() =>
@@ -1087,15 +1186,11 @@ export function FeedScreen() {
               style={styles.logo}
               contentFit="contain"
             />
-            {!online ? (
-              <View style={styles.offlinePill}>
-                <Text style={styles.offlineText}>Hors-ligne</Text>
-              </View>
-            ) : null}
           </View>
           <View style={styles.headerTabs}>
             <Pressable
               style={styles.tabSlot}
+              unstable_pressDelay={0}
               onPress={() => {
                 if (!token) {
                   openAuth();
@@ -1117,6 +1212,7 @@ export function FeedScreen() {
             </Pressable>
             <Pressable
               style={styles.tabSlot}
+              unstable_pressDelay={0}
               onPress={() => selectTab("foryou")}
             >
               <Text
@@ -1133,6 +1229,7 @@ export function FeedScreen() {
             </Pressable>
             <Pressable
               style={styles.tabSlot}
+              unstable_pressDelay={0}
               onPress={() => selectTab("search")}
             >
               <Text
@@ -1149,8 +1246,14 @@ export function FeedScreen() {
           </View>
           <View style={styles.headerActions}>
             <Pressable
-              hitSlop={8}
-              onPress={() => (token ? setInboxOpen(true) : openAuth())}
+              hitSlop={10}
+              unstable_pressDelay={0}
+              onPressIn={() => {
+                if (token) setInboxOpen(true);
+              }}
+              onPress={() => {
+                if (!token) openAuth();
+              }}
               style={styles.iconHit}
             >
               <Ionicons
@@ -1176,20 +1279,37 @@ export function FeedScreen() {
               ) : null}
             </Pressable>
             <Pressable
-              hitSlop={8}
-              onPress={() =>
-                token ? router.push("/profile" as Href) : openAuth()
-              }
+              hitSlop={10}
+              unstable_pressDelay={0}
+              onPressIn={() => {
+                if (token) router.push("/profile" as Href);
+              }}
+              onPress={() => {
+                if (!token) openAuth();
+              }}
               style={styles.iconHit}
             >
               <Ionicons
-                name="settings-outline"
-                size={22}
+                name="menu-outline"
+                size={24}
                 color={tab === "search" ? c.text : "#fff"}
               />
             </Pressable>
           </View>
         </View>
+        {!online ? (
+          <View
+            style={[
+              styles.offlineBar,
+              tab === "search" && styles.offlineBarOnLight,
+            ]}
+          >
+            <Ionicons name="cloud-offline-outline" size={14} color="#FBBF24" />
+            <Text style={styles.offlineBarText} numberOfLines={1}>
+              Hors ligne · contenu en mémoire
+            </Text>
+          </View>
+        ) : null}
       </View>
       <NotificationsSheet
         open={inboxOpen}
@@ -1241,7 +1361,12 @@ function RailButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.railBtn} onPress={onPress}>
+    <Pressable
+      style={styles.railBtn}
+      unstable_pressDelay={0}
+      hitSlop={6}
+      onPress={onPress}
+    >
       <Ionicons
         name={filled ? icon : (`${icon}-outline` as typeof icon)}
         size={28}
@@ -1342,36 +1467,53 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#fff", fontWeight: "700" },
   header: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 20 },
-  offlinePill: {
-    marginTop: 4,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  offlineBar: {
+    marginTop: 6,
+    marginHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "center",
+    maxWidth: "92%",
+    backgroundColor: "rgba(12,12,16,0.72)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(251,191,36,0.35)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  offlineText: { color: "#fcd34d", fontSize: 10, fontWeight: "700" },
+  offlineBarOnLight: {
+    backgroundColor: "rgba(251,191,36,0.12)",
+    borderColor: "rgba(251,191,36,0.28)",
+  },
+  offlineBarText: {
+    color: "#FDE68A",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.1,
+    flexShrink: 1,
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 8,
   },
   headerSide: {
-    width: 84,
+    width: 72,
     alignItems: "flex-start",
     justifyContent: "center",
     paddingLeft: 4,
   },
   headerActions: {
-    width: 84,
+    width: 72,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 2,
   },
   iconHit: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1542,6 +1684,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     flexShrink: 1,
     minWidth: 90,
+  },
+  viewsLine: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 34,
+  },
+  optionsBlock: {
+    marginLeft: 34,
+    marginTop: 2,
+    gap: 6,
+  },
+  optionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  sizeChip: {
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  sizeChipText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
   },
   follow: {
     backgroundColor: "#fff",

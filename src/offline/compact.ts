@@ -22,6 +22,9 @@ export type CompactProduct = {
   shopName: string;
   poster: string | null;
   videoUrl: string | null;
+  colors?: string[];
+  sizes?: string[];
+  viewsCount?: number;
 };
 
 export type CompactCartLine = {
@@ -103,6 +106,9 @@ export function compactProduct(product: Product): CompactProduct {
     shopName: str(product.shop?.name, "Boutique"),
     poster,
     videoUrl,
+    colors: (product.colors ?? []).slice(0, 5),
+    sizes: (product.sizes ?? []).slice(0, 4),
+    viewsCount: Math.max(0, num(product.viewsCount, 0)),
   };
 }
 
@@ -119,10 +125,11 @@ export function expandProduct(row: CompactProduct): Product {
     quantity: row.quantity,
     status: "ACTIVE",
     images,
-    colors: [],
-    sizes: [],
+    colors: row.colors ?? [],
+    sizes: row.sizes ?? [],
     likesCount: 0,
     commentsCount: 0,
+    viewsCount: row.viewsCount ?? 0,
     likedByMe: false,
     shop: {
       id: row.shopId,

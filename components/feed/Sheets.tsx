@@ -52,7 +52,7 @@ export function CommentsSheet({
   return (
     <Modal
       visible={Boolean(product)}
-      animationType="slide"
+      animationType="fade"
       transparent
       statusBarTranslucent
       onRequestClose={onClose}
@@ -307,7 +307,7 @@ export function BuySheet({
   return (
     <Modal
       visible={Boolean(product)}
-      animationType="slide"
+      animationType="fade"
       transparent
       statusBarTranslucent
       onRequestClose={onClose}
@@ -700,7 +700,7 @@ export function ShopProfileSheet({
   return (
     <Modal
       visible={Boolean(shop)}
-      animationType="slide"
+      animationType="fade"
       transparent
       statusBarTranslucent
       onRequestClose={onClose}

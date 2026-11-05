@@ -43,7 +43,7 @@ function later(key: string, write: () => void) {
       } catch {
         /* ignore corrupt writes */
       }
-    }, 1500),
+    }, 450),
   );
 }
 

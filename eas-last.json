@@ -1,0 +1,59 @@
+﻿[
+  {
+    "id": "0500533f-d032-4843-bed5-bf561205396f",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+      "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "01a1ab15-96e2-7b85-9f0c-6d58152b5f02",
+      "hash": "69e4ffc2d3fe6d270cf6e6a94818fb8e3e863c07"
+    },
+    "initiatingActor": {
+      "id": "f9e21570-87ab-4055-83f3-c9cc047a373f",
+      "displayName": "kilemmarxweber"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/59f9fb0f-efd9-4070-bc3f-8122df037e7a/0500533f-d032-4843-bed5-bf561205396f/2026-11-05T09%3A41%3A27Z-eb313900-d505-43de-bc14-c8e0bd656991.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20261105%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20261105T101554Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5713afb90c7bfc14c017b72bed431f85d5a8d4798b8b3b446986b2b50f951c56f0e2265bb65741c4a9d9f120f97260eb532b7fc559aa57a27797296253911508d93804e5bd436defd15fab912f1017c24d211b6d6f69c79dcc3a5c7c88cf43f5712ac3daedc190e0bdc3c07435b36cdd322a5d1060c488814fc5d893579c69f8145f95ad50716ba4506a4539e8e8b893c7f867f648d50519a1a594ba542d5281bf9260df5a1abfc350d493bc3ab7b6ac6f6331f62f4d6f2ad1ae3edb18cba9f3d0a39c2c996badcd4e02cd10fc8f5545126cb3461ed138cf2475bebb3a9de10dbfc816d11fbd2ffe270d885ef0cc3ad619187e113983f63b774c72bc79564b4f"
+    ],
+    "app": {
+      "id": "59f9fb0f-efd9-4070-bc3f-8122df037e7a",
+      "name": "ShipShop",
+      "slug": "ShipShop",
+      "ownerAccount": {
+        "id": "ee5e5b0e-6217-4f09-a44b-65c59af614e3",
+        "name": "kilemmarxweber"
+      }
+    },
+    "updateChannel": {
+      "id": "01a1ab15-2ccd-7769-a5ee-16db409a4dc7",
+      "name": "production"
+    },
+    "distribution": "STORE",
+    "buildProfile": "production-apk",
+    "appIdentifier": "com.kilemmarxweber.ShipShop",
+    "sdkVersion": "58.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "2",
+    "runtime": {
+      "id": "01a19f31-ffed-7ab9-b2a1-673fd97e9684",
+      "version": "1.0.0"
+    },
+    "gitCommitHash": "f5b763774248dd6238f49552c0f61f34d08b2ec8",
+    "gitCommitMessage": "Refactor DiscoverCard and DiscoverScreen components to remove unused animations and improve performance\n\n- Removed Animated and FadeInDown imports from DiscoverCard and DiscoverScreen.\n- Eliminated delay prop from DiscoverCard and adjusted rendering logic.\n- Updated DiscoverScreen to utilize new focus handling for product strips.\n- Enhanced event handling for ticket purchases and challenge completions.\n- Added wallet currency parsing and event price formatting for better user experience.",
+    "priority": "NORMAL",
+    "createdAt": "2026-11-05T09:41:21.196Z",
+    "updatedAt": "2026-11-05T10:01:26.708Z",
+    "completedAt": "2026-11-05T10:01:26.466Z",
+    "expirationDate": "2026-12-05T09:41:21.241Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4897,
+      "buildQueueTime": 5649,
+      "buildDuration": 1194724
+    }
+  }
+]

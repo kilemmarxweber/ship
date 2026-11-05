@@ -25,8 +25,6 @@ export function inboxQueryKey(token: string | null | undefined) {
 export function feedQueryKey(
   token: string | null | undefined,
   tab = "foryou",
-  query = "",
-  category: string | null = null,
 ) {
-  return ["feed", tab, query, category, token ?? "guest"] as const;
+  return ["feed", tab, token ?? "guest"] as const;
 }

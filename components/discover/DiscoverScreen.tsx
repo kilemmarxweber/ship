@@ -6,10 +6,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useIsFocused, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     NativeScrollEvent,
     NativeSyntheticEvent,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -23,6 +23,7 @@ import { DiscoverCard } from "@/components/discover/DiscoverCard";
 import { EventPoster } from "@/components/events/EventPoster";
 import { BuySheet } from "@/components/feed/Sheets";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
+import { SoftSpinner } from "@/components/ui/SoftSpinner";
 import { api, mediaUrl } from "@/src/api";
 import { templateFor } from "@/src/challenge-place";
 import { compactCount, formatMoney } from "@/src/format";
@@ -106,6 +107,7 @@ export function DiscoverScreen() {
   const [buyProduct, setBuyProduct] = useState<Product | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const stripFocusLock = useRef(false);
 
   useEffect(() => {
@@ -251,13 +253,13 @@ export function DiscoverScreen() {
 
   async function joinChallenge(item: GrowthChallenge) {
     try {
-      const data = await api<{ eventId?: string | null; event?: { id: string } | null }>(
-        "/api/growth/challenge",
-        {
-          method: "POST",
-          body: JSON.stringify({ challengeId: item.id }),
-        },
-      );
+      const data = await api<{
+        eventId?: string | null;
+        event?: { id: string } | null;
+      }>("/api/growth/challenge", {
+        method: "POST",
+        body: JSON.stringify({ challengeId: item.id }),
+      });
       showToast("Challenge relevé.", "success");
       void surface.refetch();
       const eventId = data.eventId ?? data.event?.id ?? item.event?.id;
@@ -268,6 +270,21 @@ export function DiscoverScreen() {
       showToast("Connecte-toi pour relever le challenge.", "info");
     }
   }
+
+  const onPullRefresh = useCallback(async () => {
+    if (pullRefreshing) return;
+    setPullRefreshing(true);
+    try {
+      await Promise.all([
+        feed.refetch(),
+        deals.refetch(),
+        surface.refetch(),
+        liveEvents.refetch(),
+      ]);
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [pullRefreshing, feed, deals, surface, liveEvents]);
 
   function eventPriceLabel(event: PublicEvent) {
     const cents =
@@ -558,13 +575,16 @@ export function DiscoverScreen() {
 
   return (
     <View style={styles.root}>
-      {feed.isLoading && products.length === 0 ? (
+      {feed.isPending && products.length === 0 ? (
         <View style={[styles.center, { paddingTop: insets.top + 40 }]}>
-          <ActivityIndicator color={colors.emerald} />
+          <SoftSpinner />
         </View>
-      ) : feed.isError ? (
+      ) : feed.isError && products.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>Découvrir indisponible</Text>
+          <Text style={styles.emptyText}>
+            Impossible de charger les produits pour le moment.
+          </Text>
           <Pressable style={styles.retry} onPress={() => void feed.refetch()}>
             <Text style={styles.retryText}>Réessayer</Text>
           </Pressable>
@@ -579,6 +599,16 @@ export function DiscoverScreen() {
           contentContainerStyle={{
             paddingBottom: 96 + insets.bottom,
           }}
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={() => void onPullRefresh()}
+              tintColor={colors.emerald}
+              colors={[colors.emerald]}
+              progressBackgroundColor="#1a1a1e"
+              progressViewOffset={insets.top + 8}
+            />
+          }
           onEndReached={() => {
             if (feed.hasNextPage && !feed.isFetchingNextPage)
               void feed.fetchNextPage();

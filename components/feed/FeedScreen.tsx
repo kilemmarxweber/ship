@@ -952,11 +952,7 @@ export function FeedScreen() {
                         size={44}
                         onPress={() => {
                           if (live) openLive(live.id);
-                          else {
-                            router.push(
-                              `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
-                            );
-                          }
+                          else setShopProduct(item);
                         }}
                       />
                       {!item.shop.followedByMe ? (
@@ -1014,20 +1010,12 @@ export function FeedScreen() {
                             size={28}
                             onPress={() => {
                               if (live) openLive(live.id);
-                              else {
-                                router.push(
-                                  `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
-                                );
-                              }
+                              else setShopProduct(item);
                             }}
                           />
                         </View>
                         <Pressable
-                          onPress={() =>
-                            router.push(
-                              `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
-                            )
-                          }
+                          onPress={() => setShopProduct(item)}
                           style={styles.sellerHit}
                         >
                           <Text

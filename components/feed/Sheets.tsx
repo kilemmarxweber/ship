@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { router, type Href } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -19,10 +19,14 @@ import {
     Text,
     TextInput,
     View,
+    type NativeScrollEvent,
+    type NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ToastHost } from "@/components/Toast";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
@@ -190,7 +194,7 @@ function CommentsBody({
           },
         ]}
       >
-        <View style={styles.handle} />
+        <SheetReduce onPress={onClose} />
         <Text style={styles.title}>Commentaires</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
@@ -334,7 +338,7 @@ export function BuySheet({
             { paddingBottom: Math.max(18, insets.bottom + 10) },
           ]}
         >
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <View style={styles.buyHead}>
             {cover ? (
               <Image
@@ -385,9 +389,6 @@ export function BuySheet({
                 ) : null}
               </View>
             </View>
-            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
-              <Ionicons name="close" size={18} color="#fff" />
-            </Pressable>
           </View>
 
           {product?.colors.length ? (
@@ -718,30 +719,24 @@ type ShopDetail = {
 };
 
 const PRODUCT_PREVIEW = 6;
+const DISMISS_PULL = 36;
 
 const shopStyles = StyleSheet.create({
   sheet: {
     backgroundColor: colors.sheet,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    maxHeight: "90%",
-    paddingTop: 8,
+    maxHeight: "92%",
+    overflow: "hidden",
   },
   scroll: {
     paddingHorizontal: 18,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 10,
     alignItems: "center",
     gap: 12,
   },
-  logo: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "#222",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.14)",
-  },
+  avatarWrap: { marginTop: 2, marginBottom: 2 },
   name: {
     color: "#fff",
     fontSize: 22,
@@ -882,15 +877,19 @@ const shopStyles = StyleSheet.create({
     justifyContent: "center",
   },
   seeMoreText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  footer: {
+    width: "100%",
+    marginTop: 10,
+    paddingBottom: 4,
+  },
   follow: {
     width: "100%",
     minHeight: 48,
-    borderRadius: 999,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     backgroundColor: colors.primary,
-    marginTop: 8,
   },
   followOff: {
     backgroundColor: colors.live,
@@ -899,14 +898,8 @@ const shopStyles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 15,
+    textAlign: "center",
   },
-  close: {
-    alignSelf: "center",
-    minHeight: 44,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  closeText: { color: colors.muted, fontWeight: "700", fontSize: 14 },
   cats: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -976,9 +969,23 @@ function ShopProfileBody({
   const [loading, setLoading] = useState(true);
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [showAddress, setShowAddress] = useState(false);
+  const pulling = useRef(false);
   const shopUrl = useMemo(() => shopPublicUrl(shop.slug), [shop.slug]);
   const phone = detail?.contactPhone?.trim() || null;
   const followed = shop.followedByMe;
+
+  function openShopPage() {
+    onClose();
+    router.push(`/shop/${encodeURIComponent(shop.slug)}#produits` as Href);
+  }
+
+  function onSheetScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const y = event.nativeEvent.contentOffset.y;
+    if (y < -DISMISS_PULL && pulling.current) {
+      pulling.current = false;
+      onClose();
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -1128,24 +1135,42 @@ function ShopProfileBody({
           { paddingBottom: Math.max(12, insets.bottom + 6) },
         ]}
       >
-        <View style={styles.handle} />
+        <SheetReduce onPress={onClose} />
+
         <ScrollView
           contentContainerStyle={shopStyles.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          bounces
+          alwaysBounceVertical
+          onScrollBeginDrag={() => {
+            pulling.current = true;
+          }}
+          onScrollEndDrag={(event) => {
+            onSheetScroll(event);
+            pulling.current = false;
+          }}
+          onMomentumScrollEnd={(event) => {
+            onSheetScroll(event);
+          }}
+          onScroll={onSheetScroll}
+          scrollEventThrottle={16}
         >
-          {shop.logoUrl ? (
-            <Image
-              source={{ uri: mediaUrl(shop.logoUrl) ?? undefined }}
-              style={shopStyles.logo}
+          <View style={shopStyles.avatarWrap}>
+            <ShopLiveAvatar
+              live
+              logoUrl={shop.logoUrl}
+              name={shop.name}
+              size={88}
+              onPress={openShopPage}
             />
-          ) : (
-            <View style={shopStyles.logo} />
-          )}
+          </View>
 
-          <Text style={shopStyles.name} numberOfLines={2}>
-            {shop.name}
-          </Text>
+          <Pressable onPress={openShopPage}>
+            <Text style={shopStyles.name} numberOfLines={2}>
+              {shop.name}
+            </Text>
+          </Pressable>
           <Text style={shopStyles.meta}>
             @{shop.slug} · {compactCount(followers)} abonnés
             {productsCount > 0
@@ -1313,18 +1338,16 @@ function ShopProfileBody({
             )}
           </View>
 
-          <Pressable
-            style={[shopStyles.follow, followed && shopStyles.followOff]}
-            onPress={onFollow}
-          >
-            <Text style={shopStyles.followText}>
-              {followed ? "Ne plus suivre" : "Suivre"}
-            </Text>
-          </Pressable>
-
-          <Pressable style={shopStyles.close} onPress={onClose}>
-            <Text style={shopStyles.closeText}>Fermer</Text>
-          </Pressable>
+          <View style={shopStyles.footer}>
+            <Pressable
+              style={[shopStyles.follow, followed && shopStyles.followOff]}
+              onPress={onFollow}
+            >
+              <Text style={shopStyles.followText}>
+                {followed ? "Ne plus suivre" : "Suivre"}
+              </Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </View>
     </View>

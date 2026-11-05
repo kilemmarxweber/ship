@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import type { Product } from "@/src/types";
@@ -172,7 +173,11 @@ export function LiveProductsSheet({
           <View style={styles.backdrop} />
         )}
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
-          <View style={styles.handle} />
+          {isHost ? (
+            <SheetReduce onPress={detail ? closeDetail : onClose} />
+          ) : (
+            <View style={styles.handle} />
+          )}
           {detail ? (
             <ProductExplain
               product={detail}
@@ -190,13 +195,7 @@ export function LiveProductsSheet({
             <>
               <View style={styles.head}>
                 <Text style={styles.title}>Produits ({rows.length})</Text>
-                {isHost ? (
-                  <Pressable onPress={onClose} hitSlop={8}>
-                    <Ionicons name="close" size={22} color="#fff" />
-                  </Pressable>
-                ) : (
-                  <Text style={styles.liveHint}>En direct</Text>
-                )}
+                {isHost ? null : <Text style={styles.liveHint}>En direct</Text>}
               </View>
               <Text style={styles.hint}>
                 {isHost

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { formatMoney } from "@/src/format";
 
 const GIFTS = [
@@ -49,7 +50,7 @@ export function LiveGiftSheet({
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
           <View style={styles.glow} />
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <View style={styles.head}>
             <View style={styles.headLeft}>
               <View style={styles.badge}>
@@ -62,9 +63,6 @@ export function LiveGiftSheet({
                 </Text>
               </View>
             </View>
-            <Pressable onPress={onClose} hitSlop={10} style={styles.close}>
-              <Ionicons name="close" size={18} color="#fff" />
-            </Pressable>
           </View>
           <View style={styles.grid}>
             {GIFTS.map((gift) => (

@@ -1,9 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import {
-    onlineManager,
-    useQuery,
-    useQueryClient,
-} from "@tanstack/react-query";
+import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -21,12 +17,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { inboxQueryKey, markConversationSeenLocal } from "@/src/inbox";
+import { useMe } from "@/src/me";
 import { snapshotGet } from "@/src/offline/db";
 import { threadSnapKey } from "@/src/offline/keys";
 import { persistThread } from "@/src/offline/persist";
 import { requestOrQueue } from "@/src/offline/writes";
-import { inboxQueryKey, markConversationSeenLocal } from "@/src/inbox";
-import { useMe } from "@/src/me";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -209,8 +205,13 @@ export function ThreadScreen({ id }: { id: string }) {
           </Pressable>
           <Text style={styles.title}>Messages</Text>
         </View>
-        <View style={styles.center}>
-          <Text style={styles.muted}>Connecte-toi pour écrire.</Text>
+        <View style={styles.guestCenter}>
+          <Ionicons
+            name="chatbubbles-outline"
+            size={40}
+            color="rgba(255,255,255,0.45)"
+          />
+          <Text style={styles.guestText}>Connecte-toi pour écrire.</Text>
           <Pressable style={styles.loginBtn} onPress={openAuth}>
             <Text style={styles.loginText}>Se connecter</Text>
           </Pressable>
@@ -407,9 +408,22 @@ const styles = StyleSheet.create({
   issueAct: { color: colors.emerald, fontWeight: "800" },
   issueGhost: { color: "#ff8a8a", fontWeight: "700" },
   center: { gap: 12, marginTop: 24 },
+  guestCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 28,
+  },
+  guestText: {
+    color: "rgba(255,255,255,0.72)",
+    lineHeight: 22,
+    textAlign: "center",
+    fontSize: 15,
+  },
   muted: { color: "rgba(255,255,255,0.72)", lineHeight: 22 },
   loginBtn: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: colors.emerald,
     borderRadius: 14,
     paddingHorizontal: 16,

@@ -478,10 +478,10 @@ export default function CartScreen() {
       </View>
 
       {!token ? (
-        <View style={styles.center}>
-          <Ionicons name="cart-outline" size={36} color={colors.muted} />
-          <Text style={styles.text}>Connecte-toi pour voir ton sac.</Text>
-          <Pressable style={styles.button} onPress={openAuth}>
+        <View style={styles.guestCenter}>
+          <Ionicons name="cart-outline" size={40} color={colors.muted} />
+          <Text style={styles.guestText}>Connecte-toi pour voir ton sac.</Text>
+          <Pressable style={styles.guestButton} onPress={openAuth}>
             <Text style={styles.buttonText}>Se connecter</Text>
           </Pressable>
         </View>
@@ -865,6 +865,25 @@ const styles = StyleSheet.create({
   },
   countText: { color: "#fff", fontWeight: "800", fontSize: 12 },
   center: { gap: 12, marginTop: 24 },
+  guestCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 28,
+  },
+  guestText: {
+    color: "rgba(255,255,255,0.72)",
+    lineHeight: 22,
+    textAlign: "center",
+    fontSize: 15,
+  },
+  guestButton: {
+    backgroundColor: colors.emerald,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
   text: { color: "rgba(255,255,255,0.72)", lineHeight: 22 },
   button: {
     alignSelf: "flex-start",

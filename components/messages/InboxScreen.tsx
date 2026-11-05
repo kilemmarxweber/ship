@@ -82,8 +82,11 @@ export function InboxScreen() {
         Conversations protégées — les urgences restent non lues jusqu’à réponse.
       </Text>
       {!token ? (
-        <View style={styles.center}>
-          <Text style={styles.empty}>Connecte-toi pour voir tes messages.</Text>
+        <View style={styles.guestCenter}>
+          <Ionicons name="chatbubbles-outline" size={40} color={colors.muted} />
+          <Text style={styles.guestText}>
+            Connecte-toi pour voir tes messages.
+          </Text>
           <Pressable style={styles.cta} onPress={openAuth}>
             <Text style={styles.ctaText}>Se connecter</Text>
           </Pressable>
@@ -206,9 +209,22 @@ const styles = StyleSheet.create({
   countText: { color: "#fff", fontWeight: "800", fontSize: 12 },
   lead: { color: colors.muted, fontSize: 13, lineHeight: 20, marginBottom: 14 },
   center: { gap: 12, marginTop: 24 },
+  guestCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    paddingHorizontal: 28,
+  },
+  guestText: {
+    color: "rgba(255,255,255,0.72)",
+    lineHeight: 22,
+    textAlign: "center",
+    fontSize: 15,
+  },
   empty: { color: "rgba(255,255,255,0.72)", lineHeight: 22 },
   cta: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: colors.emerald,
     borderRadius: 14,
     paddingHorizontal: 16,

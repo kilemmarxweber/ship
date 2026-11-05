@@ -955,19 +955,14 @@ export function FeedScreen() {
                           else setShopProduct(item);
                         }}
                       />
-                      <Pressable
-                        style={[
-                          styles.plusMini,
-                          item.shop.followedByMe && styles.minusMini,
-                        ]}
-                        onPress={() => void toggleFollow(item)}
-                      >
-                        <Ionicons
-                          name={item.shop.followedByMe ? "remove" : "add"}
-                          size={14}
-                          color="#fff"
-                        />
-                      </Pressable>
+                      {!item.shop.followedByMe ? (
+                        <Pressable
+                          style={styles.plusMini}
+                          onPress={() => void toggleFollow(item)}
+                        >
+                          <Ionicons name="add" size={14} color="#fff" />
+                        </Pressable>
+                      ) : null}
                     </View>
                     <RailButton
                       icon="heart"
@@ -1038,26 +1033,16 @@ export function FeedScreen() {
                             />
                           ) : null}
                         </Pressable>
-                        <Pressable
-                          style={[
-                            styles.follow,
-                            item.shop.followedByMe && styles.followUnfollow,
-                          ]}
-                          onPress={() => void toggleFollow(item)}
-                        >
-                          <Text
-                            style={[
-                              styles.followText,
-                              item.shop.followedByMe &&
-                                styles.followUnfollowText,
-                            ]}
-                            numberOfLines={1}
+                        {!item.shop.followedByMe ? (
+                          <Pressable
+                            style={styles.follow}
+                            onPress={() => void toggleFollow(item)}
                           >
-                            {item.shop.followedByMe
-                              ? "Ne plus suivre"
-                              : "Suivre"}
-                          </Text>
-                        </Pressable>
+                            <Text style={styles.followText} numberOfLines={1}>
+                              Suivre
+                            </Text>
+                          </Pressable>
+                        ) : null}
                       </View>
                       <Text style={styles.viewsLine}>
                         {compactCount(item.viewsCount ?? item.likesCount ?? 0)}{" "}
@@ -1619,7 +1604,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  minusMini: { backgroundColor: "#e11d48" },
   meta: { position: "absolute", left: 12, right: 58 },
   shopCopy: { minWidth: 0, gap: 3 },
   sellerRow: {
@@ -1705,18 +1689,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  followUnfollow: {
-    backgroundColor: colors.live,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
   followText: {
     color: colors.ink,
     fontWeight: "800",
     fontSize: 12,
-  },
-  followUnfollowText: {
-    color: "#fff",
   },
   caption: {
     color: "#fff",

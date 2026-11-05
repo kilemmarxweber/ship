@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { compactCount } from "@/src/format";
 import {
@@ -83,7 +84,7 @@ export function NotificationsSheet({
         <View
           style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }]}
         >
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <View style={styles.header}>
             <Text style={styles.title}>Notifications</Text>
             {badge > 0 ? (
@@ -93,9 +94,6 @@ export function NotificationsSheet({
                 </Text>
               </View>
             ) : null}
-            <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn}>
-              <Ionicons name="close" size={18} color="#fff" />
-            </Pressable>
           </View>
           <Text style={styles.hint}>
             Messages et commentaires — le compteur baisse dès qu’ils sont lus.

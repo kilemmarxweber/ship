@@ -11,9 +11,20 @@ function devHost() {
   return "localhost";
 }
 
+const PROD_API = "https://shipshop.klambocore.com";
+
 export function apiOrigin() {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, "");
   if (fromEnv) return fromEnv;
+  const extraUrl = String(
+    (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
+      "",
+  )
+    .trim()
+    .replace(/\/$/, "");
+  if (extraUrl) return extraUrl;
+  // Never ship a release/production build pointed at localhost.
+  if (!__DEV__) return PROD_API;
   return `http://${devHost()}:3000`;
 }
 
@@ -96,7 +107,7 @@ function requestHeaders(init?: RequestInit) {
   const token = useSession.getState().token;
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  headers.set("Origin", "shipshop://");
+  headers.set("Origin", "shipshop://app");
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -107,7 +118,7 @@ function requestHeaders(init?: RequestInit) {
 function authHeaderMap() {
   const token = useSession.getState().token;
   const headers: Record<string, string> = {
-    Origin: "shipshop://",
+    Origin: "shipshop://app",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -186,7 +197,7 @@ export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
 async function webUpload(url: string, form: FormData, token: string | null) {
   const headers = new Headers();
   headers.set("Accept", "application/json");
-  headers.set("Origin", "shipshop://");
+  headers.set("Origin", "shipshop://app");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(url, { method: "POST", headers, body: form });
   const text = await response.text();
@@ -201,7 +212,7 @@ function nativeUpload(url: string, form: FormData, token: string | null) {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("Accept", "application/json");
-    xhr.setRequestHeader("Origin", "shipshop://");
+    xhr.setRequestHeader("Origin", "shipshop://app");
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.onload = () => {
       const text = xhr.responseText ?? "";
@@ -262,7 +273,7 @@ export async function authRequest(path: string, body: Record<string, unknown>) {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      Origin: "shipshop://",
+      Origin: "shipshop://app",
     },
     body: JSON.stringify(body),
   });

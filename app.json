@@ -113,6 +113,7 @@
       "typedRoutes": true
     },
     "extra": {
+      "apiUrl": "https://shipshop.klambocore.com",
       "router": {
         "asyncRoutes": {
           "web": true

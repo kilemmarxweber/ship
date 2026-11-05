@@ -39,12 +39,14 @@ import {
     weaveChallenges,
     type MixedRow,
 } from "@/src/challenge-place";
+import { colorHex } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
 import { useInbox } from "@/src/inbox";
 import { matchOpenLive } from "@/src/live";
 import { isSellerOfShop, useMe } from "@/src/me";
 import { coverOf, mediaList } from "@/src/media";
 import { kvGet, kvSet } from "@/src/offline/db";
+import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import { useSession } from "@/src/session";
@@ -58,6 +60,16 @@ import {
     useWantedOfferSync,
     WANTED_FEED_KEY,
 } from "@/src/wanted";
+
+function normalizeProduct(product: Product): Product {
+  return {
+    ...product,
+    colors: Array.isArray(product.colors) ? product.colors : [],
+    sizes: Array.isArray(product.sizes) ? product.sizes : [],
+    description: product.description ?? null,
+    quantity: product.quantity ?? 0,
+  };
+}
 
 type FeedTab = "foryou" | "following" | "search";
 
@@ -113,17 +125,21 @@ export function FeedScreen() {
   useWantedOfferSync(Boolean(token) && focused);
 
   const feed = useInfiniteQuery({
-    queryKey: ["feed", tab, token ?? "guest"],
+    queryKey: feedQueryKey(token, tab === "following" ? "following" : "foryou"),
     enabled: tab !== "search" && (tab !== "following" || Boolean(token)),
     initialPageParam: "",
     staleTime: 45_000,
     gcTime: 24 * 60 * 60 * 1000,
     networkMode: "offlineFirst",
-    queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ status: "ACTIVE", limit: "8" });
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({ status: "ACTIVE", limit: "12" });
       if (pageParam) params.set("cursor", pageParam);
       if (tab === "following") params.set("following", "1");
-      return api<FeedPage>(`/api/products?${params.toString()}`);
+      const page = await api<FeedPage>(`/api/products?${params.toString()}`);
+      return {
+        ...page,
+        products: (page.products ?? []).map(normalizeProduct),
+      };
     },
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -157,9 +173,9 @@ export function FeedScreen() {
 
   const products = useMemo(
     () =>
-      (feed.data?.pages.flatMap((page) => page.products) ?? []).filter(
-        isListableProduct,
-      ),
+      (feed.data?.pages.flatMap((page) => page.products) ?? [])
+        .map(normalizeProduct)
+        .filter(isListableProduct),
     [feed.data],
   );
   const isReelTab = tab === "foryou" || tab === "following";
@@ -976,6 +992,39 @@ export function FeedScreen() {
                           </Text>
                         </Pressable>
                       </View>
+                      <Text style={styles.viewsLine}>
+                        {compactCount(item.viewsCount ?? item.likesCount ?? 0)}{" "}
+                        vues
+                      </Text>
+                      {(item.colors?.length ?? 0) > 0 ||
+                      (item.sizes?.length ?? 0) > 0 ? (
+                        <View style={styles.optionsBlock}>
+                          {(item.colors?.length ?? 0) > 0 ? (
+                            <View style={styles.optionsRow}>
+                              {(item.colors ?? []).slice(0, 5).map((swatch) => (
+                                <View
+                                  key={swatch}
+                                  style={[
+                                    styles.colorDot,
+                                    { backgroundColor: colorHex(swatch) },
+                                  ]}
+                                />
+                              ))}
+                            </View>
+                          ) : null}
+                          {(item.sizes?.length ?? 0) > 0 ? (
+                            <View style={styles.optionsRow}>
+                              {(item.sizes ?? []).slice(0, 4).map((size) => (
+                                <View key={size} style={styles.sizeChip}>
+                                  <Text style={styles.sizeChipText}>
+                                    {size}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
                       {item.description ? (
                         <Pressable
                           onPress={() =>
@@ -1542,6 +1591,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     flexShrink: 1,
     minWidth: 90,
+  },
+  viewsLine: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 34,
+    marginTop: 2,
+  },
+  optionsBlock: {
+    marginLeft: 34,
+    marginTop: 4,
+    gap: 6,
+  },
+  optionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  sizeChip: {
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  sizeChipText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
   },
   follow: {
     backgroundColor: "#fff",

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, type Href } from "expo-router";
 import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
@@ -200,7 +200,10 @@ export function ThreadScreen({ id }: { id: string }) {
     return (
       <View style={[styles.wrap, { paddingTop: insets.top + 12 }]}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.back}>
+          <Pressable
+            onPress={() => router.replace("/messages" as Href)}
+            style={styles.back}
+          >
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </Pressable>
           <Text style={styles.title}>Messages</Text>
@@ -226,7 +229,10 @@ export function ThreadScreen({ id }: { id: string }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}>
+        <Pressable
+          onPress={() => router.replace("/messages" as Href)}
+          style={styles.back}
+        >
           <Ionicons name="chevron-back" size={20} color="#fff" />
         </Pressable>
         <View style={{ flex: 1 }}>

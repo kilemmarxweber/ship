@@ -66,6 +66,8 @@ export function NotificationsSheet({
 
   function openThread(id: string) {
     onClose();
+    // Pose la liste messages sous la conversation (retour ≠ accueil).
+    router.navigate("/messages" as Href);
     router.push(`/messages/${id}` as Href);
   }
 

@@ -20,6 +20,7 @@ import {
     RoomEvent,
     Track,
     type LocalParticipant,
+    type ScreenShareCaptureOptions,
 } from "livekit-client";
 import {
     Component,
@@ -32,9 +33,13 @@ import {
     type ErrorInfo,
     type ReactNode,
 } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
+import {
+    LiveScreenShareSheet,
+    type LiveScreenShareMode,
+} from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
 import { isLiveLookId, LIVE_LOOKS, type LiveLookId } from "@/src/live-look";
 import {
@@ -72,8 +77,41 @@ const ROOM_OPTIONS = {
     simulcast: false,
     stopMicTrackOnMute: true,
     videoEncoding: { maxBitrate: 1_200_000, maxFramerate: 30 },
+    screenShareEncoding: { maxBitrate: 1_800_000, maxFramerate: 15 },
   },
 };
+
+const SCREEN_SHARE_RESOLUTION = {
+  width: 1080,
+  height: 1920,
+  frameRate: 15,
+};
+
+function androidApiLevel() {
+  if (Platform.OS !== "android") return 0;
+  const raw = Platform.Version;
+  return typeof raw === "number" ? raw : Number.parseInt(String(raw), 10) || 0;
+}
+
+function screenShareCaptureOptions(
+  mode: LiveScreenShareMode,
+): ScreenShareCaptureOptions {
+  if (mode === "app") {
+    return {
+      audio: false,
+      preferCurrentTab: true,
+      contentHint: "detail",
+      video: { displaySurface: "window" },
+      resolution: SCREEN_SHARE_RESOLUTION,
+    };
+  }
+  return {
+    audio: false,
+    contentHint: "detail",
+    video: { displaySurface: "monitor" },
+    resolution: SCREEN_SHARE_RESOLUTION,
+  };
+}
 
 const MAX_STAGE_PIPS = 8;
 const CONNECT_OPTIONS = { autoSubscribe: true };
@@ -224,6 +262,14 @@ const LookCtx = createContext<{
   look: "studio",
   pick: () => undefined,
   isHost: false,
+});
+
+const ScreenShareCtx = createContext<{
+  mode: LiveScreenShareMode | null;
+  setMode: (mode: LiveScreenShareMode | null) => void;
+}>({
+  mode: null,
+  setMode: () => undefined,
 });
 
 function useLiveRoomOrNull() {
@@ -451,9 +497,12 @@ function SubscribeRemoteVideo() {
       for (const participant of room.remoteParticipants.values()) {
         for (const pub of participant.trackPublications.values()) {
           const video =
-            pub.source === Track.Source.Camera || pub.kind === Track.Kind.Video;
+            pub.source === Track.Source.Camera ||
+            pub.source === Track.Source.ScreenShare ||
+            pub.kind === Track.Kind.Video;
           const audio =
             pub.source === Track.Source.Microphone ||
+            pub.source === Track.Source.ScreenShareAudio ||
             pub.kind === Track.Kind.Audio;
           if (!video && !audio) continue;
           if (!pub.isSubscribed) pub.setSubscribed(true);
@@ -507,6 +556,12 @@ export function LiveKitRoomGate({
       setMicOk: (ok: boolean) => setAv((cur) => ({ ...cur, microphone: ok })),
     }),
     [],
+  );
+  const [screenShareMode, setScreenShareMode] =
+    useState<LiveScreenShareMode | null>(null);
+  const screenShareApi = useMemo(
+    () => ({ mode: screenShareMode, setMode: setScreenShareMode }),
+    [screenShareMode],
   );
 
   useEffect(() => {
@@ -606,17 +661,19 @@ export function LiveKitRoomGate({
 
   return (
     <AvCtx.Provider value={avApi}>
-      <RoomContext.Provider value={room.current}>
-        <LiveLookProvider isHost={isHost}>
-          <PublishLocalAv
-            enabled={canPublish && audioOn}
-            cameraOn={cameraOn && av.camera}
-            micOn={micOn && av.microphone}
-          />
-          <SubscribeRemoteVideo />
-          {children}
-        </LiveLookProvider>
-      </RoomContext.Provider>
+      <ScreenShareCtx.Provider value={screenShareApi}>
+        <RoomContext.Provider value={room.current}>
+          <LiveLookProvider isHost={isHost}>
+            <PublishLocalAv
+              enabled={canPublish && audioOn}
+              cameraOn={cameraOn && av.camera}
+              micOn={micOn && av.microphone}
+            />
+            <SubscribeRemoteVideo />
+            {children}
+          </LiveLookProvider>
+        </RoomContext.Provider>
+      </ScreenShareCtx.Provider>
     </AvCtx.Provider>
   );
 }
@@ -660,21 +717,44 @@ function LiveKitVideoInner({
   paused: boolean;
   onKickPlayback?: () => void;
 }) {
-  const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
-  const remotes = tracks.filter(
+  const tracks = useTracks(
+    [Track.Source.Camera, Track.Source.ScreenShare],
+    { onlySubscribed: false },
+  );
+  const cameraTracks = tracks.filter(
+    (row) => isTrackReference(row) && row.source === Track.Source.Camera,
+  );
+  const screenTracks = tracks.filter(
+    (row) => isTrackReference(row) && row.source === Track.Source.ScreenShare,
+  );
+  const remotes = cameraTracks.filter(
     (row) => isTrackReference(row) && !row.participant.isLocal,
   );
-  const hostTrack =
+  const hostCamera =
     remotes.find((row) => row.participant.identity === hostUserId) ??
     remotes[0];
-  const localTrack = tracks.find(
+  const localCamera = cameraTracks.find(
     (row) => isTrackReference(row) && row.participant.isLocal,
   );
-  const shown = isHost ? localTrack : hostTrack;
-  const hasVideo = isTrackReference(shown) && (isHost || cameraOn !== false);
+  const hostScreen =
+    screenTracks.find(
+      (row) =>
+        isTrackReference(row) &&
+        (isHost
+          ? row.participant.isLocal
+          : !hostUserId || row.participant.identity === hostUserId),
+    ) ??
+    screenTracks.find((row) => isTrackReference(row) && !row.participant.isLocal) ??
+    (isHost
+      ? screenTracks.find((row) => isTrackReference(row) && row.participant.isLocal)
+      : undefined);
+  const sharing = isTrackReference(hostScreen);
+  const faceTrack = isHost ? localCamera : hostCamera;
+  const shown = sharing ? hostScreen : isHost ? localCamera : hostCamera;
+  const hasVideo = isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
   const look = useContext(LookCtx).look;
 
-  // Invités sur scène (1…N) : tous les cameras distants sauf le host.
+  // Invités sur scène (1…N) : cameras distants sauf le host.
   const guestRemotes = remotes.filter(
     (row) =>
       isTrackReference(row) &&
@@ -682,7 +762,7 @@ function LiveKitVideoInner({
   );
   // Invité local aussi visible en PIP (comme le rail web).
   const stageSlots = [
-    ...(!isHost && isTrackReference(localTrack) ? [localTrack] : []),
+    ...(!isHost && isTrackReference(localCamera) ? [localCamera] : []),
     ...guestRemotes,
   ]
     .filter(isTrackReference)
@@ -692,6 +772,7 @@ function LiveKitVideoInner({
   const pipH = pipCount > 4 ? 104 : 148;
   const pipW = pipCount > 4 ? 76 : 108;
   const pipGap = 8;
+  const showFacePip = sharing && isTrackReference(faceTrack);
 
   return (
     <View style={styles.fill}>
@@ -700,9 +781,11 @@ function LiveKitVideoInner({
           <VideoTrack
             trackRef={shown}
             style={styles.fill}
-            objectFit="cover"
+            objectFit={sharing ? "contain" : "cover"}
             zOrder={0}
-            mirror={Boolean(isHost || shown.participant.isLocal)}
+            mirror={
+              !sharing && Boolean(isHost || shown.participant.isLocal)
+            }
           />
         </TrackSafe>
       ) : ended || paused ? (
@@ -714,7 +797,22 @@ function LiveKitVideoInner({
           onRetry={onKickPlayback}
         />
       )}
-      {hasVideo ? <LiveFilterOverlay look={look} /> : null}
+      {hasVideo && !sharing ? <LiveFilterOverlay look={look} /> : null}
+
+      {showFacePip ? (
+        <View style={styles.hostFacePip} pointerEvents="none">
+          <TrackSafe fallback={null}>
+            <VideoTrack
+              trackRef={faceTrack}
+              style={styles.fill}
+              objectFit="cover"
+              zOrder={2}
+              mirror={Boolean(isHost || faceTrack.participant.isLocal)}
+            />
+          </TrackSafe>
+          <LiveFilterOverlay look={look} intensity="pip" />
+        </View>
+      ) : null}
 
       {stageSlots.length > 0 ? (
         <View style={styles.guestRail} pointerEvents="box-none">
@@ -735,7 +833,7 @@ function LiveKitVideoInner({
                   trackRef={row}
                   style={styles.fill}
                   objectFit="cover"
-                  zOrder={1 + index}
+                  zOrder={3 + index}
                   mirror={row.participant.isLocal}
                 />
               </TrackSafe>
@@ -747,7 +845,7 @@ function LiveKitVideoInner({
         </View>
       ) : null}
 
-      {!isHost && cameraOn === false && !ended && hostTrack ? (
+      {!isHost && !sharing && cameraOn === false && !ended && hostCamera ? (
         <View style={styles.wait} pointerEvents="none">
           <Text style={styles.waitTitle}>Caméra du diffuseur coupée</Text>
           <Text style={styles.waitBody}>
@@ -804,6 +902,133 @@ export function LiveFilterBar() {
         onPress={() => setOpen((value) => !value)}
       >
         <Ionicons name="color-filter" size={20} color="#fff" />
+      </Pressable>
+    </View>
+  );
+}
+
+export function LiveScreenShareHost({ enabled }: { enabled: boolean }) {
+  const room = useLiveRoomOrNull();
+  if (!enabled || !room) return null;
+  return <LiveScreenShareHostInner />;
+}
+
+function LiveScreenShareHostInner() {
+  const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
+  const { mode, setMode } = useContext(ScreenShareCtx);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!isScreenShareEnabled) setMode(null);
+  }, [isScreenShareEnabled, setMode]);
+
+  const startShare = (requested: LiveScreenShareMode) => {
+    void (async () => {
+      if (Platform.OS !== "android") {
+        showToast("Partage d’écran bientôt sur iPhone", "info");
+        setOpen(false);
+        return;
+      }
+      let nextMode = requested;
+      if (requested === "app" && androidApiLevel() < 34) {
+        showToast(
+          "Écran actif nécessite Android 14 — Tout l’écran lancé",
+          "info",
+        );
+        nextMode = "full";
+      }
+      setBusy(true);
+      try {
+        await localParticipant.setScreenShareEnabled(
+          true,
+          screenShareCaptureOptions(nextMode),
+        );
+        setMode(nextMode);
+        setOpen(false);
+      } catch {
+        showToast("Impossible de démarrer le partage d’écran", "error");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  const stopShare = () => {
+    void (async () => {
+      setBusy(true);
+      try {
+        await localParticipant.setScreenShareEnabled(false);
+        setMode(null);
+        setOpen(false);
+      } catch {
+        showToast("Arrêt du partage impossible", "error");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  return (
+    <>
+      <Pressable
+        style={[styles.avBtn, isScreenShareEnabled && styles.studioBtnOn]}
+        onPress={() => setOpen(true)}
+        accessibilityLabel="Partage d’écran"
+      >
+        <Ionicons
+          name={
+            isScreenShareEnabled
+              ? "phone-portrait"
+              : "phone-portrait-outline"
+          }
+          size={20}
+          color="#fff"
+        />
+      </Pressable>
+      <LiveScreenShareSheet
+        open={open}
+        sharing={isScreenShareEnabled}
+        mode={mode}
+        busy={busy}
+        onClose={() => setOpen(false)}
+        onStart={startShare}
+        onStop={stopShare}
+      />
+    </>
+  );
+}
+
+export function LiveScreenShareBanner({ enabled }: { enabled: boolean }) {
+  const room = useLiveRoomOrNull();
+  if (!enabled || !room) return null;
+  return <LiveScreenShareBannerInner />;
+}
+
+function LiveScreenShareBannerInner() {
+  const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
+  const { mode, setMode } = useContext(ScreenShareCtx);
+  if (!isScreenShareEnabled) return null;
+  const label =
+    mode === "app" ? "Partage — Écran actif" : "Partage — Tout l’écran";
+
+  return (
+    <View style={styles.shareBanner} pointerEvents="box-none">
+      <Text style={styles.shareBannerText}>{label}</Text>
+      <Pressable
+        style={styles.shareBannerStop}
+        onPress={() => {
+          void (async () => {
+            try {
+              await localParticipant.setScreenShareEnabled(false);
+              setMode(null);
+            } catch {
+              showToast("Arrêt du partage impossible", "error");
+            }
+          })();
+        }}
+      >
+        <Text style={styles.shareBannerStopText}>Arrêter</Text>
       </Pressable>
     </View>
   );
@@ -900,6 +1125,55 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.28)",
+  },
+  hostFacePip: {
+    position: "absolute",
+    left: 12,
+    bottom: 132,
+    width: 108,
+    height: 148,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#111",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.28)",
+    zIndex: 5,
+  },
+  shareBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 92,
+    zIndex: 24,
+    elevation: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,214,143,0.35)",
+  },
+  shareBannerText: {
+    flex: 1,
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  shareBannerStop: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "rgba(251,191,36,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.45)",
+  },
+  shareBannerStopText: {
+    color: "#FBBF24",
+    fontWeight: "800",
+    fontSize: 12,
   },
   endedStage: { backgroundColor: "#050508" },
   wait: {

@@ -3,8 +3,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/src/theme";
 
-/** Poignée + « Réduire » centrés en haut des bottom sheets. */
+/** Poignée seule — le libellé / chevron restent en code mais sont masqués (Android a déjà l’indicateur). */
 export function SheetReduce({ onPress }: { onPress: () => void }) {
+  const showReduceHint = false;
   return (
     <Pressable
       style={styles.hit}
@@ -14,10 +15,12 @@ export function SheetReduce({ onPress }: { onPress: () => void }) {
       hitSlop={12}
     >
       <View style={styles.handle} />
-      <View style={styles.row}>
-        <Ionicons name="chevron-down" size={18} color={colors.muted} />
-        <Text style={styles.label}>Réduire</Text>
-      </View>
+      {showReduceHint ? (
+        <View style={styles.row}>
+          <Ionicons name="chevron-down" size={18} color={colors.muted} />
+          <Text style={styles.label}>Réduire</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -30,7 +33,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 8,
     gap: 6,
-    minHeight: 52,
+    minHeight: 36,
   },
   handle: {
     width: 42,

@@ -5,6 +5,8 @@ const NEEDED = [
   "android.permission.RECORD_AUDIO",
   "android.permission.MODIFY_AUDIO_SETTINGS",
   "android.permission.POST_NOTIFICATIONS",
+  "android.permission.FOREGROUND_SERVICE",
+  "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
 ];
 
 function ensurePermission(manifest, name) {

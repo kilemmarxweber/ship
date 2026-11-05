@@ -31,6 +31,14 @@ export function LiveHostAvButtons(_props: {
   return null;
 }
 
+export function LiveScreenShareHost(_props: { enabled: boolean }) {
+  return null;
+}
+
+export function LiveScreenShareBanner(_props: { enabled: boolean }) {
+  return null;
+}
+
 export function LiveCatalogSync(_props: {
   isHost: boolean;
   open: boolean;

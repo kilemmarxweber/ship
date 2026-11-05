@@ -32,6 +32,8 @@ import {
     LiveCatalogSync,
     LiveHostAvButtons,
     LiveKitVideo,
+    LiveScreenShareBanner,
+    LiveScreenShareHost,
 } from "@/components/live/LiveMedia";
 import { LiveProductsSheet } from "@/components/live/LiveProductsSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
@@ -697,6 +699,10 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         </View>
       ) : null}
 
+      {isHost && canPublish && !ended ? (
+        <LiveScreenShareBanner enabled />
+      ) : null}
+
       <Pressable
         style={styles.stage}
         onPress={() => {
@@ -881,14 +887,17 @@ export function LiveScreen({ liveId }: { liveId: string }) {
           <Ionicons name="share-social" size={20} color="#fff" />
         </Pressable>
         {canPublish ? (
-          <LiveHostAvButtons
-            onCamera={(enabled) => {
-              void hostPost({ action: "camera", cameraOn: enabled });
-            }}
-            onMic={(enabled) => {
-              void hostPost({ action: "mic", micOn: enabled });
-            }}
-          />
+          <>
+            <LiveHostAvButtons
+              onCamera={(enabled) => {
+                void hostPost({ action: "camera", cameraOn: enabled });
+              }}
+              onMic={(enabled) => {
+                void hostPost({ action: "mic", micOn: enabled });
+              }}
+            />
+            {isHost ? <LiveScreenShareHost enabled /> : null}
+          </>
         ) : null}
       </View>
       <LiveLikeRise events={stageFx} />

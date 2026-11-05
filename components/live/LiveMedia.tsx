@@ -40,6 +40,18 @@ export function LiveHostAvButtons(props: {
   return <Native.LiveHostAvButtons {...props} />;
 }
 
+export function LiveScreenShareHost(props: { enabled: boolean }) {
+  const Native = useNativeLive();
+  if (!Native?.LiveScreenShareHost) return null;
+  return <Native.LiveScreenShareHost {...props} />;
+}
+
+export function LiveScreenShareBanner(props: { enabled: boolean }) {
+  const Native = useNativeLive();
+  if (!Native?.LiveScreenShareBanner) return null;
+  return <Native.LiveScreenShareBanner {...props} />;
+}
+
 export function LiveCatalogSync(props: {
   isHost: boolean;
   open: boolean;

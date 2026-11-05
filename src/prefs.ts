@@ -65,7 +65,12 @@ async function writePrefs(locale: UserLocale, theme: UserTheme) {
 }
 
 function applyNativeTheme(theme: UserTheme) {
-  Appearance.setColorScheme(theme);
+  if (typeof Appearance.setColorScheme === "function") {
+    Appearance.setColorScheme(theme);
+  }
+  if (Platform.OS === "web" && typeof document !== "undefined") {
+    document.documentElement.style.colorScheme = theme;
+  }
 }
 
 export const usePrefs = create<PrefsState>((set, get) => ({

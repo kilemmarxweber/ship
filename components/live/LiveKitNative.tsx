@@ -51,7 +51,8 @@ if (isLiveRtcAvailable()) {
 
 const CAMERA = {
   facingMode: "user" as const,
-  resolution: { width: 540, height: 960, frameRate: 24 },
+  // Portrait studio — netteté + fluidité pour le diffuseur / invités.
+  resolution: { width: 720, height: 1280, frameRate: 30 },
 };
 
 const MIC_CAPTURE = {
@@ -70,9 +71,11 @@ const ROOM_OPTIONS = {
   publishDefaults: {
     simulcast: false,
     stopMicTrackOnMute: true,
-    videoEncoding: { maxBitrate: 700_000, maxFramerate: 24 },
+    videoEncoding: { maxBitrate: 1_200_000, maxFramerate: 30 },
   },
 };
+
+const MAX_STAGE_PIPS = 8;
 const CONNECT_OPTIONS = { autoSubscribe: true };
 
 const SPEAKER_ROUTE = ["speaker", "bluetooth", "headset", "earpiece"] as const;
@@ -671,6 +674,25 @@ function LiveKitVideoInner({
   const hasVideo = isTrackReference(shown) && (isHost || cameraOn !== false);
   const look = useContext(LookCtx).look;
 
+  // Invités sur scène (1…N) : tous les cameras distants sauf le host.
+  const guestRemotes = remotes.filter(
+    (row) =>
+      isTrackReference(row) &&
+      (!hostUserId || row.participant.identity !== hostUserId),
+  );
+  // Invité local aussi visible en PIP (comme le rail web).
+  const stageSlots = [
+    ...(!isHost && isTrackReference(localTrack) ? [localTrack] : []),
+    ...guestRemotes,
+  ]
+    .filter(isTrackReference)
+    .slice(0, MAX_STAGE_PIPS);
+
+  const pipCount = stageSlots.length;
+  const pipH = pipCount > 4 ? 104 : 148;
+  const pipW = pipCount > 4 ? 76 : 108;
+  const pipGap = 8;
+
   return (
     <View style={styles.fill}>
       {hasVideo && isTrackReference(shown) ? (
@@ -693,23 +715,38 @@ function LiveKitVideoInner({
         />
       )}
       {hasVideo ? <LiveFilterOverlay look={look} /> : null}
-      {isHost
-        ? remotes.filter(isTrackReference).map((row) => (
+
+      {stageSlots.length > 0 ? (
+        <View style={styles.guestRail} pointerEvents="box-none">
+          {stageSlots.map((row, index) => (
             <View
               key={row.participant.sid || row.participant.identity}
-              style={styles.guestPip}
+              style={[
+                styles.guestPip,
+                {
+                  top: 88 + index * (pipH + pipGap),
+                  width: pipW,
+                  height: pipH,
+                },
+              ]}
             >
               <TrackSafe fallback={null}>
                 <VideoTrack
                   trackRef={row}
                   style={styles.fill}
                   objectFit="cover"
-                  zOrder={1}
+                  zOrder={1 + index}
+                  mirror={row.participant.isLocal}
                 />
               </TrackSafe>
+              {hasVideo ? (
+                <LiveFilterOverlay look={look} intensity="pip" />
+              ) : null}
             </View>
-          ))
-        : null}
+          ))}
+        </View>
+      ) : null}
+
       {!isHost && cameraOn === false && !ended && hostTrack ? (
         <View style={styles.wait} pointerEvents="none">
           <Text style={styles.waitTitle}>Caméra du diffuseur coupée</Text>
@@ -851,17 +888,18 @@ function LiveHostAvButtonsInner({
 
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill },
+  guestRail: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 4,
+  },
   guestPip: {
     position: "absolute",
-    top: 88,
     right: 12,
-    width: 108,
-    height: 152,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.28)",
   },
   endedStage: { backgroundColor: "#050508" },
   wait: {

@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Modal,
     Pressable,
     ScrollView,
@@ -20,13 +21,11 @@ import { EventTicketSettings } from "@/components/profile/EventTicketSettings";
 import { FlashPubSettings } from "@/components/profile/FlashPubSettings";
 import { ShopHoursSettings } from "@/components/profile/ShopHoursSettings";
 import { MediaStrip } from "@/components/publish/MediaStrip";
-import { SoftSpinner } from "@/components/ui/SoftSpinner";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { badgeKey, badgeLabel, type GrowthBadge } from "@/src/growth";
 import { useT } from "@/src/i18n";
 import { useMe } from "@/src/me";
-import { useOnline } from "@/src/offline/network";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
@@ -61,7 +60,6 @@ export function ProfileScreen() {
   const logout = useSession((state) => state.logout);
   const applyRemote = usePrefs((state) => state.applyRemote);
   const me = useMe();
-  const online = useOnline();
   const [mode, setMode] = useState<"buyer" | "seller">("buyer");
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -75,23 +73,17 @@ export function ProfileScreen() {
   const profile = useQuery({
     queryKey: ["profile", token ?? "guest"],
     enabled: Boolean(token),
-    staleTime: 60_000,
-    networkMode: "offlineFirst",
     queryFn: () => api<{ user?: ProfileUser }>("/api/profile"),
   });
   const wallet = useQuery({
     queryKey: ["wallet", token ?? "guest"],
     enabled: Boolean(token),
-    staleTime: 30_000,
-    networkMode: "offlineFirst",
     queryFn: () =>
       api<{ wallet?: WalletBalances; displayCurrency?: string }>("/api/wallet"),
   });
   const kyc = useQuery({
     queryKey: ["kyc", token ?? "guest"],
     enabled: Boolean(token),
-    staleTime: 60_000,
-    networkMode: "offlineFirst",
     queryFn: () =>
       api<{
         kyc?: { status?: string; rejectReason?: string | null } | null;
@@ -101,8 +93,6 @@ export function ProfileScreen() {
   const growth = useQuery({
     queryKey: ["growth-me", token ?? "guest"],
     enabled: Boolean(token),
-    staleTime: 60_000,
-    networkMode: "offlineFirst",
     queryFn: () =>
       api<{ badges?: GrowthBadge[] }>("/api/growth/me").catch(() => ({
         badges: [] as GrowthBadge[],
@@ -191,15 +181,7 @@ export function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.topRow}>
-          <Pressable
-            unstable_pressDelay={0}
-            hitSlop={8}
-            onPressIn={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/");
-            }}
-            style={styles.back}
-          >
+          <Pressable onPress={() => router.back()} style={styles.back}>
             <Ionicons name="chevron-back" size={20} color={c.text} />
             <Text
               style={[styles.backText, { color: c.text }]}
@@ -240,31 +222,10 @@ export function ProfileScreen() {
               <Text style={styles.primaryText}>Se connecter</Text>
             </Pressable>
           </View>
-        ) : profile.isPending && !user ? (
-          <View style={styles.center}>
-            <SoftSpinner color={c.emerald} />
-            {!online ? (
-              <Text
-                style={[styles.lead, { color: c.textMuted, marginTop: 12 }]}
-              >
-                Hors ligne — profil indisponible sans cache.
-              </Text>
-            ) : null}
-          </View>
+        ) : profile.isLoading ? (
+          <ActivityIndicator color={c.emerald} />
         ) : (
           <>
-            {!online ? (
-              <View style={styles.offlineBanner}>
-                <Ionicons
-                  name="cloud-offline-outline"
-                  size={14}
-                  color="#FBBF24"
-                />
-                <Text style={styles.offlineBannerText}>
-                  Hors ligne · menu disponible en local
-                </Text>
-              </View>
-            ) : null}
             <View style={styles.hero}>
               {displayImage ? (
                 <Image
@@ -373,8 +334,7 @@ export function ProfileScreen() {
             ) : null}
 
             <Pressable
-              unstable_pressDelay={0}
-              onPressIn={() => router.push("/wallet" as Href)}
+              onPress={() => router.push("/wallet" as Href)}
               style={styles.wallet}
             >
               <View>
@@ -456,8 +416,7 @@ export function ProfileScreen() {
             <View style={styles.grid}>
               <Pressable
                 style={[styles.tile, { backgroundColor: c.card }]}
-                unstable_pressDelay={0}
-                onPressIn={() => router.push("/tickets" as Href)}
+                onPress={() => router.push("/tickets" as Href)}
               >
                 <Ionicons name="qr-code-outline" size={20} color={c.emerald} />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
@@ -466,8 +425,7 @@ export function ProfileScreen() {
               </Pressable>
               <Pressable
                 style={[styles.tile, { backgroundColor: c.card }]}
-                unstable_pressDelay={0}
-                onPressIn={() => router.push("/orders")}
+                onPress={() => router.push("/orders")}
               >
                 <Ionicons name="receipt-outline" size={20} color="#FF7A00" />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
@@ -479,8 +437,7 @@ export function ProfileScreen() {
               </Pressable>
               <Pressable
                 style={[styles.tile, { backgroundColor: c.card }]}
-                unstable_pressDelay={0}
-                onPressIn={() => router.push("/courier")}
+                onPress={() => router.push("/courier")}
               >
                 <Ionicons name="bicycle-outline" size={20} color={c.emerald} />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
@@ -492,8 +449,7 @@ export function ProfileScreen() {
               </Pressable>
               <Pressable
                 style={[styles.tile, { backgroundColor: c.card }]}
-                unstable_pressDelay={0}
-                onPressIn={() =>
+                onPress={() =>
                   token ? router.push("/kyc" as Href) : openAuth()
                 }
               >
@@ -517,8 +473,7 @@ export function ProfileScreen() {
               </Pressable>
               <Pressable
                 style={[styles.tile, { backgroundColor: c.card }]}
-                unstable_pressDelay={0}
-                onPressIn={() => router.push("/community" as Href)}
+                onPress={() => router.push("/community" as Href)}
               >
                 <Ionicons name="trophy-outline" size={20} color="#FBBF24" />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
@@ -617,8 +572,7 @@ export function ProfileScreen() {
                   <Pressable
                     key={`${href}-${label}`}
                     style={[styles.legalRow, { backgroundColor: c.card }]}
-                    unstable_pressDelay={0}
-                    onPressIn={() => router.push(href as Href)}
+                    onPress={() => router.push(href as Href)}
                   >
                     <Ionicons name={icon} size={18} color={c.textMuted} />
                     <Text style={[styles.legalLabel, { color: c.text }]}>
@@ -660,8 +614,7 @@ export function ProfileScreen() {
           <Pressable
             key={href}
             style={[styles.legalRow, { backgroundColor: c.card }]}
-            unstable_pressDelay={0}
-            onPressIn={() => router.push(href as Href)}
+            onPress={() => router.push(href as Href)}
           >
             <Ionicons name={icon} size={18} color={c.textMuted} />
             <Text style={[styles.legalLabel, { color: c.text }]}>{label}</Text>
@@ -737,24 +690,6 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
-  offlineBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "stretch",
-    backgroundColor: "rgba(251,191,36,0.12)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(251,191,36,0.28)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  offlineBannerText: {
-    color: "#FDE68A",
-    fontSize: 12,
-    fontWeight: "700",
-    flexShrink: 1,
-  },
   topRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -65,11 +65,20 @@ async function writePrefs(locale: UserLocale, theme: UserTheme) {
 }
 
 function applyNativeTheme(theme: UserTheme) {
-  if (typeof Appearance.setColorScheme === "function") {
-    Appearance.setColorScheme(theme);
+  // RN Web / Hermes often expose Appearance without setColorScheme.
+  if (Platform.OS === "web") {
+    if (typeof document !== "undefined") {
+      document.documentElement.style.colorScheme = theme;
+    }
+    return;
   }
-  if (Platform.OS === "web" && typeof document !== "undefined") {
-    document.documentElement.style.colorScheme = theme;
+  try {
+    const setScheme = (
+      Appearance as { setColorScheme?: (scheme: UserTheme | null) => void }
+    ).setColorScheme;
+    setScheme?.(theme);
+  } catch {
+    /* ignore unsupported Appearance APIs */
   }
 }
 

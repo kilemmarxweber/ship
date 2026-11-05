@@ -28,6 +28,7 @@ export async function openOfflineDb() {
   if (opened) return;
   opened = true;
   try {
+    // Native-only path; web uses db.web.ts (no wasm).
     const SQLite = await import("expo-sqlite");
     const db = SQLite.openDatabaseSync("shipshop-offline.db");
     db.execSync(`
@@ -148,7 +149,9 @@ export function snapshotDeletePrefix(prefix: string) {
   }
 }
 
-export function outboxEnqueue(row: Omit<OutboxRow, "tries"> & { tries?: number }) {
+export function outboxEnqueue(
+  row: Omit<OutboxRow, "tries"> & { tries?: number },
+) {
   const next: OutboxRow = { tries: 0, ...row };
   memOutbox.push(next);
   try {

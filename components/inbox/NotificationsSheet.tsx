@@ -73,7 +73,7 @@ export function NotificationsSheet({
   return (
     <Modal
       visible={open}
-      animationType="fade"
+      animationType="slide"
       transparent
       statusBarTranslucent
       onRequestClose={onClose}

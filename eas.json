@@ -18,6 +18,12 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://shipshop.klambocore.com"
       }
+    },
+    "production-apk": {
+      "extends": "production",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {

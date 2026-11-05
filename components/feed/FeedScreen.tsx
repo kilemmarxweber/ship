@@ -707,7 +707,7 @@ export function FeedScreen() {
             overScrollMode="never"
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.key}
-            drawDistance={height * 2}
+            drawDistance={height * 1.15}
             onMomentumScrollEnd={onMomentumScrollEnd}
             onEndReached={() => {
               if (feed.hasNextPage && !feed.isFetchingNextPage)
@@ -802,17 +802,19 @@ export function FeedScreen() {
                     height={height}
                     onTap={() => onMediaPress(item)}
                     dotsBottom={bottom + 100}
-                    restartToken={active}
+                    restartToken={item.id}
+                    poster={coverOf(item.images)}
                   />
-                  {item.soundtrack?.audioUrl && index === active ? (
+                  {item.soundtrack?.audioUrl &&
+                  index === active &&
+                  !paused &&
+                  (focused || commentProduct?.id === item.id) ? (
                     <ReelSoundtrack
                       uri={
                         mediaUrl(item.soundtrack.audioUrl) ??
                         item.soundtrack.audioUrl
                       }
-                      playing={
-                        !paused && (focused || commentProduct?.id === item.id)
-                      }
+                      playing
                       muted={muted}
                     />
                   ) : null}
@@ -983,12 +985,21 @@ export function FeedScreen() {
                         <Pressable
                           style={[
                             styles.follow,
-                            item.shop.followedByMe && styles.followOn,
+                            item.shop.followedByMe && styles.followUnfollow,
                           ]}
                           onPress={() => void toggleFollow(item)}
                         >
-                          <Text style={styles.followText}>
-                            {item.shop.followedByMe ? "Suivi" : "Suivre"}
+                          <Text
+                            style={[
+                              styles.followText,
+                              item.shop.followedByMe &&
+                                styles.followUnfollowText,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {item.shop.followedByMe
+                              ? "Ne plus suivre"
+                              : "Suivre"}
                           </Text>
                         </Pressable>
                       </View>
@@ -1632,14 +1643,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 6,
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
-  followOn: { backgroundColor: "rgba(255,255,255,0.82)" },
+  followUnfollow: {
+    backgroundColor: colors.live,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
   followText: {
     color: colors.ink,
     fontWeight: "800",
     fontSize: 12,
+  },
+  followUnfollowText: {
+    color: "#fff",
   },
   caption: {
     color: "#fff",

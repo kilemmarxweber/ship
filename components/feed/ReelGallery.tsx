@@ -15,6 +15,44 @@ import { colors } from "@/src/theme";
 const AUTO_MS = 3200;
 const IDLE_MS = 4500;
 
+function SlideMedia({
+  uri,
+  poster,
+  active,
+  playing,
+  muted,
+  loop,
+  onEnded,
+}: {
+  uri: string;
+  poster?: string | null;
+  active: boolean;
+  playing: boolean;
+  muted: boolean;
+  loop?: boolean;
+  onEnded?: () => void;
+}) {
+  if (!isVideoUrl(uri)) {
+    return <ReelCover uri={uri} />;
+  }
+  // Mount at most one video decoder per gallery — avoids Android crashes & jank.
+  if (active && playing) {
+    return (
+      <ReelVideo
+        uri={uri}
+        playing
+        muted={muted}
+        loop={loop}
+        onEnded={onEnded}
+      />
+    );
+  }
+  if (poster && !isVideoUrl(poster)) {
+    return <ReelCover uri={poster} />;
+  }
+  return <View style={styles.placeholder} />;
+}
+
 export function ReelGallery({
   urls,
   playing,
@@ -24,6 +62,7 @@ export function ReelGallery({
   onTap,
   dotsBottom,
   restartToken,
+  poster,
 }: {
   urls: string[];
   playing: boolean;
@@ -33,6 +72,7 @@ export function ReelGallery({
   onTap: () => void;
   dotsBottom: number;
   restartToken: string | number;
+  poster?: string | null;
 }) {
   const scrollRef = useRef<{
     scrollTo: (opts: { x: number; y?: number; animated?: boolean }) => void;
@@ -89,11 +129,13 @@ export function ReelGallery({
     const only = urls[0];
     return (
       <Pressable style={[styles.frame, { width, height }]} onPress={onTap}>
-        {isVideoUrl(only) ? (
-          <ReelVideo uri={only} playing={playing} muted={muted} />
-        ) : (
-          <ReelCover uri={only} />
-        )}
+        <SlideMedia
+          uri={only}
+          poster={poster}
+          active
+          playing={playing}
+          muted={muted}
+        />
       </Pressable>
     );
   }
@@ -123,17 +165,15 @@ export function ReelGallery({
             style={{ width, height }}
             onPress={onTap}
           >
-            {isVideoUrl(uri) ? (
-              <ReelVideo
-                uri={uri}
-                playing={playing && index === slide}
-                muted={muted}
-                loop={false}
-                onEnded={playing && index === slide ? goNext : undefined}
-              />
-            ) : (
-              <ReelCover uri={uri} />
-            )}
+            <SlideMedia
+              uri={uri}
+              poster={poster}
+              active={index === slide}
+              playing={playing}
+              muted={muted}
+              loop={false}
+              onEnded={playing && index === slide ? goNext : undefined}
+            />
           </Pressable>
         ))}
       </ScrollView>
@@ -156,6 +196,10 @@ const styles = StyleSheet.create({
     left: 0,
     backgroundColor: "#0A0A0F",
     overflow: "hidden",
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "#0A0A0F",
   },
   dots: {
     position: "absolute",

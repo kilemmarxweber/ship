@@ -47,6 +47,7 @@ import {
     ensureCameraPermission,
     isLiveRtcAvailable,
     requestLiveAvPermissions,
+    requestNotificationPermission,
 } from "@/src/live-rtc";
 import { showToast } from "@/src/toast";
 
@@ -940,14 +941,28 @@ function LiveScreenShareHostInner() {
       }
       setBusy(true);
       try {
+        // Notification FGS obligatoire — sinon Android tue l’app hors ShipShop.
+        await requestNotificationPermission();
+        try {
+          await AudioSession.startAudioSession();
+        } catch {
+          /* déjà active */
+        }
         await localParticipant.setScreenShareEnabled(
           true,
           screenShareCaptureOptions(nextMode),
         );
         setMode(nextMode);
         setOpen(false);
+        showToast(
+          "Partage actif — une notif garde le live si tu changes d’app",
+          "info",
+        );
       } catch {
-        showToast("Impossible de démarrer le partage d’écran", "error");
+        showToast(
+          "Partage impossible — rebuild Android requis (MediaProjection)",
+          "error",
+        );
       } finally {
         setBusy(false);
       }

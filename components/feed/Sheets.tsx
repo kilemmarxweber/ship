@@ -917,10 +917,12 @@ const shopStyles = StyleSheet.create({
 
 export function ShopProfileSheet({
   shop,
+  live = false,
   onClose,
   onFollow,
 }: {
   shop: ShopCard | null;
+  live?: boolean;
   onClose: () => void;
   onFollow: () => void;
 }) {
@@ -936,6 +938,7 @@ export function ShopProfileSheet({
         <ShopProfileBody
           key={shop.id}
           shop={shop}
+          live={live}
           onClose={onClose}
           onFollow={onFollow}
         />
@@ -955,10 +958,12 @@ function hoursLabel(detail: ShopDetail | null) {
 
 function ShopProfileBody({
   shop,
+  live,
   onClose,
   onFollow,
 }: {
   shop: ShopCard;
+  live: boolean;
   onClose: () => void;
   onFollow: () => void;
 }) {
@@ -1158,7 +1163,7 @@ function ShopProfileBody({
         >
           <View style={shopStyles.avatarWrap}>
             <ShopLiveAvatar
-              live
+              live={live}
               logoUrl={shop.logoUrl}
               name={shop.name}
               size={88}

@@ -38,6 +38,18 @@ export function matchOpenLive<
   return pool[0] ?? null;
 }
 
+export type LiveViewer = {
+  peerKey: string;
+  userId?: string | null;
+  name: string;
+  image?: string | null;
+  joinedAt: string;
+  lastSeenAt: string;
+  qualified: boolean;
+  online: boolean;
+  watchedSeconds: number;
+};
+
 export type LiveDetail = {
   id: string;
   title: string;
@@ -45,6 +57,11 @@ export type LiveDetail = {
   giftCents?: number;
   likeCount?: number;
   viewerPeak?: number;
+  /** Spectateurs actuellement en ligne (heartbeat). */
+  viewerCount?: number;
+  /** Ont suivi le live ≥ 1 minute (session). */
+  qualifiedViewerCount?: number;
+  viewers?: LiveViewer[];
   startedAt?: string;
   pausedAt?: string | null;
   statusMessage?: string | null;

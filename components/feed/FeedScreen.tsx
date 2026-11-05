@@ -952,7 +952,11 @@ export function FeedScreen() {
                         size={44}
                         onPress={() => {
                           if (live) openLive(live.id);
-                          else setShopProduct(item);
+                          else {
+                            router.push(
+                              `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
+                            );
+                          }
                         }}
                       />
                       {!item.shop.followedByMe ? (
@@ -1010,12 +1014,20 @@ export function FeedScreen() {
                             size={28}
                             onPress={() => {
                               if (live) openLive(live.id);
-                              else setShopProduct(item);
+                              else {
+                                router.push(
+                                  `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
+                                );
+                              }
                             }}
                           />
                         </View>
                         <Pressable
-                          onPress={() => setShopProduct(item)}
+                          onPress={() =>
+                            router.push(
+                              `/shop/${encodeURIComponent(item.shop.slug)}` as Href,
+                            )
+                          }
                           style={styles.sellerHit}
                         >
                           <Text
@@ -1319,6 +1331,13 @@ export function FeedScreen() {
               shopProduct.shop)
             : null
         }
+        live={Boolean(
+          shopProduct &&
+          matchOpenLive(lives.data?.lives, {
+            productId: shopProduct.id,
+            ownerUserId: shopProduct.shop.ownerUserId,
+          }),
+        )}
         onClose={() => setShopProduct(null)}
         onFollow={() => {
           if (shopProduct) void toggleFollow(shopProduct);

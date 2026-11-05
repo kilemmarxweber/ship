@@ -28,13 +28,9 @@ export function ShopLiveAvatar({
   onPress: () => void;
 }) {
   const tick = useSharedValue(0);
+  const ringColor = live ? colors.live : colors.emerald;
 
   useEffect(() => {
-    if (!live) {
-      cancelAnimation(tick);
-      tick.value = 0;
-      return;
-    }
     tick.value = 0;
     tick.value = withRepeat(
       withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.quad) }),
@@ -42,17 +38,12 @@ export function ShopLiveAvatar({
       false,
     );
     return () => cancelAnimation(tick);
-  }, [live, tick]);
+  }, [tick]);
 
   const ringStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: live ? interpolate(tick.value, [0, 0.5, 1], [1, 1.07, 1]) : 1 },
-    ],
-    borderColor: live ? colors.live : "#fff",
-    shadowOpacity: live
-      ? interpolate(tick.value, [0, 0.5, 1], [0.2, 0.85, 0.2])
-      : 0,
-    shadowRadius: live ? interpolate(tick.value, [0, 0.5, 1], [2, 9, 2]) : 0,
+    transform: [{ scale: interpolate(tick.value, [0, 0.5, 1], [1, 1.07, 1]) }],
+    shadowOpacity: interpolate(tick.value, [0, 0.5, 1], [0.18, 0.75, 0.18]),
+    shadowRadius: interpolate(tick.value, [0, 0.5, 1], [2, 9, 2]),
   }));
 
   const faceStyle = useAnimatedStyle(() => ({
@@ -79,10 +70,11 @@ export function ShopLiveAvatar({
             width: size,
             height: size,
             borderRadius: radius,
-            borderWidth: live ? 2 : 1.5,
+            borderWidth: 2,
+            borderColor: ringColor,
             backgroundColor: "#222",
             overflow: "hidden",
-            shadowColor: colors.live,
+            shadowColor: ringColor,
           },
           ringStyle,
         ]}
@@ -102,11 +94,16 @@ export function ShopLiveAvatar({
             </View>
           )}
         </Animated.View>
-        <Animated.View pointerEvents="none" style={[styles.label, labelStyle]}>
-          <Text style={[styles.live, { fontSize: Math.max(8, size * 0.26) }]}>
-            LIVE
-          </Text>
-        </Animated.View>
+        {live ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.label, labelStyle]}
+          >
+            <Text style={[styles.live, { fontSize: Math.max(8, size * 0.26) }]}>
+              LIVE
+            </Text>
+          </Animated.View>
+        ) : null}
       </Animated.View>
     </Pressable>
   );

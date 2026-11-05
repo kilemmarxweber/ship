@@ -36,6 +36,7 @@ import {
     LiveScreenShareHost,
 } from "@/components/live/LiveMedia";
 import { LiveProductsSheet } from "@/components/live/LiveProductsSheet";
+import { LiveViewersSheet } from "@/components/live/LiveViewersSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
 import { api, ApiError, apiOrigin, apiPayment, mediaUrl } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
@@ -45,6 +46,7 @@ import {
     type LiveDetail,
     type LiveGuest,
     type LiveSfuToken,
+    type LiveViewer,
 } from "@/src/live";
 import { isLiveRtcAvailable } from "@/src/live-rtc";
 import { isSellerOfShop, useMe } from "@/src/me";
@@ -75,6 +77,10 @@ export function LiveScreen({ liveId }: { liveId: string }) {
   const [localPresented, setLocalPresented] = useState<string | null>(null);
   const [localScroll, setLocalScroll] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
+  const [viewersOpen, setViewersOpen] = useState(false);
+  const [localViewers, setLocalViewers] = useState<LiveViewer[]>([]);
+  const [localViewerCount, setLocalViewerCount] = useState<number | null>(null);
+  const [localQualifiedCount, setLocalQualifiedCount] = useState(0);
   const [hostDenied, setHostDenied] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [chatVisible, setChatVisible] = useState(true);
@@ -299,6 +305,48 @@ export function LiveScreen({ liveId }: { liveId: string }) {
       app.remove();
     };
   }, [ended, hostPost, isHost]);
+
+  // Présence viewers — compte exact + liste (host)
+  useEffect(() => {
+    if (!live || ended) return;
+    let cancelled = false;
+    const peerKey = me.data?.id ?? `anon:${sessionKey}`;
+    const ping = async () => {
+      try {
+        const data = await api<{
+          viewerCount?: number;
+          qualifiedViewerCount?: number;
+          viewers?: LiveViewer[];
+        }>(`/api/growth/lives/${liveId}/presence`, {
+          method: "POST",
+          body: JSON.stringify({
+            peerKey,
+            displayName: "Viewer",
+          }),
+        });
+        if (cancelled) return;
+        if (typeof data.viewerCount === "number") {
+          setLocalViewerCount(data.viewerCount);
+        }
+        if (typeof data.qualifiedViewerCount === "number") {
+          setLocalQualifiedCount(data.qualifiedViewerCount);
+        }
+        if (data.viewers) setLocalViewers(data.viewers);
+      } catch {
+        /* offline / table absente */
+      }
+    };
+    void ping();
+    const timer = setInterval(() => void ping(), 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      void api(`/api/growth/lives/${liveId}/presence`, {
+        method: "POST",
+        body: JSON.stringify({ action: "leave", peerKey }),
+      }).catch(() => undefined);
+    };
+  }, [ended, live?.id, liveId, me.data?.id, sessionKey]);
 
   const wasOnStage = useRef(false);
   useEffect(() => {
@@ -595,12 +643,19 @@ export function LiveScreen({ liveId }: { liveId: string }) {
           <Ionicons name="time-outline" size={12} color="#fff" />
           <Text style={styles.metaText}>{formatLiveClock(elapsed)}</Text>
         </View>
-        <View style={styles.metaPill}>
+        <Pressable
+          style={styles.metaPill}
+          onPress={() => setViewersOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Voir les spectateurs"
+        >
           <Ionicons name="eye" size={12} color="#fff" />
           <Text style={styles.metaText}>
-            {compactCount(live.viewerPeak ?? 0)}
+            {compactCount(
+              localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0,
+            )}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       {isHost && !ended ? (
@@ -958,6 +1013,15 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         busy={busy}
         onClose={() => setGiftOpen(false)}
         onSend={(amount) => void sendGift(amount)}
+      />
+      <LiveViewersSheet
+        open={viewersOpen}
+        onClose={() => setViewersOpen(false)}
+        viewerCount={
+          localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0
+        }
+        qualifiedCount={localQualifiedCount || live.qualifiedViewerCount || 0}
+        viewers={localViewers.length ? localViewers : (live.viewers ?? [])}
       />
       <BuySheet
         product={buyProduct}

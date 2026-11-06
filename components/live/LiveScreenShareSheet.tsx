@@ -49,7 +49,8 @@ export function LiveScreenShareSheet({
             <View style={styles.headText}>
               <Text style={styles.title}>Partage d’écran</Text>
               <Text style={styles.sub}>
-                Le live continue — ta caméra reste en vignette
+                Style Meet / WhatsApp : notif pour revenir au live, caméra en
+                vignette
               </Text>
             </View>
           </View>
@@ -69,7 +70,8 @@ export function LiveScreenShareSheet({
             <View style={styles.rowBody}>
               <Text style={styles.rowTitle}>Tout l’écran</Text>
               <Text style={styles.rowSub}>
-                Affiche tout le téléphone, même hors ShipShop
+                Tout le téléphone (ECC, etc.). Une notif « Revenir au live »
+                reste en haut
               </Text>
             </View>
             {sharing && mode === "full" ? (

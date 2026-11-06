@@ -49,6 +49,7 @@ import {
     requestLiveAvPermissions,
     requestNotificationPermission,
 } from "@/src/live-rtc";
+import { setActiveScreenShareLiveId } from "@/src/live-share-session";
 import { showToast } from "@/src/toast";
 
 if (isLiveRtcAvailable()) {
@@ -83,9 +84,10 @@ const ROOM_OPTIONS = {
 };
 
 const SCREEN_SHARE_RESOLUTION = {
-  width: 1080,
-  height: 1920,
-  frameRate: 15,
+  // 720p @ 12 fps — plus stable Android (évite OOM / kill pendant « Tout l’écran »)
+  width: 720,
+  height: 1280,
+  frameRate: 12,
 };
 
 function androidApiLevel() {
@@ -718,10 +720,9 @@ function LiveKitVideoInner({
   paused: boolean;
   onKickPlayback?: () => void;
 }) {
-  const tracks = useTracks(
-    [Track.Source.Camera, Track.Source.ScreenShare],
-    { onlySubscribed: false },
-  );
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
+    onlySubscribed: false,
+  });
   const cameraTracks = tracks.filter(
     (row) => isTrackReference(row) && row.source === Track.Source.Camera,
   );
@@ -745,14 +746,19 @@ function LiveKitVideoInner({
           ? row.participant.isLocal
           : !hostUserId || row.participant.identity === hostUserId),
     ) ??
-    screenTracks.find((row) => isTrackReference(row) && !row.participant.isLocal) ??
+    screenTracks.find(
+      (row) => isTrackReference(row) && !row.participant.isLocal,
+    ) ??
     (isHost
-      ? screenTracks.find((row) => isTrackReference(row) && row.participant.isLocal)
+      ? screenTracks.find(
+          (row) => isTrackReference(row) && row.participant.isLocal,
+        )
       : undefined);
   const sharing = isTrackReference(hostScreen);
   const faceTrack = isHost ? localCamera : hostCamera;
   const shown = sharing ? hostScreen : isHost ? localCamera : hostCamera;
-  const hasVideo = isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
+  const hasVideo =
+    isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
   const look = useContext(LookCtx).look;
 
   // Invités sur scène (1…N) : cameras distants sauf le host.
@@ -784,9 +790,7 @@ function LiveKitVideoInner({
             style={styles.fill}
             objectFit={sharing ? "contain" : "cover"}
             zOrder={0}
-            mirror={
-              !sharing && Boolean(isHost || shown.participant.isLocal)
-            }
+            mirror={!sharing && Boolean(isHost || shown.participant.isLocal)}
           />
         </TrackSafe>
       ) : ended || paused ? (
@@ -908,20 +912,29 @@ export function LiveFilterBar() {
   );
 }
 
-export function LiveScreenShareHost({ enabled }: { enabled: boolean }) {
+export function LiveScreenShareHost({
+  enabled,
+  liveId,
+}: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   const room = useLiveRoomOrNull();
   if (!enabled || !room) return null;
-  return <LiveScreenShareHostInner />;
+  return <LiveScreenShareHostInner liveId={liveId} />;
 }
 
-function LiveScreenShareHostInner() {
+function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
   const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
   const { mode, setMode } = useContext(ScreenShareCtx);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!isScreenShareEnabled) setMode(null);
+    if (!isScreenShareEnabled) {
+      setMode(null);
+      setActiveScreenShareLiveId(null);
+    }
   }, [isScreenShareEnabled, setMode]);
 
   const startShare = (requested: LiveScreenShareMode) => {
@@ -948,6 +961,7 @@ function LiveScreenShareHostInner() {
         } catch {
           /* déjà active */
         }
+        if (liveId) setActiveScreenShareLiveId(liveId);
         await localParticipant.setScreenShareEnabled(
           true,
           screenShareCaptureOptions(nextMode),
@@ -955,12 +969,15 @@ function LiveScreenShareHostInner() {
         setMode(nextMode);
         setOpen(false);
         showToast(
-          "Partage actif — une notif garde le live si tu changes d’app",
+          nextMode === "full"
+            ? "Tout l’écran partagé — notif « Revenir au live » en haut"
+            : "Écran actif partagé — notif pour revenir au live",
           "info",
         );
       } catch {
+        setActiveScreenShareLiveId(null);
         showToast(
-          "Partage impossible — rebuild Android requis (MediaProjection)",
+          "Partage impossible — rebuild Android requis (icône + FGS)",
           "error",
         );
       } finally {
@@ -975,6 +992,7 @@ function LiveScreenShareHostInner() {
       try {
         await localParticipant.setScreenShareEnabled(false);
         setMode(null);
+        setActiveScreenShareLiveId(null);
         setOpen(false);
       } catch {
         showToast("Arrêt du partage impossible", "error");
@@ -993,9 +1011,7 @@ function LiveScreenShareHostInner() {
       >
         <Ionicons
           name={
-            isScreenShareEnabled
-              ? "phone-portrait"
-              : "phone-portrait-outline"
+            isScreenShareEnabled ? "phone-portrait" : "phone-portrait-outline"
           }
           size={20}
           color="#fff"
@@ -1014,22 +1030,46 @@ function LiveScreenShareHostInner() {
   );
 }
 
-export function LiveScreenShareBanner({ enabled }: { enabled: boolean }) {
+export function LiveScreenShareBanner({
+  enabled,
+  liveId,
+}: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   const room = useLiveRoomOrNull();
   if (!enabled || !room) return null;
-  return <LiveScreenShareBannerInner />;
+  return <LiveScreenShareBannerInner liveId={liveId} />;
 }
 
-function LiveScreenShareBannerInner() {
+function LiveScreenShareBannerInner({ liveId }: { liveId?: string }) {
   const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
   const { mode, setMode } = useContext(ScreenShareCtx);
   if (!isScreenShareEnabled) return null;
-  const label =
-    mode === "app" ? "Partage — Écran actif" : "Partage — Tout l’écran";
+  const full = mode !== "app";
 
   return (
     <View style={styles.shareBanner} pointerEvents="box-none">
-      <Text style={styles.shareBannerText}>{label}</Text>
+      <View style={styles.shareBannerPulse} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.shareBannerText}>
+          {full ? "Vous partagez tout l’écran" : "Vous partagez l’écran actif"}
+        </Text>
+        <Text style={styles.shareBannerHint}>
+          Comme Meet / WhatsApp — notif pour revenir au live
+        </Text>
+      </View>
+      {liveId ? (
+        <Pressable
+          style={styles.shareBannerReturn}
+          onPress={() => {
+            /* déjà sur le live : feedback clair */
+            showToast("Tu es déjà sur le live", "info");
+          }}
+        >
+          <Text style={styles.shareBannerReturnText}>Live</Text>
+        </Pressable>
+      ) : null}
       <Pressable
         style={styles.shareBannerStop}
         onPress={() => {
@@ -1037,6 +1077,7 @@ function LiveScreenShareBannerInner() {
             try {
               await localParticipant.setScreenShareEnabled(false);
               setMode(null);
+              setActiveScreenShareLiveId(null);
             } catch {
               showToast("Arrêt du partage impossible", "error");
             }
@@ -1156,37 +1197,59 @@ const styles = StyleSheet.create({
   },
   shareBanner: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    top: 92,
+    left: 12,
+    right: 12,
+    top: 88,
     zIndex: 24,
     elevation: 24,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(0,0,0,0.72)",
-    borderRadius: 14,
-    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: "#B91C1C",
+    borderRadius: 16,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "rgba(0,214,143,0.35)",
+    borderColor: "rgba(255,255,255,0.18)",
+    overflow: "hidden",
+  },
+  shareBannerPulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#fff",
   },
   shareBannerText: {
-    flex: 1,
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  shareBannerHint: {
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: "600",
+    fontSize: 11,
+  },
+  shareBannerReturn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  shareBannerReturnText: {
     color: "#fff",
     fontWeight: "800",
     fontSize: 12,
   },
   shareBannerStop: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 10,
-    backgroundColor: "rgba(251,191,36,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(251,191,36,0.45)",
+    backgroundColor: "#fff",
   },
   shareBannerStopText: {
-    color: "#FBBF24",
+    color: "#B91C1C",
     fontWeight: "800",
     fontSize: 12,
   },

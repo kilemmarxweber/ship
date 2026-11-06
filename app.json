@@ -121,6 +121,7 @@
         }
       ],
       "./plugins/withLivePermissions",
+      "./plugins/withScreenShareKeepAlive",
       "expo-build-properties"
     ],
     "experiments": {

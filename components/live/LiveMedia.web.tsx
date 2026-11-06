@@ -31,11 +31,17 @@ export function LiveHostAvButtons(_props: {
   return null;
 }
 
-export function LiveScreenShareHost(_props: { enabled: boolean }) {
+export function LiveScreenShareHost(_props: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   return null;
 }
 
-export function LiveScreenShareBanner(_props: { enabled: boolean }) {
+export function LiveScreenShareBanner(_props: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   return null;
 }
 

@@ -755,7 +755,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
       ) : null}
 
       {isHost && canPublish && !ended ? (
-        <LiveScreenShareBanner enabled />
+        <LiveScreenShareBanner enabled liveId={liveId} />
       ) : null}
 
       <Pressable
@@ -951,7 +951,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
                 void hostPost({ action: "mic", micOn: enabled });
               }}
             />
-            {isHost ? <LiveScreenShareHost enabled /> : null}
+            {isHost ? <LiveScreenShareHost enabled liveId={liveId} /> : null}
           </>
         ) : null}
       </View>

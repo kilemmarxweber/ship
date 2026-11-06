@@ -40,13 +40,19 @@ export function LiveHostAvButtons(props: {
   return <Native.LiveHostAvButtons {...props} />;
 }
 
-export function LiveScreenShareHost(props: { enabled: boolean }) {
+export function LiveScreenShareHost(props: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   const Native = useNativeLive();
   if (!Native?.LiveScreenShareHost) return null;
   return <Native.LiveScreenShareHost {...props} />;
 }
 
-export function LiveScreenShareBanner(props: { enabled: boolean }) {
+export function LiveScreenShareBanner(props: {
+  enabled: boolean;
+  liveId?: string;
+}) {
   const Native = useNativeLive();
   if (!Native?.LiveScreenShareBanner) return null;
   return <Native.LiveScreenShareBanner {...props} />;

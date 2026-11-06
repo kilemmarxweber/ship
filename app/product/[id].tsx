@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
+import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -14,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, isVideoUrl, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { coverOf } from "@/src/media";
+import { coverOf, mediaList } from "@/src/media";
 import type { Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
 
@@ -29,7 +30,30 @@ const ui = StyleSheet.create({
   backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   empty: { textAlign: "center", marginTop: 40 },
   hero: { borderRadius: 20, overflow: "hidden", marginBottom: 16 },
-  cover: { width: "100%", aspectRatio: 3 / 4, backgroundColor: "#16161F" },
+  cover: {
+    width: "100%",
+    minHeight: 280,
+    aspectRatio: 4 / 5,
+    backgroundColor: "#0E0E14",
+  },
+  gallery: { gap: 10, paddingVertical: 4 },
+  galleryThumb: {
+    width: 72,
+    height: 90,
+    borderRadius: 12,
+    backgroundColor: "#16161F",
+  },
+  galleryThumbOn: { borderWidth: 2, borderColor: "#00D68F" },
+  fitHint: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  fitHintText: { color: "#fff", fontWeight: "700", fontSize: 11 },
   liveBadge: {
     position: "absolute",
     left: 12,
@@ -70,7 +94,12 @@ export default function PublishedProductScreen() {
     queryFn: () => api<{ product?: Product }>(`/api/products/${id}`),
   });
   const product = query.data?.product;
-  const cover = product ? coverOf(product.images) : null;
+  const gallery = useMemo(
+    () => (product ? mediaList(product.images) : []),
+    [product],
+  );
+  const [activeUri, setActiveUri] = useState<string | null>(null);
+  const cover = activeUri ?? (product ? coverOf(product.images) : null);
   const hasVideo = Boolean(product?.images.some((url) => isVideoUrl(url)));
 
   return (
@@ -99,11 +128,14 @@ export default function PublishedProductScreen() {
               <Image
                 source={{ uri: mediaUrl(cover) ?? cover }}
                 style={ui.cover}
-                contentFit="cover"
+                contentFit="contain"
               />
             ) : (
               <View style={[ui.cover, { backgroundColor: c.sheet }]} />
             )}
+            <View style={ui.fitHint}>
+              <Text style={ui.fitHintText}>Contain · proportions gardées</Text>
+            </View>
             {hasVideo ? (
               <View style={ui.liveBadge}>
                 <Ionicons name="play" size={14} color="#fff" />
@@ -115,6 +147,27 @@ export default function PublishedProductScreen() {
               <Text style={ui.okText}>Publié</Text>
             </View>
           </View>
+          {gallery.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={ui.gallery}
+              style={{ marginBottom: 12 }}
+            >
+              {gallery.map((uri) => {
+                const on = (activeUri ?? gallery[0]) === uri;
+                return (
+                  <Pressable key={uri} onPress={() => setActiveUri(uri)}>
+                    <Image
+                      source={{ uri }}
+                      style={[ui.galleryThumb, on && ui.galleryThumbOn]}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
           <Text style={[ui.title, { color: c.text }]}>{product.title}</Text>
           <Text style={[ui.price, { color: c.emerald }]}>
             {formatMoney(product.priceCents, product.currency)}

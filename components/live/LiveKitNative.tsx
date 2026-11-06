@@ -33,7 +33,15 @@ import {
     type ErrorInfo,
     type ReactNode,
 } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
 import {
@@ -41,7 +49,8 @@ import {
     type LiveScreenShareMode,
 } from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
-import { isLiveLookId, LIVE_LOOKS, type LiveLookId } from "@/src/live-look";
+import { AR_FILTERS, isArFilterId } from "@/src/live-ar-filters";
+import { isLiveLookId } from "@/src/live-look";
 import {
     demanderMicro,
     ensureCameraPermission,
@@ -258,8 +267,8 @@ const AvCtx = createContext<{
 });
 
 const LookCtx = createContext<{
-  look: LiveLookId;
-  pick: (id: LiveLookId) => void;
+  look: string;
+  pick: (id: string) => void;
   isHost: boolean;
 }>({
   look: "studio",
@@ -286,16 +295,16 @@ function LiveLookProvider({
   isHost: boolean;
   children: ReactNode;
 }) {
-  const [look, setLook] = useState<LiveLookId>("studio");
+  const [look, setLook] = useState("studio");
   const { send, message } = useDataChannel("ss-filter");
 
   useEffect(() => {
     if (isHost || !message?.payload) return;
     const next = new TextDecoder().decode(message.payload);
-    if (isLiveLookId(next)) setLook(next);
+    if (isLiveLookId(next) || isArFilterId(next)) setLook(next);
   }, [isHost, message]);
 
-  const pick = (id: LiveLookId) => {
+  const pick = (id: string) => {
     setLook(id);
     if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
   };
@@ -869,51 +878,58 @@ function LiveKitVideoInner({
   );
 }
 
-const LOOK_ICONS: Record<LiveLookId, keyof typeof Ionicons.glyphMap> = {
-  naturel: "sunny-outline",
-  studio: "sparkles-outline",
-  doux: "flower-outline",
-  vivid: "flash-outline",
-  cinema: "film-outline",
-  noir: "moon-outline",
-};
-
 export function LiveFilterBar() {
   const { look, pick, isHost } = useContext(LookCtx);
   const [open, setOpen] = useState(false);
   if (!isHost) return null;
+  const active = AR_FILTERS.find((item) => item.id === look);
 
   return (
     <View style={styles.studioWrap}>
       {open ? (
-        <View style={styles.studioMenu}>
-          {LIVE_LOOKS.map((item) => {
-            const on = look === item.id;
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityLabel={item.label}
-                onPress={() => {
-                  pick(item.id);
-                  setOpen(false);
-                }}
-                style={[styles.filterChip, on && styles.filterChipOn]}
-              >
-                <Ionicons
-                  name={LOOK_ICONS[item.id]}
-                  size={18}
-                  color={on ? "#05140F" : "#fff"}
-                />
-              </Pressable>
-            );
-          })}
+        <View style={styles.studioPanel}>
+          <Text style={styles.studioTitle}>Filtres Live</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.studioMenu}
+          >
+            {AR_FILTERS.map((item) => {
+              const on = look === item.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityLabel={item.name}
+                  onPress={() => {
+                    pick(item.id);
+                  }}
+                  style={[styles.filterChipWide, on && styles.filterChipOn]}
+                >
+                  <Text style={styles.filterEmoji}>{item.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.filterLabel,
+                      { color: on ? "#05140F" : "rgba(255,255,255,0.9)" },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable style={styles.studioClose} onPress={() => setOpen(false)}>
+            <Text style={styles.studioCloseText}>Fermer</Text>
+          </Pressable>
         </View>
       ) : null}
       <Pressable
         style={[styles.avBtn, open && styles.studioBtnOn]}
         onPress={() => setOpen((value) => !value)}
+        accessibilityLabel="Galerie filtres"
       >
-        <Ionicons name="color-filter" size={20} color="#fff" />
+        <Text style={{ fontSize: 16 }}>{active?.emoji ?? "✨"}</Text>
       </Pressable>
     </View>
   );
@@ -977,14 +993,14 @@ function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
         setOpen(false);
         showToast(
           nextMode === "full"
-            ? "Tout l’écran partagé — notif « Revenir au live » en haut"
-            : "Écran actif partagé — notif pour revenir au live",
+            ? "Bandeau rouge + Arrêter — notif pour revenir au live"
+            : "Écran actif — bandeau rouge + Arrêter",
           "info",
         );
       } catch {
         setActiveScreenShareLiveId(null);
         showToast(
-          "Partage impossible — rebuild Android requis (icône + FGS)",
+          "Partage impossible — autorise la notif puis réessaie",
           "error",
         );
       } finally {
@@ -1050,49 +1066,62 @@ export function LiveScreenShareBanner({
 }
 
 function LiveScreenShareBannerInner({ liveId }: { liveId?: string }) {
+  const insets = useSafeAreaInsets();
   const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
   const { mode, setMode } = useContext(ScreenShareCtx);
   if (!isScreenShareEnabled) return null;
   const full = mode !== "app";
 
   return (
-    <View style={styles.shareBanner} pointerEvents="box-none">
-      <View style={styles.shareBannerPulse} />
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.shareBannerText}>
-          {full ? "Vous partagez tout l’écran" : "Vous partagez l’écran actif"}
-        </Text>
-        <Text style={styles.shareBannerHint}>
-          Comme Meet / WhatsApp — notif pour revenir au live
-        </Text>
-      </View>
-      {liveId ? (
+    <View
+      style={[styles.shareBanner, { paddingTop: Math.max(insets.top, 10) }]}
+      pointerEvents="box-none"
+      accessibilityLabel="Partage d’écran en cours"
+    >
+      <View style={styles.shareBannerRow}>
+        <View style={styles.shareBannerPulse} />
+        <View style={styles.shareBannerCopy}>
+          <Text style={styles.shareBannerText} numberOfLines={1}>
+            {full
+              ? "Vous partagez tout l’écran"
+              : "Vous partagez l’écran actif"}
+          </Text>
+          <Text style={styles.shareBannerHint} numberOfLines={1}>
+            Notif sticky pour revenir au live
+          </Text>
+        </View>
+        {liveId ? (
+          <Pressable
+            style={styles.shareBannerReturn}
+            hitSlop={8}
+            onPress={() => {
+              showToast("Tu es déjà sur le live", "info");
+            }}
+            accessibilityLabel="Revenir au live"
+          >
+            <Text style={styles.shareBannerReturnText}>Live</Text>
+          </Pressable>
+        ) : null}
         <Pressable
-          style={styles.shareBannerReturn}
+          style={styles.shareBannerStop}
+          hitSlop={8}
           onPress={() => {
-            /* déjà sur le live : feedback clair */
-            showToast("Tu es déjà sur le live", "info");
+            void (async () => {
+              try {
+                await localParticipant.setScreenShareEnabled(false);
+                setMode(null);
+                setActiveScreenShareLiveId(null);
+                showToast("Partage d’écran arrêté", "info");
+              } catch {
+                showToast("Arrêt du partage impossible", "error");
+              }
+            })();
           }}
+          accessibilityLabel="Arrêter le partage d’écran"
         >
-          <Text style={styles.shareBannerReturnText}>Live</Text>
+          <Text style={styles.shareBannerStopText}>Arrêter</Text>
         </Pressable>
-      ) : null}
-      <Pressable
-        style={styles.shareBannerStop}
-        onPress={() => {
-          void (async () => {
-            try {
-              await localParticipant.setScreenShareEnabled(false);
-              setMode(null);
-              setActiveScreenShareLiveId(null);
-            } catch {
-              showToast("Arrêt du partage impossible", "error");
-            }
-          })();
-        }}
-      >
-        <Text style={styles.shareBannerStopText}>Arrêter</Text>
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -1213,25 +1242,31 @@ const styles = StyleSheet.create({
   },
   shareBanner: {
     position: "absolute",
-    left: 12,
-    right: 12,
-    top: 88,
-    zIndex: 24,
-    elevation: 24,
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 40,
+    elevation: 40,
+    backgroundColor: "#DC2626",
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.2)",
+  },
+  shareBannerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#B91C1C",
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    overflow: "hidden",
+    gap: 10,
+    minHeight: 40,
+  },
+  shareBannerCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
   },
   shareBannerPulse: {
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
     borderRadius: 5,
     backgroundColor: "#fff",
   },
@@ -1241,17 +1276,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   shareBannerHint: {
-    color: "rgba(255,255,255,0.82)",
+    color: "rgba(255,255,255,0.88)",
     fontWeight: "600",
     fontSize: 11,
   },
   shareBannerReturn: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.28)",
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
   shareBannerReturnText: {
     color: "#fff",
@@ -1259,15 +1292,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   shareBannerStop: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: "#fff",
   },
   shareBannerStopText: {
     color: "#B91C1C",
     fontWeight: "800",
-    fontSize: 12,
+    fontSize: 13,
   },
   endedStage: { backgroundColor: "#050508" },
   wait: {
@@ -1306,26 +1339,57 @@ const styles = StyleSheet.create({
     borderColor: "#00D68F",
     backgroundColor: "rgba(0,214,143,0.22)",
   },
-  studioMenu: {
+  studioPanel: {
     position: "absolute",
     right: 52,
-    bottom: 0,
+    bottom: -8,
+    width: 280,
+    borderRadius: 18,
+    backgroundColor: "rgba(8,8,14,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  studioTitle: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  studioMenu: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingVertical: 4,
   },
-  filterChip: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.55)",
+  filterChipWide: {
+    width: 64,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,255,255,0.14)",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
   },
   filterChipOn: {
     backgroundColor: "#00D68F",
     borderColor: "#00D68F",
+  },
+  filterEmoji: { fontSize: 18 },
+  filterLabel: { fontSize: 10, fontWeight: "800" },
+  studioClose: {
+    alignSelf: "flex-end",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  studioCloseText: {
+    color: "rgba(255,255,255,0.55)",
+    fontWeight: "700",
+    fontSize: 12,
   },
 });

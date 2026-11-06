@@ -1,21 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
+import { ProductImagePreviewSheet } from "@/components/publish/ProductImagePreviewSheet";
 import { apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import {
-    pickMediaLibrary,
-    subscribePendingPickedMedia,
-    type PickKind,
+  pickMediaLibrary,
+  subscribePendingPickedMedia,
+  type PickKind,
 } from "@/src/pick-media";
+import {
+  analyzeProductImage,
+  formatRatio,
+  hintFromSellCategory,
+  sortPrimaryFirst,
+  type ProductImageMeta,
+} from "@/src/product-image-intel";
 import { colors, HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import { appendUploadFile } from "@/src/upload-file";
@@ -40,6 +49,19 @@ async function uploadAsset(
   return uploaded.posterUrl ? [uploaded.posterUrl, url] : [url];
 }
 
+async function optimizeStill(uri: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return result.uri;
+  } catch {
+    return uri;
+  }
+}
+
 export function MediaStrip({
   urls,
   onChange,
@@ -48,6 +70,7 @@ export function MediaStrip({
   variant = "product",
   busy,
   setBusy,
+  category = "divers",
 }: {
   urls: string[];
   onChange: (next: string[]) => void;
@@ -56,6 +79,7 @@ export function MediaStrip({
   variant?: "product" | "avatar";
   busy: boolean;
   setBusy: (value: boolean) => void;
+  category?: string;
 }) {
   const c = useColors();
   const urlsRef = useRef(urls);
@@ -66,6 +90,63 @@ export function MediaStrip({
   const [done, setDone] = useState(0);
   const [total, setTotal] = useState(0);
   const [phase, setPhase] = useState<"idle" | "picking" | "uploading">("idle");
+  const [metas, setMetas] = useState<ProductImageMeta[]>([]);
+  const [preview, setPreview] = useState<ProductImageMeta | null>(null);
+  const categoryHint = hintFromSellCategory(category);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const next: ProductImageMeta[] = [];
+      for (let i = 0; i < urls.length; i += 1) {
+        const url = urls[i];
+        if (isVideoUrl(url)) {
+          next.push({
+            url,
+            originalUrl: url,
+            width: 0,
+            height: 0,
+            ratio: 1,
+            fit: "contain",
+            isPrimary: i === 0,
+          });
+          continue;
+        }
+        const existing = metas.find(
+          (item) => item.url === url || item.originalUrl === url,
+        );
+        if (existing) {
+          next.push({ ...existing, isPrimary: i === 0 });
+          continue;
+        }
+        try {
+          const uri = mediaUrl(url) ?? url;
+          const meta = await analyzeProductImage(uri, {
+            categoryHint,
+            isPrimary: i === 0,
+            originalUrl: url,
+          });
+          next.push({ ...meta, url });
+        } catch {
+          next.push({
+            url,
+            originalUrl: url,
+            width: 0,
+            height: 0,
+            ratio: 1,
+            fit: "contain",
+            isPrimary: i === 0,
+            tip: "Contain par défaut — proportions respectées.",
+          });
+        }
+      }
+      if (alive) setMetas(sortPrimaryFirst(next));
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-analyse when urls/category change
+  }, [urls.join("|"), categoryHint]);
 
   async function ingest(assets: ImagePickerAsset[]) {
     if (!assets.length) return;
@@ -73,7 +154,7 @@ export function MediaStrip({
     setBusy(true);
     setDone(0);
     setTotal(assets.length);
-    showToast("Média en cours d’envoi — patiente un instant.", "info");
+    showToast("Analyse + envoi des médias…", "info");
     try {
       const next = max === 1 ? [] : [...urlsRef.current];
       let index = 0;
@@ -81,7 +162,25 @@ export function MediaStrip({
         if (next.length >= max) break;
         index += 1;
         setDone(index);
-        const uploaded = await uploadAsset(asset, variant);
+        const isVideo = (asset.type ?? "").includes("video");
+        let uploadUri = asset.uri;
+        if (!isVideo && variant === "product") {
+          uploadUri = await optimizeStill(asset.uri);
+          try {
+            const meta = await analyzeProductImage(asset.uri, {
+              categoryHint,
+              originalUrl: asset.uri,
+            });
+            if (meta.warning) showToast(meta.warning, "info");
+            else if (meta.tip) showToast(meta.tip, "info");
+          } catch {
+            /* ignore probe */
+          }
+        }
+        const uploaded = await uploadAsset(
+          { ...asset, uri: uploadUri },
+          variant,
+        );
         for (const url of uploaded) {
           if (!next.includes(url) && next.length < max) next.push(url);
         }
@@ -138,6 +237,79 @@ export function MediaStrip({
     }
   }
 
+  function setPrimary(url: string) {
+    const next = [url, ...urls.filter((item) => item !== url)];
+    onChange(next);
+    showToast("Photo principale définie", "info");
+  }
+
+  async function replaceOne(url: string) {
+    setPreview(null);
+    setPhase("picking");
+    setBusy(true);
+    try {
+      const assets = await pickMediaLibrary({
+        kind: "images",
+        limit: 1,
+        crop: false,
+      });
+      if (!assets.length) {
+        setBusy(false);
+        setPhase("idle");
+        return;
+      }
+      setPhase("uploading");
+      const optimized = await optimizeStill(assets[0].uri);
+      const uploaded = await uploadAsset(
+        { ...assets[0], uri: optimized },
+        variant,
+      );
+      const replacement = uploaded[0];
+      onChange(urls.map((item) => (item === url ? replacement : item)));
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Remplacement impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+      setPhase("idle");
+    }
+  }
+
+  async function cropOne(url: string) {
+    setPreview(null);
+    setPhase("picking");
+    setBusy(true);
+    try {
+      const assets = await pickMediaLibrary({
+        kind: "images",
+        limit: 1,
+        crop: true,
+      });
+      if (!assets.length) {
+        setBusy(false);
+        setPhase("idle");
+        return;
+      }
+      setPhase("uploading");
+      const uploaded = await uploadAsset(assets[0], variant);
+      const cropped = uploaded[0];
+      // Keep original earlier in list semantics: display uses cropped url,
+      // originalUrl stays in meta via analyze on next effect.
+      onChange(urls.map((item) => (item === url ? cropped : item)));
+      showToast("Recadrage appliqué — l’original reste sur le serveur si déjà envoyé", "info");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Recadrage impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+      setPhase("idle");
+    }
+  }
+
   const replace = max === 1 && urls.length >= 1;
   const locked = busy || phase !== "idle";
   const full = locked || (urls.length >= max && max !== 1);
@@ -147,11 +319,33 @@ export function MediaStrip({
     phase === "picking"
       ? "Ouverture de la galerie…"
       : total > 1
-        ? `Envoi ${Math.min(done, total)}/${total} — patiente`
-        : "Envoi du média — patiente un instant";
+        ? `Envoi ${Math.min(done, total)}/${total}`
+        : "Analyse + envoi…";
+
+  const firstStill = metas.find((item) => !isVideoUrl(item.url));
 
   return (
     <View>
+      <View
+        style={[
+          styles.guide,
+          { backgroundColor: `${c.primary}12`, borderColor: `${c.primary}33` },
+        ]}
+      >
+        <Ionicons name="scan-outline" size={16} color={c.primary} />
+        <Text style={[styles.guideText, { color: c.text }]}>
+          Affichage fiche en contain — ta photo n’est jamais forcée. Conseil
+          ratio selon catégorie : ~{formatRatio(
+            categoryHint === "robes"
+              ? 2 / 3
+              : categoryHint === "hauts" || categoryHint === "divers"
+                ? 4 / 5
+                : 1,
+          )}
+          .
+        </Text>
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -230,27 +424,72 @@ export function MediaStrip({
             </Text>
           </View>
         ) : null}
-        {urls.map((url) => (
-          <View key={url} style={styles.thumbWrap}>
-            <Image
-              source={{ uri: mediaUrl(url) ?? url }}
-              style={styles.thumb}
-              contentFit="cover"
-            />
-            {isVideoUrl(url) ? (
-              <View style={styles.play}>
-                <Ionicons name="play" size={12} color="#fff" />
-              </View>
-            ) : null}
+        {urls.map((url, index) => {
+          const meta = metas.find((item) => item.url === url);
+          const primary = index === 0;
+          return (
             <Pressable
-              style={styles.remove}
-              onPress={() => onChange(urls.filter((item) => item !== url))}
+              key={url}
+              style={styles.thumbWrap}
+              onPress={() => {
+                if (meta) setPreview(meta);
+                else
+                  setPreview({
+                    url,
+                    originalUrl: url,
+                    width: 0,
+                    height: 0,
+                    ratio: 1,
+                    fit: "contain",
+                    isPrimary: primary,
+                  });
+              }}
             >
-              <Ionicons name="close" size={12} color="#fff" />
+              <Image
+                source={{ uri: mediaUrl(url) ?? url }}
+                style={styles.thumb}
+                contentFit="cover"
+              />
+              {isVideoUrl(url) ? (
+                <View style={styles.play}>
+                  <Ionicons name="play" size={12} color="#fff" />
+                </View>
+              ) : null}
+              {primary ? (
+                <View style={[styles.badge, { backgroundColor: c.emerald }]}>
+                  <Text style={styles.badgeText}>1</Text>
+                </View>
+              ) : null}
+              {meta?.warning ? (
+                <View style={styles.warnDot}>
+                  <Ionicons name="warning" size={10} color="#04281c" />
+                </View>
+              ) : null}
+              {meta && meta.width > 0 ? (
+                <View style={styles.ratioTag}>
+                  <Text style={styles.ratioText}>{formatRatio(meta.ratio)}</Text>
+                </View>
+              ) : null}
+              <Pressable
+                style={styles.remove}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onChange(urls.filter((item) => item !== url));
+                }}
+              >
+                <Ionicons name="close" size={12} color="#fff" />
+              </Pressable>
             </Pressable>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
+
+      {firstStill?.tip ? (
+        <Text style={[styles.footTip, { color: c.textMuted }]}>
+          {firstStill.tip}
+        </Text>
+      ) : null}
+
       {locked ? (
         <View
           style={[
@@ -266,11 +505,41 @@ export function MediaStrip({
           <Text style={[styles.bannerText, { color: c.text }]}>{status}</Text>
         </View>
       ) : null}
+
+      <ProductImagePreviewSheet
+        open={Boolean(preview)}
+        meta={preview}
+        onClose={() => setPreview(null)}
+        onSetPrimary={() => {
+          if (preview) setPrimary(preview.url);
+          setPreview(null);
+        }}
+        onCrop={() => {
+          if (preview) void cropOne(preview.url);
+        }}
+        onReplace={() => {
+          if (preview) void replaceOne(preview.url);
+        }}
+        onRemove={() => {
+          if (preview) onChange(urls.filter((item) => item !== preview.url));
+          setPreview(null);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  guide: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  guideText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
   row: { gap: 10, paddingVertical: 4 },
   add: {
     width: 104,
@@ -328,6 +597,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  badge: {
+    position: "absolute",
+    left: 6,
+    top: 6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  badgeText: { color: "#04281c", fontWeight: "900", fontSize: 11 },
+  warnDot: {
+    position: "absolute",
+    right: 28,
+    top: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#FBBF24",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ratioTag: {
+    position: "absolute",
+    left: 6,
+    bottom: 6,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ratioText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   remove: {
     position: "absolute",
     top: 6,
@@ -339,4 +641,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  footTip: { marginTop: 8, fontSize: 12, lineHeight: 17 },
 });

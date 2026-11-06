@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import {
     ActivityIndicator,
     Pressable,
@@ -54,6 +54,23 @@ export function LiveListScreen() {
         </Text>
       </Pressable>
       <Text style={styles.title}>Lives</Text>
+      <Pressable
+        style={styles.arEntry}
+        onPress={() => router.push("/ar" as Href)}
+      >
+        <Text style={styles.arEmoji}>👑</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.arTitle}>Studio AR</Text>
+          <Text style={styles.arBody}>
+            Chapeau, lunettes, emojis — teste avant le live
+          </Text>
+        </View>
+        <Ionicons
+          name="chevron-forward"
+          size={18}
+          color="rgba(255,255,255,0.45)"
+        />
+      </Pressable>
       {lives.isLoading ? (
         <ActivityIndicator color="#00D68F" />
       ) : rows.length === 0 ? (
@@ -112,6 +129,20 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800" },
+  arEntry: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(0,214,143,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0,214,143,0.35)",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 4,
+  },
+  arEmoji: { fontSize: 28 },
+  arTitle: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  arBody: { color: "rgba(255,255,255,0.62)", fontSize: 12, marginTop: 2 },
   empty: { color: "rgba(255,255,255,0.62)", marginTop: 24 },
   row: {
     flexDirection: "row",

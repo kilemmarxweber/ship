@@ -796,6 +796,7 @@ export function SellerProductsScreen() {
                   }
                   busy={mediaBusy}
                   setBusy={setMediaBusy}
+                  category={editing.category ?? "divers"}
                 />
               ) : null}
             </ScrollView>

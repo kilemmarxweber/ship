@@ -273,6 +273,7 @@ export function SellFlow({
             kind="mixed"
             busy={mediaBusy}
             setBusy={setMediaBusy}
+            category={category}
           />
           <MusicStudio
             productTitle={title}

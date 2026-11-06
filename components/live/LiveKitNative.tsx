@@ -783,26 +783,33 @@ function LiveKitVideoInner({
 
   return (
     <View style={styles.fill}>
-      {hasVideo && isTrackReference(shown) ? (
-        <TrackSafe fallback={null}>
-          <VideoTrack
-            trackRef={shown}
-            style={styles.fill}
-            objectFit={sharing ? "contain" : "cover"}
-            zOrder={0}
-            mirror={!sharing && Boolean(isHost || shown.participant.isLocal)}
+      <View style={styles.stageVideo}>
+        {hasVideo && isTrackReference(shown) ? (
+          <TrackSafe fallback={null}>
+            <VideoTrack
+              trackRef={shown}
+              style={styles.fill}
+              objectFit={sharing ? "contain" : "cover"}
+              zOrder={0}
+              mirror={!sharing && Boolean(isHost || shown.participant.isLocal)}
+            />
+          </TrackSafe>
+        ) : ended || paused ? (
+          <View style={[styles.fill, styles.endedStage]} />
+        ) : (
+          <LiveWaiting
+            avatar={hostAvatar}
+            isHost={isHost}
+            onRetry={onKickPlayback}
           />
-        </TrackSafe>
-      ) : ended || paused ? (
-        <View style={[styles.fill, styles.endedStage]} />
-      ) : (
-        <LiveWaiting
-          avatar={hostAvatar}
-          isHost={isHost}
-          onRetry={onKickPlayback}
-        />
-      )}
-      {hasVideo && !sharing ? <LiveFilterOverlay look={look} /> : null}
+        )}
+        {/* Filtre plein cadre = même surface que la vidéo (peau + décor) */}
+        {hasVideo && !sharing ? (
+          <View style={styles.filterLayer} pointerEvents="none">
+            <LiveFilterOverlay look={look} />
+          </View>
+        ) : null}
+      </View>
 
       {showFacePip ? (
         <View style={styles.hostFacePip} pointerEvents="none">
@@ -1169,6 +1176,15 @@ function LiveHostAvButtonsInner({
 
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill },
+  stageVideo: {
+    ...StyleSheet.absoluteFill,
+    overflow: "hidden",
+  },
+  filterLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 2,
+    elevation: 2,
+  },
   guestRail: {
     ...StyleSheet.absoluteFill,
     zIndex: 4,

@@ -5,20 +5,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
+  ActivityIndicator,
+  FlatList,
     Keyboard,
     KeyboardAvoidingView,
     Linking,
-    Modal,
+  Modal,
     Platform,
-    Pressable,
+  Pressable,
     ScrollView,
     Share,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
     type NativeScrollEvent,
     type NativeSyntheticEvent,
 } from "react-native";
@@ -330,7 +330,7 @@ export function BuySheet({
       onRequestClose={onClose}
     >
       <View style={styles.buyFrame}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={onClose} />
         <ToastHost />
         <View
           style={[
@@ -385,7 +385,7 @@ export function BuySheet({
                 product.compareAtCents > product.priceCents ? (
                   <Text style={styles.compare}>
                     {formatMoney(product.compareAtCents, product.currency)}
-                  </Text>
+        </Text>
                 ) : null}
               </View>
             </View>
@@ -427,11 +427,11 @@ export function BuySheet({
             </View>
           ) : null}
 
-          {product?.sizes.length ? (
+        {product?.sizes.length ? (
             <View style={styles.optionBlock}>
               <Text style={styles.optionLabel}>Taille</Text>
-              <View style={styles.chips}>
-                {product.sizes.map((item) => (
+          <View style={styles.chips}>
+            {product.sizes.map((item) => (
                   <Pressable
                     key={item}
                     onPress={() => setSize(item)}
@@ -445,11 +445,11 @@ export function BuySheet({
                     >
                       {item}
                     </Text>
-                  </Pressable>
-                ))}
+              </Pressable>
+            ))}
               </View>
-            </View>
-          ) : null}
+          </View>
+        ) : null}
 
           {stock > 0 ? (
             <View style={styles.qtyPick}>
@@ -469,11 +469,11 @@ export function BuySheet({
                   style={styles.qtyBtn}
                 >
                   <Ionicons name="add" size={16} color="#fff" />
-                </Pressable>
+              </Pressable>
                 <Text style={styles.qtyHint}>max {stock}</Text>
               </View>
-            </View>
-          ) : null}
+          </View>
+        ) : null}
 
           <Pressable
             onPress={() => void add()}
@@ -505,7 +505,7 @@ export function BuySheet({
                 </>
               )}
             </LinearGradient>
-          </Pressable>
+        </Pressable>
         </View>
       </View>
     </Modal>

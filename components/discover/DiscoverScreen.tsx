@@ -352,6 +352,68 @@ export function DiscoverScreen() {
         </View>
       </View>
 
+      {!searching && (surface.data?.lives?.length ?? 0) > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.kicker}>Lives shopping</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.strip}
+          >
+            {(surface.data?.lives ?? [])
+              .filter((live) => live.status !== "ENDED")
+              .slice(0, 12)
+              .map((live) => {
+                const rawCover =
+                  live.product?.images?.[0] || live.user?.image || null;
+                const cover = rawCover
+                  ? (mediaUrl(rawCover) ?? rawCover)
+                  : null;
+                const host =
+                  live.hostLabel ||
+                  (live.shop?.name && live.user?.name
+                    ? `${live.shop.name} · ${live.user.name}`
+                    : live.shop?.name || live.user?.name || "Créateur");
+                return (
+                  <Pressable
+                    key={live.id}
+                    style={styles.eventCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/live/[id]",
+                        params: { id: live.id },
+                      })
+                    }
+                  >
+                    {cover ? (
+                      <Image source={{ uri: cover }} style={styles.eventCover} />
+                    ) : (
+                      <View
+                        style={[styles.eventCover, { backgroundColor: "#16161f" }]}
+                      />
+                    )}
+                    <LinearGradient
+                      colors={["transparent", "rgba(0,0,0,0.85)"]}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.liveShopBadge}>
+                      <Text style={styles.liveShopBadgeText}>LIVE</Text>
+                    </View>
+                    <View style={styles.eventMeta}>
+                      <Text style={styles.eventTitle} numberOfLines={2}>
+                        {live.title || "Live shopping"}
+                      </Text>
+                      <Text style={styles.eventOrg} numberOfLines={1}>
+                        {host}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+          </ScrollView>
+        </View>
+      ) : null}
+
       {!searching && (liveEvents.data?.events?.length ?? 0) > 0 ? (
         <View style={styles.section}>
           <Text style={styles.kicker}>Événements</Text>
@@ -720,7 +782,32 @@ const styles = StyleSheet.create({
     height: 210,
     borderRadius: 18,
     backgroundColor: "#16161F",
+    overflow: "hidden",
   },
+  liveShopBadge: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    backgroundColor: "#E11D48",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  liveShopBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  eventMeta: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 10,
+  },
+  eventTitle: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  eventOrg: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 2 },
   highlightGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

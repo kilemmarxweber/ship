@@ -106,9 +106,18 @@ export type GrowthChallenge = {
 export type GrowthLive = {
   id: string;
   title?: string;
+  status?: string;
   viewerPeak?: number;
   followedByMe?: boolean;
+  hostKind?: "OWNER" | "ADMIN" | "INFLUENCER" | "CREATOR";
+  hostLabel?: string;
+  shop?: { name?: string; slug?: string; logoUrl?: string | null } | null;
   user: { id?: string; name?: string; image?: string | null };
+  product?: {
+    id?: string;
+    title?: string;
+    images?: string[];
+  } | null;
 };
 
 export type GrowthSurface = {
@@ -125,10 +134,14 @@ export type FeedPage = {
 
 export type LiveTeaser = {
   id: string;
+  title?: string;
   status?: string;
   viewerPeak?: number;
   viewerCount?: number;
-  user: { id: string };
+  hostKind?: "OWNER" | "ADMIN" | "INFLUENCER" | "CREATOR";
+  hostLabel?: string;
+  shop?: { name?: string; slug?: string; logoUrl?: string | null } | null;
+  user: { id: string; name?: string | null; image?: string | null };
   product: { id: string } | null;
 };
 

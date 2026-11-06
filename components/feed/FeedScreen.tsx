@@ -31,6 +31,8 @@ import {
     ShopProfileSheet,
 } from "@/components/feed/Sheets";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
+import { LiveAlertTeaser } from "@/components/live/LiveAlertTeaser";
+import { formatLiveHostLabel } from "@/src/live-host-label";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
 import { api, ApiError, apiOrigin, mediaUrl } from "@/src/api";
@@ -912,7 +914,7 @@ export function FeedScreen() {
                       <Text style={styles.trendText}>Tendance</Text>
                     </View>
                   ) : null}
-                  {showGoLive ? (
+                  {showGoLive || liveOn ? (
                     <Pressable
                       onPress={() => void onLivePress(item, live)}
                       disabled={startingLiveId === item.id}
@@ -935,6 +937,17 @@ export function FeedScreen() {
                         />
                         <Text style={styles.liveText}>LIVE</Text>
                       </View>
+                      {liveOn ? (
+                        <View style={styles.liveHostPill}>
+                          <Text style={styles.liveHostText} numberOfLines={1}>
+                            {formatLiveHostLabel({
+                              hostLabel: live?.hostLabel,
+                              userName: live?.user?.name,
+                              shopName: live?.shop?.name ?? item.shop.name,
+                            })}
+                          </Text>
+                        </View>
+                      ) : null}
                       <View style={styles.viewerPill}>
                         <Ionicons name="eye" size={12} color="#fff" />
                         <Text style={styles.liveCount}>
@@ -1312,6 +1325,7 @@ export function FeedScreen() {
         onClose={() => setBuyProduct(null)}
         onAdded={() => undefined}
       />
+      {tab !== "search" ? <LiveAlertTeaser /> : null}
       <ShopProfileSheet
         shop={
           shopProduct
@@ -1552,6 +1566,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 9,
     paddingVertical: 5,
+  },
+  liveHostPill: {
+    maxWidth: 140,
+    backgroundColor: "rgba(12,12,16,0.78)",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  liveHostText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
   },
   viewerPill: {
     flexDirection: "row",

@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { safeBack } from "@/src/nav";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    FlatList,
     Linking,
     Pressable,
     ScrollView,
@@ -22,6 +23,7 @@ import { api, apiOrigin } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
 import { matchOpenLive } from "@/src/live";
 import { coverOf } from "@/src/media";
+import { useOnline } from "@/src/offline/network";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -42,10 +44,6 @@ type ShopDetail = ShopCard & {
   categories?: { id: string; count: number }[];
 };
 
-type ScrollHandle = {
-  scrollTo: (opts: { y: number; animated?: boolean }) => void;
-};
-
 function hoursLabel(shop: ShopDetail) {
   if (shop.alwaysOpen) return "Toujours disponible";
   const start = shop.hoursStart?.trim();
@@ -57,12 +55,13 @@ function hoursLabel(shop: ShopDetail) {
 export function ShopPublicScreen() {
   const insets = useSafeAreaInsets();
   const c = useColors();
+  const online = useOnline();
   const token = useSession((state) => state.token);
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ slug?: string; "#": string }>();
   const slug = String(params.slug ?? "");
   const hash = String(params["#"] ?? "");
-  const scrollRef = useRef<ScrollHandle | null>(null);
+  const scrollRef = useRef<FlatList<Product> | null>(null);
   const productsY = useRef(0);
 
   const [q, setQ] = useState("");
@@ -70,9 +69,6 @@ export function ShopPublicScreen() {
   const [category, setCategory] = useState<string | null>(null);
   const [showAddress, setShowAddress] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
-  const [derivedCats, setDerivedCats] = useState<
-    { id: string; count: number; label: string }[]
-  >([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q.trim()), 200);
@@ -114,7 +110,10 @@ export function ShopPublicScreen() {
     },
   });
 
-  const products = productsQ.data?.products ?? [];
+  const products = useMemo(
+    () => productsQ.data?.products ?? [],
+    [productsQ.data?.products],
+  );
   const liveMatch = shop
     ? matchOpenLive(livesQ.data?.lives, { ownerUserId: shop.ownerUserId })
     : null;
@@ -127,23 +126,22 @@ export function ShopPublicScreen() {
       ? `https://www.google.com/maps/search/?api=1&query=${shop.lat},${shop.lng}`
       : null;
 
-  useEffect(() => {
-    if ((shop?.categories?.length ?? 0) > 0) return;
-    if (debouncedQ || category || productsQ.isLoading) return;
+  const derivedCats = useMemo(() => {
+    if ((shop?.categories?.length ?? 0) > 0 || debouncedQ || category) {
+      return [];
+    }
     const counts = new Map<string, number>();
     for (const product of products) {
       const id = product.category?.trim();
       if (!id) continue;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    setDerivedCats(
-      [...counts.entries()].map(([id, count]) => ({
-        id,
-        count,
-        label: id,
-      })),
-    );
-  }, [shop?.categories, products, debouncedQ, category, productsQ.isLoading]);
+    return [...counts.entries()].map(([id, count]) => ({
+      id,
+      count,
+      label: id,
+    }));
+  }, [shop?.categories, products, debouncedQ, category]);
 
   const categoryChips = useMemo(() => {
     const rows = shop?.categories ?? [];
@@ -157,15 +155,11 @@ export function ShopPublicScreen() {
     return derivedCats;
   }, [shop?.categories, derivedCats]);
 
-  const bindScroll = useCallback((node: ScrollHandle | null) => {
-    scrollRef.current = node;
-  }, []);
-
   useEffect(() => {
     if (hash !== "produits" || !shop || productsQ.isLoading) return;
     const t = setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, productsY.current - 12),
+      scrollRef.current?.scrollToOffset({
+        offset: Math.max(0, productsY.current - 12),
         animated: true,
       });
     }, 280);
@@ -330,19 +324,142 @@ export function ShopPublicScreen() {
         </Pressable>
       </View>
 
-      {shopQ.isLoading ? (
-        <ActivityIndicator color={c.emerald} style={{ marginTop: 40 }} />
+      {shopQ.isPending && slug ? (
+        online ? (
+          <ActivityIndicator color={c.emerald} style={{ marginTop: 40 }} />
+        ) : (
+          <View style={ui.offlineState}>
+            <Text style={[ui.emptyHint, { color: c.textMuted }]}>
+              Connexion indisponible
+            </Text>
+            <Pressable onPress={() => void shopQ.refetch()} style={ui.retryBtn}>
+              <Text style={[ui.retryText, { color: c.primary }]}>Réessayer</Text>
+            </Pressable>
+          </View>
+        )
       ) : !shop ? (
-        <Text style={[ui.empty, { color: c.textMuted }]}>
-          Boutique introuvable
-        </Text>
+        <View style={ui.offlineState}>
+          <Text style={[ui.empty, { color: c.textMuted }]}>
+            {shopQ.isError
+              ? "Boutique indisponible"
+              : online
+                ? "Boutique introuvable"
+                : "Connexion indisponible"}
+          </Text>
+          {shopQ.isError || !online ? (
+            <Pressable onPress={() => void shopQ.refetch()} style={ui.retryBtn}>
+              <Text style={[ui.retryText, { color: c.primary }]}>Réessayer</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : (
-        <ScrollView
-          ref={bindScroll as never}
+        <FlatList
+          ref={scrollRef}
+          data={products}
+          keyExtractor={(product) => product.id}
+          numColumns={2}
+          columnWrapperStyle={ui.gridRow}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
           contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-        >
+          renderItem={({ item: product }) => {
+            const cover = coverOf(product.images ?? []);
+            return (
+              <Pressable
+                style={[
+                  ui.card,
+                  { backgroundColor: c.card, borderColor: HAIRLINE },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/product/[id]",
+                    params: { id: product.id },
+                  })
+                }
+              >
+                {product.category ? (
+                  <View style={ui.catBadge}>
+                    <Text style={ui.catBadgeText}>{product.category}</Text>
+                  </View>
+                ) : null}
+                <Image
+                  source={{ uri: cover ?? undefined }}
+                  style={ui.cover}
+                  contentFit="cover"
+                />
+                <Text
+                  style={[ui.title, { color: c.text }]}
+                  numberOfLines={2}
+                >
+                  {product.title}
+                </Text>
+                <Text style={[ui.price, { color: c.emerald }]}>
+                  {formatMoney(product.priceCents, product.currency)}
+                </Text>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            productsQ.isPending ? (
+              online ? (
+                <ActivityIndicator
+                  color={c.emerald}
+                  style={{ marginTop: 24 }}
+                />
+              ) : (
+                <View style={ui.emptyProducts}>
+                  <Text style={[ui.emptyHint, { color: c.textMuted }]}>
+                    {productsQ.isError
+                      ? "Impossible de charger les produits."
+                      : "Connexion indisponible"}
+                  </Text>
+                  <Pressable
+                    onPress={() => void productsQ.refetch()}
+                    style={ui.retryBtn}
+                  >
+                    <Text style={[ui.retryText, { color: c.primary }]}>
+                      Réessayer
+                    </Text>
+                  </Pressable>
+                </View>
+              )
+            ) : productsQ.isError ? (
+              <View style={ui.emptyProducts}>
+                <Text style={[ui.emptyHint, { color: c.textMuted }]}>
+                  Impossible de charger les produits.
+                </Text>
+                <Pressable
+                  onPress={() => void productsQ.refetch()}
+                  style={ui.retryBtn}
+                >
+                  <Text style={[ui.retryText, { color: c.primary }]}>
+                    Réessayer
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={ui.emptyProducts}>
+                <Ionicons
+                  name="storefront-outline"
+                  size={36}
+                  color={c.textMuted}
+                />
+                <Text style={[ui.emptyTitle, { color: c.text }]}>
+                  Aucun produit
+                </Text>
+                <Text style={[ui.emptyHint, { color: c.textMuted }]}>
+                  {debouncedQ || category
+                    ? "Aucun résultat pour ce filtre."
+                    : "Cette boutique n'a pas encore de produits."}
+                </Text>
+              </View>
+            )
+          }
+          ListHeaderComponent={
+            <>
           <View style={[ui.headerBlock, { borderBottomColor: HAIRLINE }]}>
             <View style={ui.brandRow}>
               <ShopLiveAvatar
@@ -568,71 +685,10 @@ export function ShopPublicScreen() {
               productsY.current = event.nativeEvent.layout.y;
             }}
             style={ui.productsBlock}
-          >
-            {productsQ.isLoading ? (
-              <ActivityIndicator color={c.emerald} style={{ marginTop: 24 }} />
-            ) : products.length === 0 ? (
-              <View style={ui.emptyProducts}>
-                <Ionicons
-                  name="storefront-outline"
-                  size={36}
-                  color={c.textMuted}
-                />
-                <Text style={[ui.emptyTitle, { color: c.text }]}>
-                  Aucun produit
-                </Text>
-                <Text style={[ui.emptyHint, { color: c.textMuted }]}>
-                  {debouncedQ || category
-                    ? "Aucun résultat pour ce filtre."
-                    : "Cette boutique n'a pas encore de produits."}
-                </Text>
-              </View>
-            ) : (
-              <View style={ui.grid}>
-                {products.map((product) => {
-                  const cover = coverOf(product.images ?? []);
-                  return (
-                    <Pressable
-                      key={product.id}
-                      style={[
-                        ui.card,
-                        { backgroundColor: c.card, borderColor: HAIRLINE },
-                      ]}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/product/[id]",
-                          params: { id: product.id },
-                        })
-                      }
-                    >
-                      {product.category ? (
-                        <View style={ui.catBadge}>
-                          <Text style={ui.catBadgeText}>
-                            {product.category}
-                          </Text>
-                        </View>
-                      ) : null}
-                      <Image
-                        source={{ uri: cover ?? undefined }}
-                        style={ui.cover}
-                        contentFit="cover"
-                      />
-                      <Text
-                        style={[ui.title, { color: c.text }]}
-                        numberOfLines={2}
-                      >
-                        {product.title}
-                      </Text>
-                      <Text style={[ui.price, { color: c.emerald }]}>
-                        {formatMoney(product.priceCents, product.currency)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        </ScrollView>
+          />
+            </>
+          }
+        />
       )}
     </View>
   );
@@ -648,6 +704,9 @@ const ui = StyleSheet.create({
   back: { flexDirection: "row", alignItems: "center", minHeight: 44 },
   backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   empty: { textAlign: "center", marginTop: 40 },
+  offlineState: { alignItems: "center", padding: 24, gap: 8 },
+  retryBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+  retryText: { fontSize: 13, fontWeight: "800" },
   headerBlock: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -736,9 +795,10 @@ const ui = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: "800" },
   emptyHint: { fontSize: 13, textAlign: "center" },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  gridRow: { gap: 10, paddingHorizontal: 16 },
   card: {
-    width: "47.5%",
+    flex: 1,
+    minWidth: 0,
     borderRadius: 14,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,

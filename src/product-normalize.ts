@@ -38,9 +38,10 @@ export function isLocalFeedCursor(cursor: unknown) {
 export function safeNextCursor(page: {
   nextCursor?: string | null;
   products?: unknown[];
-}) {
+}, pageParams?: unknown[]) {
   const cursor = page.nextCursor ?? null;
   if (!cursor || isLocalFeedCursor(cursor)) return undefined;
+  if (pageParams?.some((param) => param === cursor)) return undefined;
   if (!page.products || page.products.length === 0) return undefined;
   return cursor;
 }

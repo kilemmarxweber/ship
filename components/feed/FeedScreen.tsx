@@ -119,6 +119,7 @@ export function FeedScreen() {
   const online = useOnline();
   const [active, setActive] = useState(0);
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
+  const fetchingNextPage = useRef(false);
   const weaveMemory = useRef(emptyWeaveMemory());
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -173,7 +174,8 @@ export function FeedScreen() {
         return { products: [], nextCursor: null };
       }
     },
-    getNextPageParam: (last) => safeNextCursor(last),
+    getNextPageParam: (last, _pages, _lastPageParam, pageParams) =>
+      safeNextCursor(last, pageParams),
     retry: 1,
   });
 
@@ -738,7 +740,7 @@ export function FeedScreen() {
         <View style={[styles.reel, { height }]}>
           <FlashList
             ref={listRef}
-            key={tab}
+            key={`${tab}:${token ?? "guest"}`}
             style={{ height, width }}
             data={feedRows}
             pagingEnabled={isReelTab}
@@ -760,11 +762,18 @@ export function FeedScreen() {
                 !focused ||
                 !feed.hasNextPage ||
                 feed.isFetchingNextPage ||
-                feed.isError
+                feed.isError ||
+                fetchingNextPage.current
               ) {
                 return;
               }
-              void feed.fetchNextPage().catch(() => undefined);
+              fetchingNextPage.current = true;
+              void feed
+                .fetchNextPage({ cancelRefetch: false })
+                .catch(() => undefined)
+                .finally(() => {
+                  fetchingNextPage.current = false;
+                });
             }}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={{

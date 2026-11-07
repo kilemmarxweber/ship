@@ -107,7 +107,8 @@
           "recordAudioAndroid": true
         }
       ],
-      "./plugins/withLivePermissions"
+      "./plugins/withLivePermissions",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

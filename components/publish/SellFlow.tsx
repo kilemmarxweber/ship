@@ -50,6 +50,7 @@ export type SellShop = {
   id: string;
   name: string;
   currency?: string;
+  logoUrl?: string | null;
 };
 
 export function SellFlow({
@@ -274,6 +275,7 @@ export function SellFlow({
             busy={mediaBusy}
             setBusy={setMediaBusy}
             category={category}
+            shopLogoUrl={shop?.logoUrl}
           />
           <MusicStudio
             productTitle={title}

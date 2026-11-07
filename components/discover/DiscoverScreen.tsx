@@ -100,6 +100,7 @@ export function DiscoverScreen() {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const stripFocusLock = useRef(false);
+  const fetchingNextPage = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 220);
@@ -129,7 +130,8 @@ export function DiscoverScreen() {
         return { products: [], nextCursor: null };
       }
     },
-    getNextPageParam: (last) => safeNextCursor(last),
+    getNextPageParam: (last, _pages, _lastPageParam, pageParams) =>
+      safeNextCursor(last, pageParams),
     retry: 1,
   });
 
@@ -178,7 +180,8 @@ export function DiscoverScreen() {
         return { products: [], nextCursor: null };
       }
     },
-    getNextPageParam: (last) => safeNextCursor(last),
+    getNextPageParam: (last, _pages, _lastPageParam, pageParams) =>
+      safeNextCursor(last, pageParams),
     retry: 1,
   });
 
@@ -656,6 +659,7 @@ export function DiscoverScreen() {
         </View>
       ) : (
         <FlashList
+          key={`discover:${token ?? "guest"}:${debounced}:${category ?? "all"}`}
           data={products}
           masonry
           numColumns={2}
@@ -671,11 +675,18 @@ export function DiscoverScreen() {
               !focused ||
               !feed.hasNextPage ||
               feed.isFetchingNextPage ||
-              feed.isError
+              feed.isError ||
+              fetchingNextPage.current
             ) {
               return;
             }
-            void feed.fetchNextPage().catch(() => undefined);
+            fetchingNextPage.current = true;
+            void feed
+              .fetchNextPage({ cancelRefetch: false })
+              .catch(() => undefined)
+              .finally(() => {
+                fetchingNextPage.current = false;
+              });
           }}
           onScroll={(event) => {
             if (event.nativeEvent.contentOffset.y > 80) {

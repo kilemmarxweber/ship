@@ -17,6 +17,7 @@ export function ProductImagePreviewSheet({
   meta,
   onClose,
   onSetPrimary,
+  onEdit,
   onCrop,
   onReplace,
   onRemove,
@@ -25,6 +26,7 @@ export function ProductImagePreviewSheet({
   meta: ProductImageMeta | null;
   onClose: () => void;
   onSetPrimary: () => void;
+  onEdit: () => void;
   onCrop: () => void;
   onReplace: () => void;
   onRemove: () => void;
@@ -68,9 +70,6 @@ export function ProductImagePreviewSheet({
             <Image source={{ uri }} style={styles.previewImg} contentFit="contain" />
           </View>
 
-          <Text style={[styles.label, { color: c.textMuted }]}>
-            Fiche produit (contain — rien n’est coupé)
-          </Text>
           <View
             style={[
               styles.productMock,
@@ -98,6 +97,16 @@ export function ProductImagePreviewSheet({
                 <Text style={[styles.btnText, { color: c.emerald }]}>★ Principale</Text>
               </View>
             )}
+            {meta.width > 0 ? (
+              <Pressable
+                style={[styles.btn, { backgroundColor: `${c.primary}22` }]}
+                onPress={onEdit}
+              >
+                <Text style={[styles.btnText, { color: c.primary }]}>
+                  Retoucher
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               style={[styles.btn, { backgroundColor: c.card, borderColor: HAIRLINE, borderWidth: 1 }]}
               onPress={onCrop}

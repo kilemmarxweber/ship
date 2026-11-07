@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -11,6 +15,7 @@ import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
 import { hydrateOffline } from "@/src/offline/hydrate";
+import { watchNetwork } from "@/src/offline/network";
 import { injectSnapshots } from "@/src/offline/persist";
 import { startSilentSync } from "@/src/offline/sync";
 import { usePrefs } from "@/src/prefs";
@@ -22,14 +27,30 @@ export { ErrorBoundary } from "expo-router";
 
 SplashScreen.preventAutoHideAsync();
 
+onlineManager.setOnline(false);
+onlineManager.setEventListener((setOnline) => {
+  let active = true;
+  let unsubscribe: (() => void) | undefined;
+  void watchNetwork((online) => {
+    if (active) setOnline(online);
+  }).then((stop) => {
+    unsubscribe = stop;
+    if (!active) stop();
+  });
+  return () => {
+    active = false;
+    unsubscribe?.();
+  };
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 45_000,
       gcTime: 24 * 60 * 60 * 1000,
-      networkMode: "offlineFirst",
+      networkMode: "online",
       retry: 1,
-      refetchOnReconnect: false,
+      refetchOnReconnect: true,
       refetchOnWindowFocus: false,
     },
   },

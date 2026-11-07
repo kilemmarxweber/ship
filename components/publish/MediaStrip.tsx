@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { ProductImagePreviewSheet } from "@/components/publish/ProductImagePreviewSheet";
+import { ProductImageEditorSheet } from "@/components/publish/ProductImageEditorSheet";
 import { apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import {
   pickMediaLibrary,
@@ -71,6 +72,7 @@ export function MediaStrip({
   busy,
   setBusy,
   category = "divers",
+  shopLogoUrl,
 }: {
   urls: string[];
   onChange: (next: string[]) => void;
@@ -80,10 +82,10 @@ export function MediaStrip({
   busy: boolean;
   setBusy: (value: boolean) => void;
   category?: string;
+  shopLogoUrl?: string | null;
 }) {
   const c = useColors();
   const urlsRef = useRef(urls);
-  urlsRef.current = urls;
   const ingestRef = useRef<(assets: ImagePickerAsset[]) => Promise<void>>(
     async () => undefined,
   );
@@ -92,7 +94,12 @@ export function MediaStrip({
   const [phase, setPhase] = useState<"idle" | "picking" | "uploading">("idle");
   const [metas, setMetas] = useState<ProductImageMeta[]>([]);
   const [preview, setPreview] = useState<ProductImageMeta | null>(null);
+  const [editing, setEditing] = useState<ProductImageMeta | null>(null);
   const categoryHint = hintFromSellCategory(category);
+
+  useEffect(() => {
+    urlsRef.current = urls;
+  }, [urls]);
 
   useEffect(() => {
     let alive = true;
@@ -154,7 +161,6 @@ export function MediaStrip({
     setBusy(true);
     setDone(0);
     setTotal(assets.length);
-    showToast("Analyse + envoi des médias…", "info");
     try {
       const next = max === 1 ? [] : [...urlsRef.current];
       let index = 0;
@@ -166,16 +172,6 @@ export function MediaStrip({
         let uploadUri = asset.uri;
         if (!isVideo && variant === "product") {
           uploadUri = await optimizeStill(asset.uri);
-          try {
-            const meta = await analyzeProductImage(asset.uri, {
-              categoryHint,
-              originalUrl: asset.uri,
-            });
-            if (meta.warning) showToast(meta.warning, "info");
-            else if (meta.tip) showToast(meta.tip, "info");
-          } catch {
-            /* ignore probe */
-          }
         }
         const uploaded = await uploadAsset(
           { ...asset, uri: uploadUri },
@@ -199,7 +195,9 @@ export function MediaStrip({
       setTotal(0);
     }
   }
-  ingestRef.current = ingest;
+  useEffect(() => {
+    ingestRef.current = ingest;
+  });
 
   useEffect(() => {
     return subscribePendingPickedMedia((assets) => {
@@ -322,30 +320,8 @@ export function MediaStrip({
         ? `Envoi ${Math.min(done, total)}/${total}`
         : "Analyse + envoi…";
 
-  const firstStill = metas.find((item) => !isVideoUrl(item.url));
-
   return (
     <View>
-      <View
-        style={[
-          styles.guide,
-          { backgroundColor: `${c.primary}12`, borderColor: `${c.primary}33` },
-        ]}
-      >
-        <Ionicons name="scan-outline" size={16} color={c.primary} />
-        <Text style={[styles.guideText, { color: c.text }]}>
-          Affichage fiche en contain — ta photo n’est jamais forcée. Conseil
-          ratio selon catégorie : ~{formatRatio(
-            categoryHint === "robes"
-              ? 2 / 3
-              : categoryHint === "hauts" || categoryHint === "divers"
-                ? 4 / 5
-                : 1,
-          )}
-          .
-        </Text>
-      </View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -484,12 +460,6 @@ export function MediaStrip({
         })}
       </ScrollView>
 
-      {firstStill?.tip ? (
-        <Text style={[styles.footTip, { color: c.textMuted }]}>
-          {firstStill.tip}
-        </Text>
-      ) : null}
-
       {locked ? (
         <View
           style={[
@@ -510,6 +480,10 @@ export function MediaStrip({
         open={Boolean(preview)}
         meta={preview}
         onClose={() => setPreview(null)}
+        onEdit={() => {
+          setEditing(preview);
+          setPreview(null);
+        }}
         onSetPrimary={() => {
           if (preview) setPrimary(preview.url);
           setPreview(null);
@@ -525,21 +499,53 @@ export function MediaStrip({
           setPreview(null);
         }}
       />
+      {editing ? (
+        <ProductImageEditorSheet
+          key={editing.url}
+          open
+          uri={mediaUrl(editing.url) ?? editing.url}
+          logoUri={mediaUrl(shopLogoUrl) ?? shopLogoUrl}
+          imageWidth={editing.width}
+          ratio={editing.ratio}
+          onClose={() => setEditing(null)}
+          onSave={async (uri) => {
+            setPhase("uploading");
+            setBusy(true);
+            try {
+              const uploaded = await uploadAsset(
+                {
+                  uri,
+                  fileName: "retouched-product.jpg",
+                  mimeType: "image/jpeg",
+                },
+                variant,
+              );
+              const replacement = uploaded[0];
+              urlsRef.current = urlsRef.current.map((url) =>
+                url === editing.url ? replacement : url,
+              );
+              onChange(urlsRef.current);
+              return true;
+            } catch (cause) {
+              showToast(
+                cause instanceof Error
+                  ? cause.message
+                  : "Retouche impossible",
+                "error",
+              );
+              return false;
+            } finally {
+              setBusy(false);
+              setPhase("idle");
+            }
+          }}
+        />
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  guide: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-start",
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  guideText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
   row: { gap: 10, paddingVertical: 4 },
   add: {
     width: 104,

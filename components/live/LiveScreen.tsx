@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useKeepAwake } from "expo-keep-awake";
 import {
     keepPreviousData,
     useQuery,
@@ -64,6 +65,11 @@ import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { Product } from "@/src/types";
+
+function LiveKeepAwake() {
+  useKeepAwake("shipshop-live");
+  return null;
+}
 
 export function LiveScreen({ liveId }: { liveId: string }) {
   const insets = useSafeAreaInsets();
@@ -536,9 +542,8 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         presentedProductId: next.presentedProductId,
         scrollY: typeof next.scrollY === "number" ? next.scrollY : prev.scrollY,
       }));
-      if (!isHost) setBagOpen(next.open);
     },
-    [isHost],
+    [],
   );
 
   const sharedCatalog = Boolean(live?.catalogOpen) || peerCatalog.open;
@@ -561,10 +566,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
     return () => clearTimeout(timer);
   }, [bagOpen, hostPost, isHost, localScroll]);
 
-  useEffect(() => {
-    if (isHost) return;
-    setBagOpen(sharedCatalog);
-  }, [isHost, sharedCatalog]);
+  const catalogSheetOpen = isHost ? bagOpen : sharedCatalog;
 
   const featured: Product | null = live?.product
     ? {
@@ -618,7 +620,9 @@ export function LiveScreen({ liveId }: { liveId: string }) {
   ];
   const composerBottom = keyboardHeight > 0 ? keyboardHeight : 0;
   const room = (
-    <View style={styles.root} collapsable={false}>
+    <>
+      {live && !ended ? <LiveKeepAwake /> : null}
+      <View style={styles.root} collapsable={false}>
       <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
         {shopAvatar ? (
           <Image source={{ uri: shopAvatar }} style={styles.avatar} />
@@ -1033,14 +1037,14 @@ export function LiveScreen({ liveId }: { liveId: string }) {
       <LiveLikeRise events={stageFx} />
       <LiveCatalogSync
         isHost={isHost}
-        open={bagOpen}
+        open={catalogSheetOpen}
         presentedProductId={presentedProductId}
         scrollY={catalogScrollY}
         onRemote={onRemoteCatalog}
       />
 
       <LiveProductsSheet
-        open={bagOpen}
+        open={catalogSheetOpen}
         liveId={liveId}
         shopId={live.product?.shop?.id}
         isHost={isHost}
@@ -1171,7 +1175,8 @@ export function LiveScreen({ liveId }: { liveId: string }) {
           showToast("Ajouté au panier", "success");
         }}
       />
-    </View>
+      </View>
+    </>
   );
 
   if (sfu) {

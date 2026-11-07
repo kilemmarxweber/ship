@@ -9,6 +9,7 @@ import {
     Pressable,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     View,
@@ -21,7 +22,7 @@ import {
     type AdminProductHit,
 } from "@/components/seller/admin/AdminProductPicker";
 import { PagedMore } from "@/components/ui/PagedMore";
-import { api, mediaUrl } from "@/src/api";
+import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { useT } from "@/src/i18n";
 import { priceToCents, sanitizePriceInput } from "@/src/product-options";
 import { useSession } from "@/src/session";
@@ -147,14 +148,18 @@ export function ChallengesAdminScreen() {
 
   const eventsQ = useQuery({
     queryKey: ["admin-events-for-challenge", token ?? "guest"],
-    enabled:
-      Boolean(token) && (q.data?.events?.length ?? 0) === 0 && !q.isLoading,
+    enabled: Boolean(token),
     queryFn: () => api<{ events?: EventHit[] }>("/api/admin/events"),
     retry: false,
   });
-  const eventOptions = q.data?.events?.length
-    ? q.data.events
-    : (eventsQ.data?.events ?? []);
+  const eventOptions = (() => {
+    const merged = new Map<string, EventHit>();
+    for (const row of q.data?.events ?? []) merged.set(row.id, row);
+    for (const row of eventsQ.data?.events ?? []) {
+      if (!merged.has(row.id)) merged.set(row.id, row);
+    }
+    return [...merged.values()];
+  })();
 
   const active = q.data?.active ?? [];
   const recent = q.data?.recent ?? [];
@@ -612,18 +617,7 @@ export function ChallengesAdminScreen() {
               { backgroundColor: c.card, borderColor: HAIRLINE },
             ]}
           >
-            <Pressable
-              disabled={busy}
-              onPress={() => void toggleChallengesEnabled(!challengesEnabled)}
-              style={styles.guestToggle}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: challengesEnabled }}
-            >
-              <Ionicons
-                name={challengesEnabled ? "checkbox" : "square-outline"}
-                size={22}
-                color={challengesEnabled ? c.primary : c.textMuted}
-              />
+            <View style={styles.guestToggle}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text
                   style={[styles.section, { color: c.text, marginBottom: 0 }]}
@@ -637,7 +631,17 @@ export function ChallengesAdminScreen() {
                   catalogue auto ni à la mise en ligne produit.
                 </Text>
               </View>
-            </Pressable>
+              <Switch
+                value={challengesEnabled}
+                disabled={busy}
+                onValueChange={(next) => void toggleChallengesEnabled(next)}
+                trackColor={{
+                  false: "rgba(127,127,140,0.35)",
+                  true: c.primary,
+                }}
+                thumbColor="#fff"
+              />
+            </View>
           </View>
 
           <View
@@ -787,9 +791,11 @@ export function ChallengesAdminScreen() {
             </ScrollView>
             {eventOptions.length === 0 ? (
               <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                {eventsQ.isError
+                {eventsQ.isError || q.isError
                   ? "Events introuvables — vérifie l’accès owner/admin."
-                  : "Aucun event en base — crée-en un dans Billets / Events."}
+                  : eventsQ.isLoading || q.isLoading
+                    ? "Chargement des events…"
+                    : `Aucun event — crée-en un dans Billets / Events.\nAPI: ${apiOrigin()}`}
               </Text>
             ) : null}
 

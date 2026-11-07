@@ -14,8 +14,11 @@ function devHost() {
 const PROD_API = "https://shipshop.klambocore.com";
 
 export function apiOrigin() {
+  // Dev : EXPO_PUBLIC_API_URL > localhost shop. Ne pas prendre extra.apiUrl
+  // (souvent la prod) sinon le picker events / toggle challenges voient une autre DB.
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, "");
   if (fromEnv) return fromEnv;
+  if (__DEV__) return `http://${devHost()}:3000`;
   const extraUrl = String(
     (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
       "",
@@ -23,9 +26,7 @@ export function apiOrigin() {
     .trim()
     .replace(/\/$/, "");
   if (extraUrl) return extraUrl;
-  // Never ship a release/production build pointed at localhost.
-  if (!__DEV__) return PROD_API;
-  return `http://${devHost()}:3000`;
+  return PROD_API;
 }
 
 export function mediaUrl(path: string | null | undefined) {

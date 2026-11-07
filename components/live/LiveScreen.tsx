@@ -7,11 +7,13 @@ import {
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     AppState,
     Keyboard,
+    Modal,
     Platform,
     Pressable,
     Share,
@@ -49,6 +51,10 @@ import {
     type LiveViewer,
 } from "@/src/live";
 import { isLiveRtcAvailable } from "@/src/live-rtc";
+import {
+    LIVE_STAGE_LAYOUTS,
+    normalizeStageLayout,
+} from "@/src/live-stage-layout";
 import { isSellerOfShop, useMe } from "@/src/me";
 import {
     clearPaymentIdempotencyKey,
@@ -77,6 +83,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
   const [localPresented, setLocalPresented] = useState<string | null>(null);
   const [localScroll, setLocalScroll] = useState(0);
   const [giftOpen, setGiftOpen] = useState(false);
+  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   const [viewersOpen, setViewersOpen] = useState(false);
   const [localViewers, setLocalViewers] = useState<LiveViewer[]>([]);
   const [localViewerCount, setLocalViewerCount] = useState<number | null>(null);
@@ -246,7 +253,9 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         if (
           cause instanceof ApiError &&
           (String(body.action ?? "").startsWith("guest_") ||
-            body.action === "catalog")
+            body.action === "catalog" ||
+            body.action === "stage_layout" ||
+            body.action === "guest_join_lock")
         ) {
           showToast(cause.message, "error");
           return false;
@@ -494,8 +503,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
 
   function goHome() {
     Keyboard.dismiss();
-    if (router.canGoBack()) router.back();
-    else router.replace("/");
+    safeBack();
   }
 
   async function onStopPress() {
@@ -591,7 +599,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
     return (
       <View style={styles.center}>
         <Text style={styles.endedTitle}>Live introuvable</Text>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => safeBack()}>
           <Text style={styles.link}>Retour{"\u00A0"}</Text>
         </Pressable>
       </View>
@@ -778,6 +786,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
             hostAvatar={shopAvatar}
             ended={ended}
             paused={paused}
+            stageLayout={live.stageLayout}
             onKickPlayback={() => void sfuQuery.refetch()}
           />
         ) : ended || paused ? (
@@ -897,17 +906,28 @@ export function LiveScreen({ liveId }: { liveId: string }) {
               styles.railBtn,
               live.myGuest?.status === "PENDING" && styles.railBtnWait,
               live.myGuest?.status === "ON_STAGE" && styles.railBtnOn,
+              live.guestJoinLocked &&
+                live.myGuest?.status !== "ON_STAGE" &&
+                live.myGuest?.status !== "PENDING" &&
+                styles.railBtnWait,
             ]}
             onPress={() => {
               if (!token) {
                 openAuth();
                 return;
               }
-              if (live.guestJoinLocked) {
-                showToast("Le diffuseur a fermé les montées", "info");
+              const status = live.myGuest?.status;
+              if (
+                live.guestJoinLocked &&
+                status !== "PENDING" &&
+                status !== "ON_STAGE"
+              ) {
+                showToast(
+                  "Live host-only — le diffuseur a fermé les montées",
+                  "info",
+                );
                 return;
               }
-              const status = live.myGuest?.status;
               void (async () => {
                 setBusy(true);
                 if (status === "PENDING") {
@@ -931,10 +951,17 @@ export function LiveScreen({ liveId }: { liveId: string }) {
                   ? "mic"
                   : live.myGuest?.status === "PENDING"
                     ? "hourglass"
-                    : "person-add"
+                    : live.guestJoinLocked
+                      ? "lock-closed"
+                      : "person-add"
               }
               size={20}
-              color={live.myGuest?.status === "PENDING" ? "#FBBF24" : "#fff"}
+              color={
+                live.myGuest?.status === "PENDING" ||
+                (live.guestJoinLocked && live.myGuest?.status !== "ON_STAGE")
+                  ? "#FBBF24"
+                  : "#fff"
+              }
             />
           </Pressable>
         ) : null}
@@ -952,6 +979,54 @@ export function LiveScreen({ liveId }: { liveId: string }) {
               }}
             />
             {isHost ? <LiveScreenShareHost enabled liveId={liveId} /> : null}
+            {isHost ? (
+              <Pressable
+                style={[
+                  styles.railBtn,
+                  live.guestJoinLocked && styles.railBtnWait,
+                ]}
+                onPress={() => {
+                  void (async () => {
+                    setBusy(true);
+                    const locked = !live.guestJoinLocked;
+                    const ok = await hostPost({
+                      action: "guest_join_lock",
+                      locked,
+                    });
+                    setBusy(false);
+                    if (ok) {
+                      showToast(
+                        locked
+                          ? "Montées fermées — live host-only"
+                          : "Montées ouvertes — viewers peuvent demander",
+                        "info",
+                      );
+                      await liveQuery.refetch();
+                    }
+                  })();
+                }}
+                accessibilityLabel={
+                  live.guestJoinLocked
+                    ? "Ouvrir les montées viewers"
+                    : "Fermer les montées (host-only)"
+                }
+              >
+                <Ionicons
+                  name={live.guestJoinLocked ? "lock-closed" : "lock-open"}
+                  size={20}
+                  color={live.guestJoinLocked ? "#FBBF24" : "#fff"}
+                />
+              </Pressable>
+            ) : null}
+            {isHost ? (
+              <Pressable
+                style={styles.railBtn}
+                onPress={() => setLayoutPickerOpen(true)}
+                accessibilityLabel="Disposition scène"
+              >
+                <Ionicons name="grid-outline" size={20} color="#fff" />
+              </Pressable>
+            ) : null}
           </>
         ) : null}
       </View>
@@ -1023,6 +1098,71 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         qualifiedCount={localQualifiedCount || live.qualifiedViewerCount || 0}
         viewers={localViewers.length ? localViewers : (live.viewers ?? [])}
       />
+      <Modal
+        visible={layoutPickerOpen && isHost && !ended}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setLayoutPickerOpen(false)}
+      >
+        <View style={styles.layoutFrame}>
+          <Pressable
+            style={styles.layoutBackdrop}
+            onPress={() => setLayoutPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.layoutSheet,
+              { paddingBottom: Math.max(insets.bottom, 14) + 8 },
+            ]}
+          >
+            <Text style={styles.layoutTitle}>Disposition scène</Text>
+            <Text style={styles.layoutSub}>
+              Placement des invités — visible pour tout le monde
+            </Text>
+            {LIVE_STAGE_LAYOUTS.map((row) => {
+              const active = normalizeStageLayout(live.stageLayout) === row.id;
+              return (
+                <Pressable
+                  key={row.id}
+                  disabled={busy}
+                  style={[styles.layoutRow, active && styles.layoutRowOn]}
+                  onPress={() => {
+                    void (async () => {
+                      setBusy(true);
+                      const ok = await hostPost({
+                        action: "stage_layout",
+                        layout: row.id,
+                      });
+                      setBusy(false);
+                      if (ok) {
+                        setLayoutPickerOpen(false);
+                        showToast(`Disposition « ${row.label} »`, "success");
+                        await liveQuery.refetch();
+                      }
+                    })();
+                  }}
+                >
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.layoutRowTitle}>
+                      {row.label}
+                      {active ? " · actif" : ""}
+                    </Text>
+                    <Text style={styles.layoutRowHint}>{row.hint}</Text>
+                  </View>
+                  {active ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#00D68F"
+                    />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
       <BuySheet
         product={buyProduct}
         onClose={() => setBuyProduct(null)}
@@ -1231,5 +1371,49 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     marginTop: -2,
+  },
+  layoutFrame: { flex: 1, justifyContent: "flex-end" },
+  layoutBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  layoutSheet: {
+    backgroundColor: "#12121A",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 10,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  layoutTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
+  layoutSub: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  layoutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  layoutRowOn: {
+    borderColor: "rgba(0,214,143,0.55)",
+    backgroundColor: "rgba(0,214,143,0.12)",
+  },
+  layoutRowTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  layoutRowHint: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
   },
 });

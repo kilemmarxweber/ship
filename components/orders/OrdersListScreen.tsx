@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -49,7 +50,7 @@ export function OrdersListScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
-      <Pressable style={styles.back} onPress={() => router.back()}>
+      <Pressable style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
         <Text style={styles.backText} numberOfLines={1}>
           {t("back")}

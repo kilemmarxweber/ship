@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -323,7 +324,7 @@ export function ShopPublicScreen() {
           },
         ]}
       >
-        <Pressable onPress={() => router.back()} style={ui.back} hitSlop={8}>
+        <Pressable onPress={() => safeBack()} style={ui.back} hitSlop={8}>
           <Ionicons name="chevron-back" size={22} color={c.text} />
           <Text style={[ui.backText, { color: c.text }]}>Retour</Text>
         </Pressable>

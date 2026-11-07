@@ -91,6 +91,8 @@ export type LiveDetail = {
   guests?: LiveGuest[];
   myGuest?: LiveGuest | null;
   guestJoinLocked?: boolean;
+  /** Disposition scène (rail | split | board) — sync web. */
+  stageLayout?: string | null;
   overlays?: LiveOverlay[];
   catalogOpen?: boolean;
   presentedProductId?: string | null;

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -104,7 +105,7 @@ export function EventScreen({ eventId }: { eventId: string }) {
         paddingBottom: insets.bottom + 28,
       }}
     >
-      <Pressable onPress={() => router.back()}>
+      <Pressable onPress={() => safeBack()}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
       {row ? (

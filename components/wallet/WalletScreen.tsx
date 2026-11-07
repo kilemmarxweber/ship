@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import * as WebBrowser from "expo-web-browser";
 import { useMemo, useState } from "react";
 import {
@@ -303,7 +304,7 @@ export function WalletScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color="#fff" />
         <Text style={styles.backText} numberOfLines={1}>
           Retour{"\u00A0"}

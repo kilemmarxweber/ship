@@ -6,7 +6,7 @@ export default function WantedRoute() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   if (!id) {
-    router.back();
+    router.replace("/");
     return null;
   }
   return <WantedDetailScreen requestId={id} />;

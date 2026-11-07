@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import {
     ActivityIndicator,
     Pressable,
@@ -58,7 +59,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
     return (
       <View style={[styles.center, { paddingTop: insets.top + 24 }]}>
         <Text style={styles.title}>QR introuvable</Text>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => safeBack()}>
           <Text style={styles.link}>Retour</Text>
         </Pressable>
       </View>
@@ -75,7 +76,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         gap: 14,
       }}
     >
-      <Pressable style={styles.back} onPress={() => router.back()}>
+      <Pressable style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
         <Text style={styles.backText} numberOfLines={1}>
           Retour{"\u00A0"}

@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -133,7 +134,7 @@ export function TicketScanScreen() {
     <View
       style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}
     >
-      <Pressable onPress={() => router.back()} style={{ padding: 16 }}>
+      <Pressable onPress={() => safeBack()} style={{ padding: 16 }}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
       {cameraApi ? (

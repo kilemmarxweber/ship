@@ -1,7 +1,7 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { router } from "expo-router";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -139,23 +139,64 @@ export function ChallengesAdminScreen() {
         active?: ChallengeRow[];
         recent?: ChallengeRow[];
         catalog?: CatalogItem[];
+        challengesEnabled?: boolean;
+        events?: EventHit[];
       }>("/api/admin/challenges"),
     retry: false,
   });
 
   const eventsQ = useQuery({
     queryKey: ["admin-events-for-challenge", token ?? "guest"],
-    enabled: Boolean(token),
+    enabled:
+      Boolean(token) && (q.data?.events?.length ?? 0) === 0 && !q.isLoading,
     queryFn: () => api<{ events?: EventHit[] }>("/api/admin/events"),
     retry: false,
   });
-  const eventOptions = eventsQ.data?.events ?? [];
+  const eventOptions = q.data?.events?.length
+    ? q.data.events
+    : (eventsQ.data?.events ?? []);
 
   const active = q.data?.active ?? [];
   const recent = q.data?.recent ?? [];
   const catalog = q.data?.catalog ?? [];
+  const challengesEnabled = Boolean(q.data?.challengesEnabled);
   const pagedActive = usePaged(active, `a-${active.length}`);
   const pagedRecent = usePaged(recent, `r-${recent.length}`);
+
+  async function toggleChallengesEnabled(next: boolean) {
+    setBusy(true);
+    try {
+      const data = await api<{
+        ok?: boolean;
+        challengesEnabled?: boolean;
+        error?: string;
+      }>("/api/admin/challenges", {
+        method: "POST",
+        body: JSON.stringify({ action: "set_enabled", enabled: next }),
+      });
+      const enabled = Boolean(data.challengesEnabled ?? next);
+      queryClient.setQueryData(
+        ["admin-challenges", token ?? "guest"],
+        (current: typeof q.data) =>
+          current ? { ...current, challengesEnabled: enabled } : current,
+      );
+      showToast(
+        enabled
+          ? "Challenges activés — visibles feed / Découvrir"
+          : "Challenges désactivés — masqués du feed",
+        "success",
+      );
+      await queryClient.invalidateQueries({ queryKey: ["admin-challenges"] });
+      await queryClient.invalidateQueries({ queryKey: ["growth-surface"] });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Paramètre impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function resetForm() {
     setEditingId(null);
@@ -528,7 +569,7 @@ export function ChallengesAdminScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
         <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
           {t("back")}
@@ -571,6 +612,40 @@ export function ChallengesAdminScreen() {
               { backgroundColor: c.card, borderColor: HAIRLINE },
             ]}
           >
+            <Pressable
+              disabled={busy}
+              onPress={() => void toggleChallengesEnabled(!challengesEnabled)}
+              style={styles.guestToggle}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: challengesEnabled }}
+            >
+              <Ionicons
+                name={challengesEnabled ? "checkbox" : "square-outline"}
+                size={22}
+                color={challengesEnabled ? c.primary : c.textMuted}
+              />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  style={[styles.section, { color: c.text, marginBottom: 0 }]}
+                >
+                  Activer les challenges
+                </Text>
+                <Text
+                  style={{ color: c.textMuted, fontSize: 12, lineHeight: 16 }}
+                >
+                  Affiche uniquement les challenges publiés ici. Pas de
+                  catalogue auto ni à la mise en ligne produit.
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: c.card, borderColor: HAIRLINE },
+            ]}
+          >
             <Text style={[styles.section, { color: c.text }]}>
               {editingId ? "Modifier le challenge" : "Nouveau challenge"}
             </Text>
@@ -595,11 +670,15 @@ export function ChallengesAdminScreen() {
               </ScrollView>
             ) : null}
             <Pressable
-              disabled={busy}
+              disabled={busy || !challengesEnabled}
               onPress={() => void seedCatalog()}
               style={[
                 styles.chip,
-                { alignSelf: "flex-start", borderColor: HAIRLINE },
+                {
+                  alignSelf: "flex-start",
+                  borderColor: HAIRLINE,
+                  opacity: challengesEnabled ? 1 : 0.45,
+                },
               ]}
             >
               <Text
@@ -697,13 +776,22 @@ export function ChallengesAdminScreen() {
                         }}
                         numberOfLines={1}
                       >
-                        {event.title}
+                        {event.status && event.status !== "ON_SALE"
+                          ? `${event.title} · ${event.status}`
+                          : event.title}
                       </Text>
                     </Pressable>
                   );
                 })}
               </View>
             </ScrollView>
+            {eventOptions.length === 0 ? (
+              <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                {eventsQ.isError
+                  ? "Events introuvables — vérifie l’accès owner/admin."
+                  : "Aucun event en base — crée-en un dans Billets / Events."}
+              </Text>
+            ) : null}
 
             {focus === "catalog" ? (
               <AdminProductPicker
@@ -929,7 +1017,7 @@ export function ChallengesAdminScreen() {
           </View>
 
           <Text style={[styles.section, { color: c.text }]}>
-            Actifs ({active.length})
+            Programmés · feed ({active.length})
           </Text>
           {pagedActive.visible.map((row) => renderRow(row))}
           <PagedMore
@@ -970,6 +1058,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: "800" },
   lead: { fontSize: 13, marginTop: 4, lineHeight: 18 },
   card: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
+  guestToggle: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
   section: { fontSize: 15, fontWeight: "800" },
   label: { fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
   input: {

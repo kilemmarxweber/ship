@@ -59,6 +59,10 @@ import {
     requestNotificationPermission,
 } from "@/src/live-rtc";
 import { setActiveScreenShareLiveId } from "@/src/live-share-session";
+import {
+    normalizeStageLayout,
+    type LiveStageLayoutId,
+} from "@/src/live-stage-layout";
 import { showToast } from "@/src/toast";
 
 if (isLiveRtcAvailable()) {
@@ -699,6 +703,7 @@ export function LiveKitVideo(props: {
   hostAvatar?: string | null;
   ended: boolean;
   paused: boolean;
+  stageLayout?: string | null;
   onKickPlayback?: () => void;
 }) {
   const room = useLiveRoomOrNull();
@@ -721,6 +726,7 @@ function LiveKitVideoInner({
   hostAvatar,
   ended,
   paused,
+  stageLayout,
   onKickPlayback,
 }: {
   isHost: boolean;
@@ -729,6 +735,7 @@ function LiveKitVideoInner({
   hostAvatar?: string | null;
   ended: boolean;
   paused: boolean;
+  stageLayout?: string | null;
   onKickPlayback?: () => void;
 }) {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
@@ -792,14 +799,26 @@ function LiveKitVideoInner({
     .filter(isTrackReference)
     .slice(0, MAX_STAGE_PIPS);
 
+  const layout: LiveStageLayoutId = normalizeStageLayout(stageLayout);
   const pipCount = stageSlots.length;
-  const pipH = pipCount > 4 ? 104 : 148;
-  const pipW = pipCount > 4 ? 76 : 108;
-  const pipGap = 8;
+  const gridish = layout === "board" || layout === "split";
+  const pipH = gridish ? (pipCount > 4 ? 96 : 120) : pipCount > 4 ? 104 : 148;
+  const pipW = gridish ? (pipCount > 4 ? 72 : 96) : pipCount > 4 ? 76 : 108;
+  const pipGap = gridish ? 6 : 8;
+  const hostStageStyle =
+    layout === "split" && pipCount > 0 && !sharing
+      ? styles.hostStageSplit
+      : styles.stageVideo;
+  const guestRailStyle =
+    layout === "board"
+      ? styles.guestBoard
+      : layout === "split"
+        ? styles.guestSplit
+        : styles.guestRail;
 
   return (
     <View style={styles.fill}>
-      <View style={styles.stageVideo}>
+      <View style={hostStageStyle}>
         {sharing && isHost ? (
           <View style={[styles.fill, styles.shareLocalStage]}>
             <View style={styles.shareLocalIcon}>
@@ -838,33 +857,49 @@ function LiveKitVideoInner({
       </View>
 
       {stageSlots.length > 0 ? (
-        <View style={styles.guestRail} pointerEvents="box-none">
-          {stageSlots.map((row, index) => (
-            <View
-              key={row.participant.sid || row.participant.identity}
-              style={[
-                styles.guestPip,
-                {
-                  top: 88 + index * (pipH + pipGap),
-                  width: pipW,
-                  height: pipH,
-                },
-              ]}
-            >
-              <TrackSafe fallback={null}>
-                <VideoTrack
-                  trackRef={row}
-                  style={styles.fill}
-                  objectFit="cover"
-                  zOrder={3 + index}
-                  mirror={row.participant.isLocal}
-                />
-              </TrackSafe>
-              {hasVideo ? (
-                <LiveFilterOverlay look={look} intensity="pip" />
-              ) : null}
-            </View>
-          ))}
+        <View style={guestRailStyle} pointerEvents="box-none">
+          {stageSlots.map((row, index) => {
+            const pipPos =
+              layout === "board"
+                ? {
+                    left: 12 + (index % 2) * (pipW + pipGap),
+                    bottom: 132 + Math.floor(index / 2) * (pipH + pipGap),
+                    width: pipW,
+                    height: pipH,
+                  }
+                : layout === "split"
+                  ? {
+                      top: 88 + index * (pipH + pipGap),
+                      right: 10,
+                      width: pipW,
+                      height: pipH,
+                    }
+                  : {
+                      top: 88 + index * (pipH + pipGap),
+                      right: 12,
+                      width: pipW,
+                      height: pipH,
+                    };
+            return (
+              <View
+                key={row.participant.sid || row.participant.identity}
+                style={[styles.guestPip, pipPos]}
+              >
+                <TrackSafe fallback={null}>
+                  <VideoTrack
+                    trackRef={row}
+                    style={styles.fill}
+                    objectFit="cover"
+                    zOrder={3 + index}
+                    mirror={row.participant.isLocal}
+                  />
+                </TrackSafe>
+                {hasVideo ? (
+                  <LiveFilterOverlay look={look} intensity="pip" />
+                ) : null}
+              </View>
+            );
+          })}
         </View>
       ) : null}
 
@@ -1238,6 +1273,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     overflow: "hidden",
   },
+  hostStageSplit: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: "38%",
+    overflow: "hidden",
+  },
   filterLayer: {
     ...StyleSheet.absoluteFill,
     zIndex: 2,
@@ -1247,9 +1290,20 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 4,
   },
+  guestSplit: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: "38%",
+    zIndex: 4,
+  },
+  guestBoard: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 4,
+  },
   guestPip: {
     position: "absolute",
-    right: 12,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#111",

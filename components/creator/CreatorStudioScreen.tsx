@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -58,6 +59,8 @@ export function CreatorStudioScreen() {
   const openAuth = useSession((state) => state.openAuth);
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("Live shopping");
+  /** Défaut off = live host-only. */
+  const [allowGuests, setAllowGuests] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const me = useQuery({
@@ -101,7 +104,10 @@ export function CreatorStudioScreen() {
     try {
       const data = await api<{ live?: { id: string } }>("/api/growth/lives", {
         method: "POST",
-        body: JSON.stringify({ title: title.trim() || "Live shopping" }),
+        body: JSON.stringify({
+          title: title.trim() || "Live shopping",
+          allowGuests,
+        }),
       });
       if (!data.live?.id) throw new Error("Live impossible");
       await queryClient.invalidateQueries({ queryKey: ["growth-lives"] });
@@ -127,7 +133,7 @@ export function CreatorStudioScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
         <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
           {t("back")}
@@ -249,6 +255,23 @@ export function CreatorStudioScreen() {
                   ]}
                 />
                 <Pressable
+                  onPress={() => setAllowGuests((v) => !v)}
+                  style={styles.guestToggle}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: allowGuests }}
+                >
+                  <Ionicons
+                    name={allowGuests ? "checkbox" : "square-outline"}
+                    size={20}
+                    color={allowGuests ? c.live : c.textMuted}
+                  />
+                  <Text
+                    style={[styles.guestToggleText, { color: c.textMuted }]}
+                  >
+                    Autoriser les viewers à monter sur scène
+                  </Text>
+                </Pressable>
+                <Pressable
                   disabled={busy || title.trim().length < 2}
                   onPress={() => void startLive()}
                   style={[
@@ -365,6 +388,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   goLiveText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  guestToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+  },
+  guestToggleText: { flex: 1, fontSize: 12, fontWeight: "700", lineHeight: 16 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16 },
   section: { fontSize: 14, fontWeight: "800" },
   giftRow: {

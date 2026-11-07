@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -242,7 +243,7 @@ export function SellerShopsScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
         <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
           {t("back")}

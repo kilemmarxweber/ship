@@ -10,6 +10,7 @@ export function LiveKitVideo(props: {
   hostAvatar?: string | null;
   ended: boolean;
   paused: boolean;
+  stageLayout?: string | null;
   onKickPlayback?: () => void;
 }) {
   const Native = useNativeLive();

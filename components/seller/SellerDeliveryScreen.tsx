@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -94,7 +95,7 @@ export function SellerDeliveryScreen() {
         gap: 12,
       }}
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
         <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
           {t("back")}

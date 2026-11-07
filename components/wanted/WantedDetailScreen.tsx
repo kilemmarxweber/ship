@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -296,7 +297,7 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
           gap: 12,
         }}
       >
-        <Pressable onPress={() => router.back()} style={styles.back}>
+        <Pressable onPress={() => safeBack()} style={styles.back}>
           <Ionicons name="chevron-back" size={22} color={c.text} />
           <Text style={[styles.backText, { color: c.text }]}>Retour</Text>
         </Pressable>

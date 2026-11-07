@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -135,7 +136,7 @@ export function KycScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color="#fff" />
         <Text style={styles.backText} numberOfLines={1}>
           Retour{"\u00A0"}

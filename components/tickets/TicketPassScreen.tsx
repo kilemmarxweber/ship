@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     Pressable,
@@ -52,7 +53,7 @@ export function TicketPassScreen({ ticketId }: { ticketId: string }) {
         gap: 12,
       }}
     >
-      <Pressable onPress={() => router.back()}>
+      <Pressable onPress={() => safeBack()}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
       <Text style={[styles.title, { color: c.text }]}>

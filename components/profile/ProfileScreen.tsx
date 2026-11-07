@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -163,8 +164,7 @@ export function ProfileScreen() {
   function confirmLogout() {
     setLogoutOpen(false);
     void logout().then(() => {
-      if (router.canGoBack()) router.back();
-      else router.replace("/");
+      safeBack();
     });
   }
 
@@ -181,7 +181,7 @@ export function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} style={styles.back}>
+          <Pressable onPress={() => safeBack()} style={styles.back}>
             <Ionicons name="chevron-back" size={20} color={c.text} />
             <Text
               style={[styles.backText, { color: c.text }]}

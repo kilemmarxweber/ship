@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -123,7 +124,7 @@ export function ArStudioScreen() {
         >
           <Text style={styles.permBtnText}>Autoriser</Text>
         </Pressable>
-        <Pressable onPress={() => router.back()} style={{ marginTop: 16 }}>
+        <Pressable onPress={() => safeBack()} style={{ marginTop: 16 }}>
           <Text style={{ color: "rgba(255,255,255,0.6)", fontWeight: "700" }}>
             Retour
           </Text>
@@ -143,7 +144,7 @@ export function ArStudioScreen() {
       <LiveFilterOverlay look={filterId} />
 
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.iconBtn} onPress={() => router.back()}>
+        <Pressable style={styles.iconBtn} onPress={() => safeBack()}>
           <Ionicons name="close" size={22} color="#fff" />
         </Pressable>
         <Text style={styles.title}>Studio AR</Text>

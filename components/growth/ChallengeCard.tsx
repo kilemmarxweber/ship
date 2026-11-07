@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import { router, type Href } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
     Pressable,
@@ -22,6 +23,8 @@ import { isVideoUrl, mediaUrl } from "@/src/api";
 import type { ChallengeTemplate } from "@/src/challenge-place";
 import { formatMoney } from "@/src/format";
 import type { GrowthChallenge } from "@/src/types";
+
+const EVENT_JOIN: [string, string, string] = ["#0ea5e9", "#0284c7", "#0369a1"];
 
 const MOOD: Record<string, string> = {
   Beauté: "💄 Beauté & Bien-être",
@@ -138,6 +141,7 @@ function coverUris(challenge: GrowthChallenge) {
   const raw = [
     challenge.spotlight?.kind === "image" ? challenge.spotlight.url : null,
     challenge.spotlight?.posterUrl,
+    challenge.event?.imageUrl,
     challenge.coverUrl,
     challenge.product?.image,
     ...(challenge.coverCandidates ?? []),
@@ -153,6 +157,67 @@ function coverUris(challenge: GrowthChallenge) {
     out.push(uri);
   }
   return out;
+}
+
+function EventCue({
+  challenge,
+  compact,
+}: {
+  challenge: GrowthChallenge;
+  compact?: boolean;
+}) {
+  const event = challenge.event;
+  if (!event) return null;
+  const price =
+    event.fromPriceCents != null
+      ? formatMoney(event.fromPriceCents, event.currency)
+      : null;
+  return (
+    <Pressable
+      onPress={() => router.push(`/events/${event.id}` as Href)}
+      hitSlop={6}
+      style={[styles.cue, styles.cueEvent, compact && styles.cueCompact]}
+    >
+      <Text style={styles.chipEmoji}>🎟️</Text>
+      <Text style={[styles.cueText, styles.cueEventText]} numberOfLines={1}>
+        Billet · {event.title}
+      </Text>
+      {price ? (
+        <Text style={[styles.cuePrice, styles.cueEventPrice]}>{price}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function ProductCue({
+  challenge,
+  compact,
+}: {
+  challenge: GrowthChallenge;
+  compact?: boolean;
+}) {
+  if (challenge.event) {
+    return <EventCue challenge={challenge} compact={compact} />;
+  }
+  const product = challenge.product;
+  if (!product) return null;
+  return (
+    <View style={[styles.cue, compact && styles.cueCompact]}>
+      <Text style={styles.chipEmoji}>🛍️</Text>
+      <Text style={styles.cueText} numberOfLines={1}>
+        {product.kind === "teaser"
+          ? `Aperçu · ${product.title}`
+          : product.title}
+      </Text>
+      {product.priceCents != null ? (
+        <Text style={styles.cuePrice}>
+          {formatMoney(product.priceCents, product.currency)}
+        </Text>
+      ) : product.kind === "teaser" ? (
+        <Text style={styles.cuePrice}>bientôt</Text>
+      ) : null}
+    </View>
+  );
 }
 
 function Faces({
@@ -303,6 +368,15 @@ export function ChallengeCard({
 }) {
   const insets = useSafeAreaInsets();
   const look = LOOK[template] ?? LOOK.stack;
+  const linkedEvent = challenge.event ?? null;
+  const heading = linkedEvent ? "🎟️ Event billet" : look.heading;
+  const joinColors = linkedEvent
+    ? challenge.done
+      ? (["#2a2a34", "#2a2a34", "#2a2a34"] as [string, string, string])
+      : EVENT_JOIN
+    : challenge.done
+      ? (["#2a2a34", "#2a2a34", "#2a2a34"] as [string, string, string])
+      : look.join;
   const uris = coverUris(challenge);
   const video =
     challenge.spotlight?.kind === "video" && challenge.spotlight.url
@@ -331,8 +405,14 @@ export function ChallengeCard({
         { backgroundColor: look.copyBg, paddingBottom: copyPad },
       ]}
     >
-      {template === "ribbon" ? <View style={styles.ribbonBar} /> : null}
-      {look.showChip && look.overlay ? <HeadingBadge look={look} /> : null}
+      {template === "ribbon" ? (
+        <View
+          style={[styles.ribbonBar, linkedEvent ? styles.ribbonBarEvent : null]}
+        />
+      ) : null}
+      {look.showChip && look.overlay ? (
+        <HeadingBadge look={{ ...look, heading }} />
+      ) : null}
       {!look.overlay && !look.showChip ? (
         <Text
           style={[
@@ -341,7 +421,7 @@ export function ChallengeCard({
             look.overlay && styles.readShadow,
           ]}
         >
-          {look.heading}
+          {heading}
         </Text>
       ) : null}
       <Text
@@ -351,7 +431,9 @@ export function ChallengeCard({
           look.overlay && styles.readShadow,
         ]}
       >
-        {MOOD[challenge.category ?? ""] ?? "✨ Lifestyle"} · ✨ à toi de jouer
+        {linkedEvent
+          ? `${linkedEvent.organizerName ?? "Event"} · achat billet`
+          : `${MOOD[challenge.category ?? ""] ?? "✨ Lifestyle"} · ✨ à toi de jouer`}
       </Text>
       <Text
         style={[
@@ -374,39 +456,7 @@ export function ChallengeCard({
       >
         {challenge.body}
       </Text>
-      {challenge.event ? (
-        <View style={styles.cue}>
-          <Text style={styles.chipEmoji}>🎟️</Text>
-          <Text style={styles.cueText} numberOfLines={1}>
-            Billet · {challenge.event.title}
-          </Text>
-          {challenge.event.fromPriceCents != null ? (
-            <Text style={styles.cuePrice}>
-              {formatMoney(
-                challenge.event.fromPriceCents,
-                challenge.event.currency,
-              )}
-            </Text>
-          ) : null}
-        </View>
-      ) : challenge.product ? (
-        <View style={styles.cue}>
-          <Text style={styles.chipEmoji}>🛍️</Text>
-          <Text style={styles.cueText} numberOfLines={1}>
-            {challenge.product.kind === "teaser"
-              ? `Aperçu · ${challenge.product.title}`
-              : challenge.product.title}
-          </Text>
-          {challenge.product.priceCents != null ? (
-            <Text style={styles.cuePrice}>
-              {formatMoney(
-                challenge.product.priceCents,
-                challenge.product.currency,
-              )}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+      <ProductCue challenge={challenge} compact={compact} />
       <View style={styles.footer}>
         <Faces
           challenge={challenge}
@@ -418,15 +468,17 @@ export function ChallengeCard({
           hitSlop={8}
         >
           <LinearGradient
-            colors={
-              challenge.done ? ["#2a2a34", "#2a2a34", "#2a2a34"] : look.join
-            }
+            colors={joinColors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[styles.join, (busy || challenge.done) && { opacity: 0.7 }]}
           >
             <Text style={styles.joinText}>
-              {challenge.done ? "Relevé" : "Je relève"}
+              {challenge.done
+                ? "Relevé"
+                : linkedEvent
+                  ? "Je relève · billet"
+                  : "Je relève"}
             </Text>
           </LinearGradient>
         </Pressable>
@@ -435,7 +487,9 @@ export function ChallengeCard({
   );
 
   const chipOnHero =
-    look.showChip && !look.overlay ? <HeadingBadge look={look} float /> : null;
+    look.showChip && !look.overlay ? (
+      <HeadingBadge look={{ ...look, heading }} float />
+    ) : null;
 
   return (
     <View
@@ -582,6 +636,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0b21a",
     marginBottom: 4,
   },
+  ribbonBarEvent: { backgroundColor: "#38bdf8" },
   kicker: {
     fontWeight: "800",
     fontSize: 13,
@@ -613,12 +668,20 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: "rgba(125,255,179,0.12)",
   },
+  cueCompact: { paddingHorizontal: 10, paddingVertical: 6 },
+  cueEvent: {
+    backgroundColor: "rgba(56,189,248,0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(125,211,252,0.35)",
+  },
   cueText: { color: "#7dffb3", fontWeight: "700", fontSize: 13, maxWidth: 200 },
+  cueEventText: { color: "#e0f2fe" },
   cuePrice: {
     color: "rgba(125,255,179,0.75)",
     fontSize: 12,
     fontWeight: "700",
   },
+  cueEventPrice: { color: "rgba(186,230,253,0.85)" },
   footer: {
     flexDirection: "row",
     alignItems: "center",

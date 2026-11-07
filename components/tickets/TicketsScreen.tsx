@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -32,7 +33,7 @@ export function TicketsScreen() {
         paddingBottom: insets.bottom + 28,
       }}
     >
-      <Pressable onPress={() => router.back()}>
+      <Pressable onPress={() => safeBack()}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
       <Text style={[styles.title, { color: c.text }]}>{t("myTickets")}</Text>

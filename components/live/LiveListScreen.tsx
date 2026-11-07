@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import {
     ActivityIndicator,
     Pressable,
@@ -46,7 +47,7 @@ export function LiveListScreen() {
         gap: 10,
       }}
     >
-      <Pressable style={styles.back} onPress={() => router.back()}>
+      <Pressable style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
         <Text style={styles.backText}>
           {t("back")}

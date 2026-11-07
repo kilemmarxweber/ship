@@ -25,6 +25,7 @@ import {
 } from "@/components/profile/ShopPicker";
 import { MediaStrip } from "@/components/publish/MediaStrip";
 import { ShipRewardsCard } from "@/components/seller/ShipRewardsCard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
@@ -89,6 +90,10 @@ export function SellerProductsScreen() {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [republishOpen, setRepublishOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<SellerProduct | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
 
   const shopsQ = useQuery({
     queryKey: ["seller-shops", token ?? "guest"],
@@ -195,36 +200,28 @@ export function SellerProductsScreen() {
       );
       return;
     }
-    Alert.alert(
-      "Supprimer le produit ?",
-      `Supprimer définitivement « ${p.title} » ?`,
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setBusy(true);
-              try {
-                await api(`/api/products/${p.id}`, { method: "DELETE" });
-                showToast("Produit supprimé", "success");
-                await refresh();
-              } catch (cause) {
-                showToast(
-                  cause instanceof Error
-                    ? cause.message
-                    : "Suppression impossible",
-                  "error",
-                );
-              } finally {
-                setBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    setPendingDelete(p);
+  }
+
+  async function confirmRemoveProduct() {
+    const p = pendingDelete;
+    if (!p) return;
+    setDeleting(true);
+    setBusy(true);
+    try {
+      await api(`/api/products/${p.id}`, { method: "DELETE" });
+      showToast("Produit supprimé", "success");
+      setPendingDelete(null);
+      await refresh();
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+      setBusy(false);
+    }
   }
 
   function openRepublish() {
@@ -937,6 +934,23 @@ export function SellerProductsScreen() {
           </View>
         </View>
       </Modal>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Supprimer le produit ?"
+        message={
+          pendingDelete
+            ? `Supprimer définitivement « ${pendingDelete.title} » ? Cette action est irréversible.`
+            : undefined
+        }
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+        onConfirm={() => void confirmRemoveProduct()}
+      />
     </View>
   );
 }

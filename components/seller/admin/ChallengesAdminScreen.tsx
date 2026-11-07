@@ -5,7 +5,6 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -21,6 +20,7 @@ import {
     AdminProductPicker,
     type AdminProductHit,
 } from "@/components/seller/admin/AdminProductPicker";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { useT } from "@/src/i18n";
@@ -131,6 +131,8 @@ export function ChallengesAdminScreen() {
   const [eventId, setEventId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const q = useQuery({
     queryKey: ["admin-challenges", token ?? "guest"],
@@ -402,34 +404,31 @@ export function ChallengesAdminScreen() {
   }
 
   function removeChallenge(id: string) {
-    Alert.alert("Supprimer définitivement ce challenge ?", undefined, [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            try {
-              await api(`/api/admin/challenges?id=${encodeURIComponent(id)}`, {
-                method: "DELETE",
-              });
-              showToast("Challenge supprimé", "success");
-              if (editingId === id) resetForm();
-              await queryClient.invalidateQueries({
-                queryKey: ["admin-challenges"],
-              });
-            } catch (cause) {
-              showToast(
-                cause instanceof Error
-                  ? cause.message
-                  : "Suppression impossible",
-                "error",
-              );
-            }
-          })();
-        },
-      },
-    ]);
+    setPendingDeleteId(id);
+  }
+
+  async function confirmRemoveChallenge() {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await api(`/api/admin/challenges?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      showToast("Challenge supprimé", "success");
+      if (editingId === id) resetForm();
+      setPendingDeleteId(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["admin-challenges"],
+      });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function renderRow(row: ChallengeRow, ended = false) {
@@ -564,6 +563,7 @@ export function ChallengesAdminScreen() {
   }
 
   return (
+    <>
     <ScrollView
       style={[styles.wrap, { backgroundColor: c.background }]}
       contentContainerStyle={{
@@ -1044,6 +1044,20 @@ export function ChallengesAdminScreen() {
         </>
       )}
     </ScrollView>
+    <ConfirmDialog
+      open={Boolean(pendingDeleteId)}
+      title="Supprimer ce challenge ?"
+      message="Cette action est définitive. Le challenge disparaîtra du feed et de Découvrir."
+      confirmLabel="Supprimer"
+      cancelLabel="Annuler"
+      destructive
+      busy={deleting}
+      onCancel={() => {
+        if (!deleting) setPendingDeleteId(null);
+      }}
+      onConfirm={() => void confirmRemoveChallenge()}
+    />
+    </>
   );
 }
 

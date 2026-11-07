@@ -20,7 +20,15 @@ import {
     type NativeScrollEvent,
     type NativeSyntheticEvent,
 } from "react-native";
-import Animated, { FadeOut, ZoomIn } from "react-native-reanimated";
+import Animated, {
+    Easing,
+    FadeOut,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+    ZoomIn,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ReelGallery } from "@/components/feed/ReelGallery";
@@ -75,6 +83,27 @@ function readLastTab(): FeedTab {
     return value;
   }
   return "foryou";
+}
+
+function OfflineConnLoader() {
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    spin.value = withRepeat(
+      withTiming(1, { duration: 1100, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, [spin]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360}deg` }],
+  }));
+  return (
+    <View style={styles.offlinePill} accessibilityLabel="Connexion">
+      <Animated.View style={style}>
+        <Ionicons name="sync-outline" size={14} color="#FBBF24" />
+      </Animated.View>
+    </View>
+  );
 }
 
 export function FeedScreen() {
@@ -1160,11 +1189,7 @@ export function FeedScreen() {
               style={styles.logo}
               contentFit="contain"
             />
-            {!online ? (
-              <View style={styles.offlinePill}>
-                <Text style={styles.offlineText}>Hors-ligne</Text>
-              </View>
-            ) : null}
+            {!online ? <OfflineConnLoader /> : null}
           </View>
           <View style={styles.headerTabs}>
             <Pressable
@@ -1418,12 +1443,13 @@ const styles = StyleSheet.create({
   offlinePill: {
     marginTop: 4,
     alignSelf: "flex-start",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  offlineText: { color: "#fcd34d", fontSize: 10, fontWeight: "700" },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",

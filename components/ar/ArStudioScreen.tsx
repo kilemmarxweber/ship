@@ -4,12 +4,12 @@ import * as MediaLibrary from "expo-media-library";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -117,7 +117,10 @@ export function ArStudioScreen() {
           Autorise la caméra pour tester les filtres AR (chapeau, lunettes,
           emojis).
         </Text>
-        <Pressable style={styles.permBtn} onPress={() => void requestPermission()}>
+        <Pressable
+          style={styles.permBtn}
+          onPress={() => void requestPermission()}
+        >
           <Text style={styles.permBtnText}>Autoriser</Text>
         </Pressable>
         <Pressable onPress={() => router.back()} style={{ marginTop: 16 }}>
@@ -166,10 +169,16 @@ export function ArStudioScreen() {
               <Pressable
                 key={item.id}
                 onPress={() => setFilterId(item.id)}
-                style={[styles.chip, on && styles.chipOn]}
+                style={styles.chipWrap}
+                accessibilityLabel={item.name}
               >
-                <Text style={styles.chipEmoji}>{item.emoji}</Text>
-                <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>
+                <View style={[styles.chip, on && styles.chipOn]}>
+                  <Text style={styles.chipEmoji}>{item.emoji}</Text>
+                </View>
+                <Text
+                  style={[styles.chipLabel, on && styles.chipLabelOn]}
+                  numberOfLines={1}
+                >
                   {item.name}
                 </Text>
               </Pressable>
@@ -178,10 +187,7 @@ export function ArStudioScreen() {
         </ScrollView>
 
         <View style={styles.controls}>
-          <Pressable
-            style={styles.sideBtn}
-            onPress={() => setFilterId("none")}
-          >
+          <Pressable style={styles.sideBtn} onPress={() => setFilterId("none")}>
             <Text style={styles.sideBtnText}>Aucun</Text>
           </Pressable>
           <Pressable
@@ -241,28 +247,34 @@ const styles = StyleSheet.create({
     zIndex: 5,
     gap: 12,
   },
-  gallery: { paddingHorizontal: 14, gap: 8 },
-  chip: {
-    width: 72,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+  gallery: { paddingHorizontal: 14, gap: 10, alignItems: "flex-end" },
+  chipWrap: {
+    width: 56,
     alignItems: "center",
-    gap: 4,
+    gap: 6,
+  },
+  chip: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   chipOn: {
     backgroundColor: "#00D68F",
-    borderColor: "#00D68F",
+    borderColor: "#fff",
   },
-  chipEmoji: { fontSize: 20 },
+  chipEmoji: { fontSize: 22 },
   chipLabel: {
-    color: "rgba(255,255,255,0.85)",
+    color: "rgba(255,255,255,0.7)",
     fontSize: 10,
     fontWeight: "800",
+    textAlign: "center",
   },
-  chipLabelOn: { color: "#04281c" },
+  chipLabelOn: { color: "#00D68F" },
   controls: {
     flexDirection: "row",
     alignItems: "center",

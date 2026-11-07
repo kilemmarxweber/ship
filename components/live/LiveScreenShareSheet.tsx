@@ -49,8 +49,8 @@ export function LiveScreenShareSheet({
             <View style={styles.headText}>
               <Text style={styles.title}>Partage d’écran</Text>
               <Text style={styles.sub}>
-                Style Meet / WhatsApp : notif pour revenir au live, caméra en
-                vignette
+                Comme WhatsApp : la caméra se coupe, les spectateurs voient
+                uniquement ton écran
               </Text>
             </View>
           </View>
@@ -70,8 +70,7 @@ export function LiveScreenShareSheet({
             <View style={styles.rowBody}>
               <Text style={styles.rowTitle}>Tout l’écran</Text>
               <Text style={styles.rowSub}>
-                Tout le téléphone (ECC, etc.). Une notif « Revenir au live »
-                reste en haut
+                Bureau Android complet. Caméra off — notif pour revenir au live
               </Text>
             </View>
             {sharing && mode === "full" ? (

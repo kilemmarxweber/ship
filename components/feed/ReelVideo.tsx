@@ -1,30 +1,26 @@
 import { useEventListener } from "expo";
-import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Image as RNImage, StyleSheet, View } from "react-native";
+import { Image as RNImage, StyleSheet, View } from "react-native";
 
-let audioModeReady = false;
-
-function ensureFeedAudioMode() {
-  if (audioModeReady) return;
-  audioModeReady = true;
-  void setAudioModeAsync({
-    playsInSilentMode: true,
-    shouldPlayInBackground: false,
-    interruptionMode: "mixWithOthers",
-    interruptionModeAndroid: "duckOthers",
-  }).catch(() => {
-    audioModeReady = false;
-  });
-}
-
-function safePlayerCall(run: () => void) {
-  try {
-    run();
-  } catch {
-    /* player may already be released while scrolling */
+function bindPlayer(
+  player: ReturnType<typeof useVideoPlayer>,
+  playing: boolean,
+  muted: boolean,
+  loop: boolean,
+  restart: boolean,
+) {
+  player.loop = loop;
+  player.volume = 1;
+  player.audioMixingMode = "mixWithOthers";
+  player.muted = muted;
+  if (playing) {
+    if (restart) player.replay();
+    void player.play();
+  } else {
+    player.pause();
+    player.currentTime = 0;
   }
 }
 
@@ -45,31 +41,21 @@ export function ReelVideo({
   useEffect(() => {
     wasPlaying.current = false;
   }, [uri]);
-
   const player = useVideoPlayer(uri, (next) => {
     next.loop = loop;
-    next.volume = muted ? 0 : 1;
-    next.muted = muted;
+    next.volume = 1;
     next.audioMixingMode = "mixWithOthers";
-    next.staysActiveInBackground = false;
+    next.muted = muted;
+    if (playing) {
+      next.replay();
+      void next.play();
+    }
   });
 
   useEffect(() => {
     const restart = playing && !wasPlaying.current;
     wasPlaying.current = playing;
-    safePlayerCall(() => {
-      player.loop = loop;
-      player.muted = muted;
-      player.volume = muted ? 0 : 1;
-      player.audioMixingMode = "mixWithOthers";
-      if (playing) {
-        // Avoid replay() — it often stalls/crashes under fast scroll on Android.
-        if (restart) player.currentTime = 0;
-        player.play();
-      } else {
-        player.pause();
-      }
-    });
+    bindPlayer(player, playing, muted, loop, restart);
   }, [loop, muted, player, playing]);
 
   useEventListener(player, "playToEnd", () => {
@@ -81,8 +67,7 @@ export function ReelVideo({
       player={player}
       nativeControls={false}
       contentFit="cover"
-      // surfaceView is lighter; only one video mounts at a time in the gallery.
-      surfaceType={Platform.OS === "android" ? "surfaceView" : undefined}
+      surfaceType="textureView"
       allowsPictureInPicture={false}
       style={styles.media}
     />
@@ -137,7 +122,6 @@ export function ReelCover({ uri }: { uri: string }) {
   );
 }
 
-/** Soundtrack via expo-audio — much lighter / faster than a hidden VideoPlayer. */
 export function ReelSoundtrack({
   uri,
   playing,
@@ -150,38 +134,40 @@ export function ReelSoundtrack({
   const wasPlaying = useRef(false);
   useEffect(() => {
     wasPlaying.current = false;
-    ensureFeedAudioMode();
   }, [uri]);
-
-  const localFile = uri.startsWith("file://") || uri.startsWith("content://");
-  const player = useAudioPlayer(uri, {
-    updateInterval: 1000,
-    // Already on disk via SQLite media_cache — skip a second download.
-    downloadFirst: !localFile,
+  const player = useVideoPlayer(uri, (next) => {
+    next.loop = true;
+    next.volume = 1;
+    next.audioMixingMode = "mixWithOthers";
+    next.muted = muted;
   });
 
   useEffect(() => {
+    player.loop = true;
+    player.volume = 1;
+    player.audioMixingMode = "mixWithOthers";
+    player.muted = muted;
     const restart = playing && !wasPlaying.current;
     wasPlaying.current = playing;
-    safePlayerCall(() => {
-      player.loop = true;
-      player.volume = 1;
-      player.muted = muted;
-      if (playing && !muted) {
-        if (restart) {
-          void player.seekTo(0).then(() => {
-            safePlayerCall(() => player.play());
-          });
-        } else {
-          player.play();
-        }
-      } else {
-        player.pause();
-      }
-    });
+    if (playing && !muted) {
+      if (restart) player.replay();
+      void player.play();
+    } else {
+      player.pause();
+      player.currentTime = 0;
+    }
   }, [muted, player, playing]);
 
-  return null;
+  return (
+    <View pointerEvents="none" style={styles.hiddenAudio}>
+      <VideoView
+        player={player}
+        nativeControls={false}
+        allowsPictureInPicture={false}
+        style={styles.hiddenAudio}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -203,4 +189,5 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  hiddenAudio: { width: 1, height: 1, opacity: 0, position: "absolute" },
 });

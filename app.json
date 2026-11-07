@@ -2,13 +2,13 @@
   "expo": {
     "name": "ShipShop",
     "slug": "ShipShop",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/59f9fb0f-efd9-4070-bc3f-8122df037e7a",
-      "checkAutomatically": "NEVER",
+      "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
     "orientation": "portrait",
@@ -32,11 +32,6 @@
         "android.permission.RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
         "POST_NOTIFICATIONS",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_CAMERA",
-        "FOREGROUND_SERVICE_MICROPHONE",
-        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "READ_EXTERNAL_STORAGE"
@@ -60,14 +55,6 @@
     "plugins": [
       "./plugins/withCmakeObjectPathMax",
       "./plugins/withLiveKitAndroidSetup",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "extraProguardRules": "-dontwarn livekit.org.jni_zero.**\n-keep class livekit.org.jni_zero.** { *; }\n-dontwarn livekit.org.webrtc.**\n-keep class livekit.org.webrtc.** { *; }\n-dontwarn org.webrtc.**\n-keep class org.webrtc.** { *; }\n-dontwarn com.livekit.**\n-keep class com.livekit.** { *; }"
-          }
-        }
-      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -114,23 +101,13 @@
       "expo-document-picker",
       "expo-file-system",
       [
-        "expo-media-library",
-        {
-          "photosPermission": "ShipShop enregistre tes photos et vidéos filtrées dans ta galerie.",
-          "savePhotosPermission": "ShipShop enregistre tes captures Studio AR dans ta galerie.",
-          "isAccessMediaLocationEnabled": true
-        }
-      ],
-      [
         "expo-audio",
         {
           "microphonePermission": "ShipShop utilise le micro pour le son de ton live shopping.",
           "recordAudioAndroid": true
         }
       ],
-      "./plugins/withLivePermissions",
-      "./plugins/withScreenShareKeepAlive",
-      "expo-build-properties"
+      "./plugins/withLivePermissions"
     ],
     "experiments": {
       "typedRoutes": true

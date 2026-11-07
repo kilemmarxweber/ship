@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import * as Linking from "expo-linking";
-import { Stack, router, type Href } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -11,7 +10,6 @@ import { AuthSheet } from "@/components/auth/AuthSheet";
 import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
-import { getActiveScreenShareLiveId } from "@/src/live-share-session";
 import { hydrateOffline } from "@/src/offline/hydrate";
 import { injectSnapshots } from "@/src/offline/persist";
 import { startSilentSync } from "@/src/offline/sync";
@@ -86,28 +84,6 @@ export default function RootLayout() {
   useEffect(() => {
     void refreshCart();
   }, [token, refreshCart]);
-
-  // Notif partage d’écran (Meet/WhatsApp) → revenir au live
-  useEffect(() => {
-    function openFromShareLink(url: string | null) {
-      if (!url) return;
-      if (
-        !url.includes("live/current-share") &&
-        !url.includes("live%2Fcurrent-share")
-      ) {
-        return;
-      }
-      const liveId = getActiveScreenShareLiveId();
-      if (!liveId) return;
-      router.push(`/live/${liveId}` as Href);
-    }
-
-    void Linking.getInitialURL().then(openFromShareLink);
-    const sub = Linking.addEventListener("url", (event) => {
-      openFromShareLink(event.url);
-    });
-    return () => sub.remove();
-  }, []);
 
   return (
     <GestureHandlerRootView

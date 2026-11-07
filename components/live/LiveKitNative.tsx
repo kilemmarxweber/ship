@@ -450,7 +450,9 @@ function PublishLocalAv({
   micOn: boolean;
 }) {
   const connection = useConnectionState();
-  const { localParticipant } = useLocalParticipant();
+  const { isScreenShareEnabled, localParticipant } = useLocalParticipant();
+  // WhatsApp-style : pendant le partage, seule l’écran est publié.
+  const wantCamera = cameraOn && !isScreenShareEnabled;
 
   const applied = useRef({ camera: false, mic: false });
   const lastConn = useRef(connection);
@@ -474,16 +476,16 @@ function PublishLocalAv({
     if (connection !== ConnectionState.Connected) return;
     if (
       !becameConnected &&
-      applied.current.camera === cameraOn &&
+      applied.current.camera === wantCamera &&
       applied.current.mic === micOn
     ) {
       return;
     }
-    applied.current = { camera: cameraOn, mic: micOn };
+    applied.current = { camera: wantCamera, mic: micOn };
     let cancelled = false;
     void (async () => {
       try {
-        await localParticipant.setCameraEnabled(cameraOn, CAMERA);
+        await localParticipant.setCameraEnabled(wantCamera, CAMERA);
       } catch {
         if (!cancelled)
           showToast("Caméra indisponible sur cet appareil", "error");
@@ -497,7 +499,7 @@ function PublishLocalAv({
     return () => {
       cancelled = true;
     };
-  }, [cameraOn, connection, enabled, localParticipant, micOn]);
+  }, [connection, enabled, localParticipant, micOn, wantCamera]);
 
   return null;
 }
@@ -764,8 +766,14 @@ function LiveKitVideoInner({
         )
       : undefined);
   const sharing = isTrackReference(hostScreen);
-  const faceTrack = isHost ? localCamera : hostCamera;
-  const shown = sharing ? hostScreen : isHost ? localCamera : hostCamera;
+  // Host local : placeholder (évite le miroir infini) — viewers voient l’écran.
+  const shown = sharing
+    ? isHost
+      ? undefined
+      : hostScreen
+    : isHost
+      ? localCamera
+      : hostCamera;
   const hasVideo =
     isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
   const look = useContext(LookCtx).look;
@@ -788,12 +796,21 @@ function LiveKitVideoInner({
   const pipH = pipCount > 4 ? 104 : 148;
   const pipW = pipCount > 4 ? 76 : 108;
   const pipGap = 8;
-  const showFacePip = sharing && isTrackReference(faceTrack);
 
   return (
     <View style={styles.fill}>
       <View style={styles.stageVideo}>
-        {hasVideo && isTrackReference(shown) ? (
+        {sharing && isHost ? (
+          <View style={[styles.fill, styles.shareLocalStage]}>
+            <View style={styles.shareLocalIcon}>
+              <Ionicons name="phone-portrait" size={36} color="#7dffb3" />
+            </View>
+            <Text style={styles.shareLocalTitle}>Partage d’écran</Text>
+            <Text style={styles.shareLocalBody}>
+              Les spectateurs voient ton bureau Android — caméra coupée
+            </Text>
+          </View>
+        ) : hasVideo && isTrackReference(shown) ? (
           <TrackSafe fallback={null}>
             <VideoTrack
               trackRef={shown}
@@ -819,21 +836,6 @@ function LiveKitVideoInner({
           </View>
         ) : null}
       </View>
-
-      {showFacePip ? (
-        <View style={styles.hostFacePip} pointerEvents="none">
-          <TrackSafe fallback={null}>
-            <VideoTrack
-              trackRef={faceTrack}
-              style={styles.fill}
-              objectFit="cover"
-              zOrder={2}
-              mirror={Boolean(isHost || faceTrack.participant.isLocal)}
-            />
-          </TrackSafe>
-          <LiveFilterOverlay look={look} intensity="pip" />
-        </View>
-      ) : null}
 
       {stageSlots.length > 0 ? (
         <View style={styles.guestRail} pointerEvents="box-none">
@@ -878,58 +880,64 @@ function LiveKitVideoInner({
   );
 }
 
+/** Icônes looks historiques ; les AR overlays utilisent l’emoji du catalogue. */
+const FILTER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  none: "close-circle-outline",
+  naturel: "sunny-outline",
+  studio: "sparkles-outline",
+  doux: "flower-outline",
+  vivid: "flash-outline",
+  cinema: "film-outline",
+  noir: "moon-outline",
+};
+
 export function LiveFilterBar() {
   const { look, pick, isHost } = useContext(LookCtx);
   const [open, setOpen] = useState(false);
   if (!isHost) return null;
-  const active = AR_FILTERS.find((item) => item.id === look);
 
   return (
     <View style={styles.studioWrap}>
       {open ? (
-        <View style={styles.studioPanel}>
-          <Text style={styles.studioTitle}>Filtres Live</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.studioMenu}
-          >
-            {AR_FILTERS.map((item) => {
-              const on = look === item.id;
-              return (
-                <Pressable
-                  key={item.id}
-                  accessibilityLabel={item.name}
-                  onPress={() => {
-                    pick(item.id);
-                  }}
-                  style={[styles.filterChipWide, on && styles.filterChipOn]}
-                >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.studioMenuScroll}
+          contentContainerStyle={styles.studioMenu}
+        >
+          {AR_FILTERS.map((item) => {
+            const on = look === item.id;
+            const icon = FILTER_ICONS[item.id];
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityLabel={item.name}
+                onPress={() => {
+                  pick(item.id);
+                  setOpen(false);
+                }}
+                style={[styles.filterChip, on && styles.filterChipOn]}
+              >
+                {icon ? (
+                  <Ionicons
+                    name={icon}
+                    size={18}
+                    color={on ? "#05140F" : "#fff"}
+                  />
+                ) : (
                   <Text style={styles.filterEmoji}>{item.emoji}</Text>
-                  <Text
-                    style={[
-                      styles.filterLabel,
-                      { color: on ? "#05140F" : "rgba(255,255,255,0.9)" },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.studioClose} onPress={() => setOpen(false)}>
-            <Text style={styles.studioCloseText}>Fermer</Text>
-          </Pressable>
-        </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       ) : null}
       <Pressable
         style={[styles.avBtn, open && styles.studioBtnOn]}
         onPress={() => setOpen((value) => !value)}
         accessibilityLabel="Galerie filtres"
       >
-        <Text style={{ fontSize: 16 }}>{active?.emoji ?? "✨"}</Text>
+        <Ionicons name="color-filter" size={20} color="#fff" />
       </Pressable>
     </View>
   );
@@ -985,6 +993,12 @@ function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
           /* déjà active */
         }
         if (liveId) setActiveScreenShareLiveId(liveId);
+        // Coupe la caméra avant le share (WhatsApp) — PublishLocalAv la garde off.
+        try {
+          await localParticipant.setCameraEnabled(false);
+        } catch {
+          /* déjà off */
+        }
         await localParticipant.setScreenShareEnabled(
           true,
           screenShareCaptureOptions(nextMode),
@@ -993,8 +1007,8 @@ function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
         setOpen(false);
         showToast(
           nextMode === "full"
-            ? "Bandeau rouge + Arrêter — notif pour revenir au live"
-            : "Écran actif — bandeau rouge + Arrêter",
+            ? "Écran partagé — caméra coupée (comme WhatsApp)"
+            : "Écran actif partagé — caméra coupée",
           "info",
         );
       } catch {
@@ -1142,15 +1156,26 @@ function LiveHostAvButtonsInner({
   onCamera: (enabled: boolean) => void;
   onMic: (enabled: boolean) => void;
 }) {
-  const { isCameraEnabled, isMicrophoneEnabled, localParticipant } =
-    useLocalParticipant();
+  const {
+    isCameraEnabled,
+    isMicrophoneEnabled,
+    isScreenShareEnabled,
+    localParticipant,
+  } = useLocalParticipant();
   const av = useContext(AvCtx);
 
   return (
     <>
       <Pressable
-        style={styles.avBtn}
+        style={[styles.avBtn, isScreenShareEnabled && styles.avBtnOff]}
         onPress={() => {
+          if (isScreenShareEnabled) {
+            showToast(
+              "Arrête le partage d’écran pour réactiver la caméra",
+              "info",
+            );
+            return;
+          }
           const next = !isCameraEnabled;
           void (async () => {
             if (next && !(await ensureCameraPermission())) {
@@ -1168,9 +1193,13 @@ function LiveHostAvButtonsInner({
         }}
       >
         <Ionicons
-          name={isCameraEnabled ? "videocam" : "videocam-off"}
+          name={
+            isScreenShareEnabled || !isCameraEnabled
+              ? "videocam-off"
+              : "videocam"
+          }
           size={20}
-          color={isCameraEnabled ? "#fff" : "#FBBF24"}
+          color={isScreenShareEnabled || !isCameraEnabled ? "#FBBF24" : "#fff"}
         />
       </Pressable>
       <Pressable
@@ -1227,18 +1256,35 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.28)",
   },
-  hostFacePip: {
-    position: "absolute",
-    left: 12,
-    bottom: 132,
-    width: 108,
-    height: 148,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#111",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.28)",
-    zIndex: 5,
+  shareLocalStage: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#07070C",
+    gap: 10,
+    paddingHorizontal: 36,
+  },
+  shareLocalIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,214,143,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(0,214,143,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  shareLocalTitle: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 18,
+  },
+  shareLocalBody: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 18,
   },
   shareBanner: {
     position: "absolute",
@@ -1339,57 +1385,31 @@ const styles = StyleSheet.create({
     borderColor: "#00D68F",
     backgroundColor: "rgba(0,214,143,0.22)",
   },
-  studioPanel: {
+  studioMenuScroll: {
     position: "absolute",
     right: 52,
-    bottom: -8,
-    width: 280,
-    borderRadius: 18,
-    backgroundColor: "rgba(8,8,14,0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    paddingTop: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 10,
-    gap: 8,
-  },
-  studioTitle: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    bottom: 0,
+    maxWidth: 268,
   },
   studioMenu: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
-  filterChipWide: {
-    width: 64,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.08)",
+  filterChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.55)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
   },
   filterChipOn: {
     backgroundColor: "#00D68F",
     borderColor: "#00D68F",
   },
-  filterEmoji: { fontSize: 18 },
-  filterLabel: { fontSize: 10, fontWeight: "800" },
-  studioClose: {
-    alignSelf: "flex-end",
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-  },
-  studioCloseText: {
-    color: "rgba(255,255,255,0.55)",
-    fontWeight: "700",
-    fontSize: 12,
-  },
+  filterEmoji: { fontSize: 16 },
 });

@@ -31,8 +31,6 @@ import {
     ShopProfileSheet,
 } from "@/components/feed/Sheets";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
-import { LiveAlertTeaser } from "@/components/live/LiveAlertTeaser";
-import { formatLiveHostLabel } from "@/src/live-host-label";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
 import { api, ApiError, apiOrigin, mediaUrl } from "@/src/api";
@@ -97,9 +95,6 @@ export function FeedScreen() {
   const [active, setActive] = useState(0);
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
   const weaveMemory = useRef(emptyWeaveMemory());
-  const activeRowKeyRef = useRef<string | null>(null);
-  const restoreRowKeyRef = useRef<string | null>(null);
-  const wasOnlineRef = useRef(online);
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -200,67 +195,14 @@ export function FeedScreen() {
 
   useEffect(() => {
     const row = feedRows[active];
-    if (!row) return;
-    activeRowKeyRef.current = row.key;
-    if (row.kind === "item") kvSet("lastProductId", row.item.id);
+    if (row?.kind === "item") kvSet("lastProductId", row.item.id);
   }, [active, feedRows]);
-
-  // Reconnexion: garder le produit / challenge actif après le refresh auto.
-  useEffect(() => {
-    const becameOnline = !wasOnlineRef.current && online;
-    wasOnlineRef.current = online;
-    if (becameOnline) {
-      restoreRowKeyRef.current =
-        activeRowKeyRef.current ?? feedRows[active]?.key ?? null;
-    }
-  }, [online, active, feedRows]);
-
-  useEffect(() => {
-    const targetKey = restoreRowKeyRef.current;
-    if (!online || !targetKey || !isReelTab) return;
-    if (feed.isFetching && !feed.data) return;
-
-    const index = feedRows.findIndex((row) => row.key === targetKey);
-    if (index < 0) {
-      // Produit encore absent (pages suivantes) — on retentera au prochain update.
-      return;
-    }
-
-    restoreRowKeyRef.current = null;
-    if (index === active) return;
-
-    setActive(index);
-    requestAnimationFrame(() => {
-      try {
-        listRef.current?.scrollToIndex({
-          index,
-          animated: false,
-          viewPosition: 0,
-        });
-      } catch {
-        listRef.current?.scrollToOffset({
-          offset: index * height,
-          animated: false,
-        });
-      }
-    });
-  }, [
-    online,
-    feedRows,
-    feed.isFetching,
-    feed.dataUpdatedAt,
-    feed.data,
-    active,
-    isReelTab,
-    height,
-  ]);
 
   function selectTab(next: FeedTab) {
     setTab(next);
     setActive(0);
     setPaused(false);
     setMuted(false);
-    restoreRowKeyRef.current = null;
   }
 
   const settleCard = useCallback(
@@ -765,7 +707,7 @@ export function FeedScreen() {
             overScrollMode="never"
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.key}
-            drawDistance={height * 1.15}
+            drawDistance={height * 2}
             onMomentumScrollEnd={onMomentumScrollEnd}
             onEndReached={() => {
               if (feed.hasNextPage && !feed.isFetchingNextPage)
@@ -860,19 +802,17 @@ export function FeedScreen() {
                     height={height}
                     onTap={() => onMediaPress(item)}
                     dotsBottom={bottom + 100}
-                    restartToken={item.id}
-                    poster={coverOf(item.images)}
+                    restartToken={active}
                   />
-                  {item.soundtrack?.audioUrl &&
-                  index === active &&
-                  !paused &&
-                  (focused || commentProduct?.id === item.id) ? (
+                  {item.soundtrack?.audioUrl && index === active ? (
                     <ReelSoundtrack
                       uri={
                         mediaUrl(item.soundtrack.audioUrl) ??
                         item.soundtrack.audioUrl
                       }
-                      playing
+                      playing={
+                        !paused && (focused || commentProduct?.id === item.id)
+                      }
                       muted={muted}
                     />
                   ) : null}
@@ -914,7 +854,7 @@ export function FeedScreen() {
                       <Text style={styles.trendText}>Tendance</Text>
                     </View>
                   ) : null}
-                  {showGoLive || liveOn ? (
+                  {showGoLive ? (
                     <Pressable
                       onPress={() => void onLivePress(item, live)}
                       disabled={startingLiveId === item.id}
@@ -937,17 +877,6 @@ export function FeedScreen() {
                         />
                         <Text style={styles.liveText}>LIVE</Text>
                       </View>
-                      {liveOn ? (
-                        <View style={styles.liveHostPill}>
-                          <Text style={styles.liveHostText} numberOfLines={1}>
-                            {formatLiveHostLabel({
-                              hostLabel: live?.hostLabel,
-                              userName: live?.user?.name,
-                              shopName: live?.shop?.name ?? item.shop.name,
-                            })}
-                          </Text>
-                        </View>
-                      ) : null}
                       <View style={styles.viewerPill}>
                         <Ionicons name="eye" size={12} color="#fff" />
                         <Text style={styles.liveCount}>
@@ -968,14 +897,19 @@ export function FeedScreen() {
                           else setShopProduct(item);
                         }}
                       />
-                      {!item.shop.followedByMe ? (
-                        <Pressable
-                          style={styles.plusMini}
-                          onPress={() => void toggleFollow(item)}
-                        >
-                          <Ionicons name="add" size={14} color="#fff" />
-                        </Pressable>
-                      ) : null}
+                      <Pressable
+                        style={[
+                          styles.plusMini,
+                          item.shop.followedByMe && styles.minusMini,
+                        ]}
+                        onPress={() => void toggleFollow(item)}
+                      >
+                        <Ionicons
+                          name={item.shop.followedByMe ? "remove" : "add"}
+                          size={14}
+                          color="#fff"
+                        />
+                      </Pressable>
                     </View>
                     <RailButton
                       icon="heart"
@@ -1046,16 +980,17 @@ export function FeedScreen() {
                             />
                           ) : null}
                         </Pressable>
-                        {!item.shop.followedByMe ? (
-                          <Pressable
-                            style={styles.follow}
-                            onPress={() => void toggleFollow(item)}
-                          >
-                            <Text style={styles.followText} numberOfLines={1}>
-                              Suivre
-                            </Text>
-                          </Pressable>
-                        ) : null}
+                        <Pressable
+                          style={[
+                            styles.follow,
+                            item.shop.followedByMe && styles.followOn,
+                          ]}
+                          onPress={() => void toggleFollow(item)}
+                        >
+                          <Text style={styles.followText}>
+                            {item.shop.followedByMe ? "Suivi" : "Suivre"}
+                          </Text>
+                        </Pressable>
                       </View>
                       <Text style={styles.viewsLine}>
                         {compactCount(item.viewsCount ?? item.likesCount ?? 0)}{" "}
@@ -1325,7 +1260,6 @@ export function FeedScreen() {
         onClose={() => setBuyProduct(null)}
         onAdded={() => undefined}
       />
-      {tab !== "search" ? <LiveAlertTeaser /> : null}
       <ShopProfileSheet
         shop={
           shopProduct
@@ -1333,13 +1267,6 @@ export function FeedScreen() {
               shopProduct.shop)
             : null
         }
-        live={Boolean(
-          shopProduct &&
-          matchOpenLive(lives.data?.lives, {
-            productId: shopProduct.id,
-            ownerUserId: shopProduct.shop.ownerUserId,
-          }),
-        )}
         onClose={() => setShopProduct(null)}
         onFollow={() => {
           if (shopProduct) void toggleFollow(shopProduct);
@@ -1567,20 +1494,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  liveHostPill: {
-    maxWidth: 140,
-    backgroundColor: "rgba(12,12,16,0.78)",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  liveHostText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "800",
-  },
   viewerPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1639,6 +1552,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  minusMini: { backgroundColor: "#e11d48" },
   meta: { position: "absolute", left: 12, right: 58 },
   shopCopy: { minWidth: 0, gap: 3 },
   sellerRow: {
@@ -1718,12 +1632,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    minHeight: 28,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 5,
     flexShrink: 0,
   },
+  followOn: { backgroundColor: "rgba(255,255,255,0.82)" },
   followText: {
     color: colors.ink,
     fontWeight: "800",

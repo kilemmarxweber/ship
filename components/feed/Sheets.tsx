@@ -2,37 +2,28 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, type Href } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
+    ActivityIndicator,
+    FlatList,
     Keyboard,
     KeyboardAvoidingView,
-    Linking,
-  Modal,
+    Modal,
     Platform,
-  Pressable,
-    ScrollView,
-    Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-    type NativeScrollEvent,
-    type NativeSyntheticEvent,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ToastHost } from "@/components/Toast";
-import { SheetReduce } from "@/components/ui/SheetReduce";
-import { api, apiOrigin, mediaUrl } from "@/src/api";
+import { api, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { colorHex, isLightColor } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
-import { coverOf } from "@/src/media";
 import { snapshotGet } from "@/src/offline/db";
 import { commentsSnapKey } from "@/src/offline/keys";
 import { persistComments } from "@/src/offline/persist";
@@ -45,17 +36,9 @@ import {
     stockFraction,
     stockLabel,
 } from "@/src/stock";
-import { HAIRLINE, colors } from "@/src/theme";
+import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { CommentItem, Product, ShopCard } from "@/src/types";
-
-function phoneDigits(phone: string) {
-  return phone.replace(/\D/g, "");
-}
-
-function shopPublicUrl(slug: string) {
-  return `${apiOrigin()}/shop/${slug}`;
-}
 
 export function CommentsSheet({
   product,
@@ -194,7 +177,7 @@ function CommentsBody({
           },
         ]}
       >
-        <SheetReduce onPress={onClose} />
+        <View style={styles.handle} />
         <Text style={styles.title}>Commentaires</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
@@ -330,7 +313,7 @@ export function BuySheet({
       onRequestClose={onClose}
     >
       <View style={styles.buyFrame}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={onClose} />
         <ToastHost />
         <View
           style={[
@@ -338,7 +321,7 @@ export function BuySheet({
             { paddingBottom: Math.max(18, insets.bottom + 10) },
           ]}
         >
-          <SheetReduce onPress={onClose} />
+          <View style={styles.handle} />
           <View style={styles.buyHead}>
             {cover ? (
               <Image
@@ -385,10 +368,13 @@ export function BuySheet({
                 product.compareAtCents > product.priceCents ? (
                   <Text style={styles.compare}>
                     {formatMoney(product.compareAtCents, product.currency)}
-        </Text>
+                  </Text>
                 ) : null}
               </View>
             </View>
+            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
+              <Ionicons name="close" size={18} color="#fff" />
+            </Pressable>
           </View>
 
           {product?.colors.length ? (
@@ -427,11 +413,11 @@ export function BuySheet({
             </View>
           ) : null}
 
-        {product?.sizes.length ? (
+          {product?.sizes.length ? (
             <View style={styles.optionBlock}>
               <Text style={styles.optionLabel}>Taille</Text>
-          <View style={styles.chips}>
-            {product.sizes.map((item) => (
+              <View style={styles.chips}>
+                {product.sizes.map((item) => (
                   <Pressable
                     key={item}
                     onPress={() => setSize(item)}
@@ -445,11 +431,11 @@ export function BuySheet({
                     >
                       {item}
                     </Text>
-              </Pressable>
-            ))}
+                  </Pressable>
+                ))}
               </View>
-          </View>
-        ) : null}
+            </View>
+          ) : null}
 
           {stock > 0 ? (
             <View style={styles.qtyPick}>
@@ -469,11 +455,11 @@ export function BuySheet({
                   style={styles.qtyBtn}
                 >
                   <Ionicons name="add" size={16} color="#fff" />
-              </Pressable>
+                </Pressable>
                 <Text style={styles.qtyHint}>max {stock}</Text>
               </View>
-          </View>
-        ) : null}
+            </View>
+          ) : null}
 
           <Pressable
             onPress={() => void add()}
@@ -505,7 +491,7 @@ export function BuySheet({
                 </>
               )}
             </LinearGradient>
-        </Pressable>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -701,231 +687,16 @@ const styles = StyleSheet.create({
   shopMeta: { color: colors.muted, fontSize: 14 },
 });
 
-type ShopDetail = {
-  contactPhone: string | null;
-  contactName: string | null;
-  description: string | null;
-  productsCount: number;
-  addressHint?: string | null;
-  followersCount: number;
-  followedByMe: boolean;
-  lat?: number | null;
-  lng?: number | null;
-  alwaysOpen?: boolean | null;
-  hoursStart?: string | null;
-  hoursEnd?: string | null;
-  workDays?: unknown;
-  categories?: { id: string; count: number }[];
-};
-
-const PRODUCT_PREVIEW = 6;
-const DISMISS_PULL = 36;
-
-const shopStyles = StyleSheet.create({
-  sheet: {
-    backgroundColor: colors.sheet,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: "92%",
-    overflow: "hidden",
-  },
-  scroll: {
-    paddingHorizontal: 18,
-    paddingTop: 4,
-    paddingBottom: 10,
-    alignItems: "center",
-    gap: 12,
-  },
-  avatarWrap: { marginTop: 2, marginBottom: 2 },
-  name: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  meta: {
-    color: colors.muted,
-    fontSize: 13,
-    textAlign: "center",
-  },
-  desc: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  hours: {
-    color: colors.muted,
-    fontSize: 12,
-    textAlign: "center",
-  },
-  socialRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 14,
-    marginTop: 4,
-  },
-  socialBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wa: { backgroundColor: "#25D366" },
-  tt: { backgroundColor: "#111111", borderWidth: 1, borderColor: HAIRLINE },
-  fb: { backgroundColor: "#1877F2" },
-  linkCard: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    paddingHorizontal: 14,
-  },
-  linkText: {
-    flex: 1,
-    color: colors.emerald,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  tools: {
-    width: "100%",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-  },
-  toolChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 40,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    paddingHorizontal: 12,
-  },
-  toolText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  toolMuted: { color: colors.muted, fontWeight: "600", fontSize: 13 },
-  addressBox: {
-    width: "100%",
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    padding: 12,
-    gap: 4,
-  },
-  addressTitle: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  addressMeta: { color: colors.muted, fontSize: 11 },
-  addressLink: { color: colors.primary, fontWeight: "700", fontSize: 12 },
-  section: { width: "100%", gap: 10, marginTop: 4 },
-  productsHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  productsTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  productsCount: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  productCard: {
-    width: "31.5%",
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: colors.card,
-  },
-  productCover: {
-    width: "100%",
-    aspectRatio: 1,
-    backgroundColor: "#1a1a22",
-  },
-  productTitle: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "600",
-    paddingHorizontal: 6,
-    paddingTop: 6,
-  },
-  productPrice: {
-    color: colors.emerald,
-    fontSize: 11,
-    fontWeight: "800",
-    paddingHorizontal: 6,
-    paddingBottom: 8,
-    paddingTop: 2,
-  },
-  emptyProducts: {
-    color: colors.muted,
-    fontSize: 13,
-    paddingVertical: 8,
-    textAlign: "center",
-  },
-  seeMore: {
-    alignSelf: "center",
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  seeMoreText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  footer: {
-    width: "100%",
-    marginTop: 10,
-    paddingBottom: 4,
-  },
-  follow: {
-    width: "100%",
-    minHeight: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    backgroundColor: colors.primary,
-  },
-  followOff: {
-    backgroundColor: colors.live,
-  },
-  followText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-    textAlign: "center",
-  },
-  cats: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "center",
-  },
-  catChip: {
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  catText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
-});
-
 export function ShopProfileSheet({
   shop,
-  live = false,
   onClose,
   onFollow,
 }: {
   shop: ShopCard | null;
-  live?: boolean;
   onClose: () => void;
   onFollow: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       visible={Boolean(shop)}
@@ -934,427 +705,37 @@ export function ShopProfileSheet({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      {shop ? (
-        <ShopProfileBody
-          key={shop.id}
-          shop={shop}
-          live={live}
-          onClose={onClose}
-          onFollow={onFollow}
-        />
-      ) : null}
-    </Modal>
-  );
-}
-
-function hoursLabel(detail: ShopDetail | null) {
-  if (!detail) return null;
-  if (detail.alwaysOpen) return "Toujours disponible";
-  const start = detail.hoursStart?.trim();
-  const end = detail.hoursEnd?.trim();
-  if (start && end) return `Ouvert ${start} – ${end}`;
-  return null;
-}
-
-function ShopProfileBody({
-  shop,
-  live,
-  onClose,
-  onFollow,
-}: {
-  shop: ShopCard;
-  live: boolean;
-  onClose: () => void;
-  onFollow: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const token = useSession((state) => state.token);
-  const [detail, setDetail] = useState<ShopDetail | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAllProducts, setShowAllProducts] = useState(false);
-  const [showAddress, setShowAddress] = useState(false);
-  const pulling = useRef(false);
-  const shopUrl = useMemo(() => shopPublicUrl(shop.slug), [shop.slug]);
-  const phone = detail?.contactPhone?.trim() || null;
-  const followed = shop.followedByMe;
-
-  function openShopPage() {
-    onClose();
-    router.push(`/shop/${encodeURIComponent(shop.slug)}#produits` as Href);
-  }
-
-  function onSheetScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const y = event.nativeEvent.contentOffset.y;
-    if (y < -DISMISS_PULL && pulling.current) {
-      pulling.current = false;
-      onClose();
-    }
-  }
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setShowAllProducts(false);
-    void (async () => {
-      try {
-        const [shopRes, productsRes] = await Promise.all([
-          api<{ shop: ShopDetail & ShopCard & { lat?: number; lng?: number } }>(
-            `/api/shops/${shop.slug}`,
-          ),
-          api<{ products: Product[] }>(
-            `/api/products?shopId=${encodeURIComponent(shop.id)}&limit=48`,
-          ),
-        ]);
-        if (!alive) return;
-        const s = shopRes.shop;
-        setDetail({
-          contactPhone: s.contactPhone ?? null,
-          contactName: s.contactName ?? null,
-          description: s.description ?? null,
-          productsCount: s.productsCount ?? 0,
-          addressHint: s.addressHint ?? null,
-          followersCount: s.followersCount ?? shop.followersCount ?? 0,
-          followedByMe: s.followedByMe ?? shop.followedByMe ?? false,
-          lat: s.lat ?? null,
-          lng: s.lng ?? null,
-          alwaysOpen: s.alwaysOpen ?? null,
-          hoursStart: s.hoursStart ?? null,
-          hoursEnd: s.hoursEnd ?? null,
-          workDays: s.workDays,
-          categories: s.categories ?? [],
-        });
-        setProducts(productsRes.products ?? []);
-      } catch {
-        if (!alive) return;
-        showToast("Impossible de charger la boutique.", "error");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [shop.id, shop.slug, shop.followersCount, shop.followedByMe]);
-
-  async function openUrl(url: string) {
-    try {
-      await Linking.openURL(url);
-    } catch {
-      showToast("Application introuvable sur cet appareil.", "error");
-    }
-  }
-
-  async function openWhatsApp() {
-    const message = `Bonjour, je vous contacte depuis ShipShop à propos de ${shop.name}.\n${shopUrl}`;
-    if (phone) {
-      const digits = phoneDigits(phone);
-      await openUrl(
-        `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
-      );
-      return;
-    }
-    await openUrl(`https://wa.me/?text=${encodeURIComponent(message)}`);
-  }
-
-  async function openTikTok() {
-    const text = `Découvre ${shop.name} sur ShipShop\n${shopUrl}`;
-    try {
-      await Share.share({ message: text, url: shopUrl });
-    } catch {
-      showToast("Partage impossible pour le moment.", "error");
-    }
-  }
-
-  async function openFacebook() {
-    const messenger = `https://www.facebook.com/dialog/send?link=${encodeURIComponent(shopUrl)}&app_id=966242223397117&redirect_uri=${encodeURIComponent(shopUrl)}`;
-    try {
-      await openUrl(messenger);
-    } catch {
-      await openUrl(
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shopUrl)}`,
-      );
-    }
-  }
-
-  async function shareShop() {
-    try {
-      await Share.share({
-        message: `Découvre ${shop.name} sur ShipShop\n${shopUrl}`,
-        url: shopUrl,
-      });
-    } catch {
-      showToast("Partage impossible pour le moment.", "error");
-    }
-  }
-
-  async function messageSeller() {
-    if (!token) {
-      showToast("Connectez-vous pour écrire au vendeur.", "info");
-      return;
-    }
-    try {
-      const data = await api<{ conversation?: { id: string } }>(
-        "/api/conversations",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            shopId: shop.id,
-            message: `Bonjour, je suis intéressé(e) par ${shop.name}.`,
-          }),
-        },
-      );
-      if (!data.conversation?.id) throw new Error("Conversation introuvable");
-      onClose();
-      router.push({
-        pathname: "/(tabs)/messages/[id]",
-        params: { id: data.conversation.id },
-      });
-    } catch {
-      showToast("Impossible d'ouvrir la conversation.", "error");
-    }
-  }
-
-  function openProduct(productId: string) {
-    onClose();
-    router.push({ pathname: "/product/[id]", params: { id: productId } });
-  }
-
-  const followers = detail?.followersCount ?? shop.followersCount ?? 0;
-  const productsCount = detail?.productsCount ?? products.length;
-  const visibleProducts = showAllProducts
-    ? products
-    : products.slice(0, PRODUCT_PREVIEW);
-  const hours = hoursLabel(detail);
-  const mapsUrl =
-    detail?.lat != null && detail?.lng != null
-      ? `https://www.google.com/maps/search/?api=1&query=${detail.lat},${detail.lng}`
-      : null;
-
-  return (
-    <View style={styles.frame}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View
-        style={[
-          shopStyles.sheet,
-          { paddingBottom: Math.max(12, insets.bottom + 6) },
-        ]}
-      >
-        <SheetReduce onPress={onClose} />
-
-        <ScrollView
-          contentContainerStyle={shopStyles.scroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          bounces
-          alwaysBounceVertical
-          onScrollBeginDrag={() => {
-            pulling.current = true;
-          }}
-          onScrollEndDrag={(event) => {
-            onSheetScroll(event);
-            pulling.current = false;
-          }}
-          onMomentumScrollEnd={(event) => {
-            onSheetScroll(event);
-          }}
-          onScroll={onSheetScroll}
-          scrollEventThrottle={16}
+      <View style={styles.frame}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <View
+          style={[
+            styles.sheet,
+            { paddingBottom: Math.max(16, insets.bottom + 8) },
+          ]}
         >
-          <View style={shopStyles.avatarWrap}>
-            <ShopLiveAvatar
-              live={live}
-              logoUrl={shop.logoUrl}
-              name={shop.name}
-              size={88}
-              onPress={openShopPage}
+          <View style={styles.handle} />
+          {shop?.logoUrl ? (
+            <Image
+              source={{ uri: mediaUrl(shop.logoUrl) ?? undefined }}
+              style={styles.shopLogo}
             />
-          </View>
-
-          <Pressable onPress={openShopPage}>
-            <Text style={shopStyles.name} numberOfLines={2}>
-              {shop.name}
-            </Text>
-          </Pressable>
-          <Text style={shopStyles.meta}>
-            @{shop.slug} · {compactCount(followers)} abonnés
-            {productsCount > 0
-              ? ` · ${compactCount(productsCount)} produits`
-              : ""}
+          ) : (
+            <View style={styles.shopLogo} />
+          )}
+          <Text style={styles.title}>{shop?.name}</Text>
+          <Text style={styles.shopMeta}>
+            {compactCount(shop?.followersCount ?? 0)} abonnés · @{shop?.slug}
           </Text>
-
-          {detail?.description ? (
-            <Text style={shopStyles.desc}>{detail.description}</Text>
-          ) : null}
-          {hours ? <Text style={shopStyles.hours}>{hours}</Text> : null}
-
-          {(detail?.categories?.length ?? 0) > 0 ? (
-            <View style={shopStyles.cats}>
-              {(detail?.categories ?? []).slice(0, 6).map((cat) => (
-                <View key={cat.id} style={shopStyles.catChip}>
-                  <Text style={shopStyles.catText}>
-                    {cat.id} · {cat.count}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          <View style={shopStyles.socialRow}>
-            <Pressable
-              style={[shopStyles.socialBtn, shopStyles.wa]}
-              onPress={() => void openWhatsApp()}
-              accessibilityLabel="WhatsApp"
-            >
-              <Ionicons name="logo-whatsapp" size={26} color="#fff" />
-            </Pressable>
-            <Pressable
-              style={[shopStyles.socialBtn, shopStyles.tt]}
-              onPress={() => void openTikTok()}
-              accessibilityLabel="TikTok"
-            >
-              <Ionicons name="logo-tiktok" size={24} color="#fff" />
-            </Pressable>
-            <Pressable
-              style={[shopStyles.socialBtn, shopStyles.fb]}
-              onPress={() => void openFacebook()}
-              accessibilityLabel="Facebook"
-            >
-              <Ionicons name="logo-facebook" size={26} color="#fff" />
-            </Pressable>
-          </View>
-
-          <Pressable
-            style={shopStyles.linkCard}
-            onPress={() => void shareShop()}
-          >
-            <Ionicons name="link-outline" size={18} color={colors.emerald} />
-            <Text style={shopStyles.linkText} numberOfLines={1}>
-              {shopUrl.replace(/^https?:\/\//, "")}
+          <Pressable style={styles.send} onPress={onFollow}>
+            <Text style={styles.sendText}>
+              {shop?.followedByMe ? "Ne plus suivre" : "Suivre"}
             </Text>
-            <Ionicons name="share-outline" size={18} color="#fff" />
           </Pressable>
-
-          <View style={shopStyles.tools}>
-            {phone ? (
-              <Pressable
-                style={shopStyles.toolChip}
-                onPress={() => void openUrl(`tel:${phone}`)}
-              >
-                <Ionicons name="call" size={16} color={colors.emerald} />
-                <Text style={shopStyles.toolText}>{phone}</Text>
-              </Pressable>
-            ) : (
-              <View style={shopStyles.toolChip}>
-                <Ionicons name="call-outline" size={16} color={colors.muted} />
-                <Text style={shopStyles.toolMuted}>Contact non publié</Text>
-              </View>
-            )}
-            <Pressable
-              style={shopStyles.toolChip}
-              onPress={() => setShowAddress((v) => !v)}
-            >
-              <Ionicons name="location-outline" size={16} color="#fff" />
-              <Text style={shopStyles.toolText}>Adresse</Text>
-            </Pressable>
-            <Pressable
-              style={shopStyles.toolChip}
-              onPress={() => void messageSeller()}
-            >
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={16}
-                color="#fff"
-              />
-              <Text style={shopStyles.toolText}>Message</Text>
-            </Pressable>
-          </View>
-
-          {showAddress ? (
-            <View style={shopStyles.addressBox}>
-              <Text style={shopStyles.addressTitle}>
-                {detail?.addressHint ?? "Kinshasa, RDC"}
-              </Text>
-              {detail?.lat != null && detail?.lng != null ? (
-                <Text style={shopStyles.addressMeta}>
-                  {detail.lat.toFixed(5)}, {detail.lng.toFixed(5)}
-                </Text>
-              ) : null}
-              {mapsUrl ? (
-                <Pressable onPress={() => void openUrl(mapsUrl)}>
-                  <Text style={shopStyles.addressLink}>Ouvrir dans Maps</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={shopStyles.section}>
-            <View style={shopStyles.productsHead}>
-              <Text style={shopStyles.productsTitle}>Produits</Text>
-              <Text style={shopStyles.productsCount}>
-                {compactCount(productsCount)}
-              </Text>
-            </View>
-
-            {loading ? (
-              <ActivityIndicator color={colors.emerald} />
-            ) : products.length === 0 ? (
-              <Text style={shopStyles.emptyProducts}>
-                Aucun produit pour le moment.
-              </Text>
-            ) : (
-              <>
-                <View style={shopStyles.grid}>
-                  {visibleProducts.map((product) => {
-                    const cover = coverOf(product.images ?? []);
-                    return (
-                      <Pressable
-                        key={product.id}
-                        style={shopStyles.productCard}
-                        onPress={() => openProduct(product.id)}
-                      >
-                        <Image
-                          source={{ uri: cover ?? undefined }}
-                          style={shopStyles.productCover}
-                        />
-                        <Text style={shopStyles.productTitle} numberOfLines={2}>
-                          {product.title}
-                        </Text>
-                        <Text style={shopStyles.productPrice}>
-                          {formatMoney(product.priceCents, product.currency)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {products.length > PRODUCT_PREVIEW ? (
-                  <Pressable
-                    style={shopStyles.seeMore}
-                    onPress={() => setShowAllProducts((v) => !v)}
-                  >
-                    <Text style={shopStyles.seeMoreText}>
-                      {showAllProducts
-                        ? "Voir moins"
-                        : `Voir plus (${products.length - PRODUCT_PREVIEW})`}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </>
-            )}
-          </View>
-
-          <View style={shopStyles.footer}>
-            <Pressable
-              style={[shopStyles.follow, followed && shopStyles.followOff]}
-              onPress={onFollow}
-            >
-              <Text style={shopStyles.followText}>
-                {followed ? "Ne plus suivre" : "Suivre"}
-              </Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+          <Pressable onPress={onClose}>
+            <Text style={styles.empty}>Fermer</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 }

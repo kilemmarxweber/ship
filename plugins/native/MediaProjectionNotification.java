@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -16,12 +17,13 @@ import androidx.core.app.NotificationCompat;
 /**
  * Meet / WhatsApp style sticky notification while screen sharing:
  * - keeps FGS valid (required icon)
+ * - red ongoing banner while broadcasting the phone screen
  * - tap → return to ShipShop live
  */
 class MediaProjectionNotification {
     private static final String TAG = MediaProjectionNotification.class.getSimpleName();
 
-    static final String ONGOING_CONFERENCE_CHANNEL_ID = "OngoingConferenceChannel";
+    static final String ONGOING_CONFERENCE_CHANNEL_ID = "ShipShopScreenShareLive";
 
     static void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -45,12 +47,14 @@ class MediaProjectionNotification {
 
         channel = new NotificationChannel(
                 ONGOING_CONFERENCE_CHANNEL_ID,
-                "Partage d’écran ShipShop",
-                NotificationManager.IMPORTANCE_LOW);
-        channel.enableLights(false);
+                "Diffusion écran ShipShop",
+                NotificationManager.IMPORTANCE_HIGH);
+        channel.enableLights(true);
+        channel.setLightColor(Color.RED);
         channel.enableVibration(false);
         channel.setShowBadge(false);
-        channel.setDescription("Reste connecté au live pendant le partage d’écran");
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        channel.setDescription("Bandeau rouge — ton écran est diffusé en direct");
 
         notificationManager.createNotificationChannel(channel);
     }
@@ -67,7 +71,7 @@ class MediaProjectionNotification {
 
         Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         if (launch == null) {
-            launch = new Intent(Intent.ACTION_VIEW, Uri.parse("shipshop://live"));
+            launch = new Intent(Intent.ACTION_VIEW, Uri.parse("shipshop://live/current-share"));
             launch.setPackage(context.getPackageName());
         }
         launch.addFlags(
@@ -75,7 +79,6 @@ class MediaProjectionNotification {
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP
                         | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        // Prefer restoring the current live route when possible.
         launch.setData(Uri.parse("shipshop://live/current-share"));
 
         int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -89,13 +92,15 @@ class MediaProjectionNotification {
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(context, ONGOING_CONFERENCE_CHANNEL_ID);
 
-        builder.setCategory(NotificationCompat.CATEGORY_CALL)
-                .setContentTitle("Vous partagez votre écran")
-                .setContentText("Touchez pour revenir au live ShipShop")
+        builder.setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setContentTitle("Vous diffusez votre écran")
+                .setContentText("Les viewers voient ton téléphone en direct")
                 .setStyle(new NotificationCompat.BigTextStyle()
                         .bigText(
-                                "Partage d’écran en cours. Touchez cette notif pour revenir au live et arrêter le partage."))
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                                "Diffusion en cours. Quitte ShipShop librement — le bandeau rouge reste actif. Touche pour revenir au live."))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setColor(0xFFDC2626)
+                .setColorized(true)
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .setOnlyAlertOnce(true)

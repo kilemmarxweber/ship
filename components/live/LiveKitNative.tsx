@@ -34,11 +34,13 @@ import {
     type ReactNode,
 } from "react";
 import {
+    AppState,
     Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -58,7 +60,10 @@ import {
     requestLiveAvPermissions,
     requestNotificationPermission,
 } from "@/src/live-rtc";
-import { setActiveScreenShareLiveId } from "@/src/live-share-session";
+import {
+    getActiveScreenShareLiveId,
+    setActiveScreenShareLiveId,
+} from "@/src/live-share-session";
 import {
     normalizeStageLayout,
     type LiveStageLayoutId,
@@ -585,6 +590,9 @@ export function LiveKitRoomGate({
   useEffect(() => {
     const instance = room.current;
     return () => {
+      // Keep the room while screen-sharing so viewers still see the phone
+      // after the host leaves ShipShop (FGS + MediaProjection).
+      if (getActiveScreenShareLiveId()) return;
       void instance?.disconnect();
     };
   }, []);
@@ -634,6 +642,7 @@ export function LiveKitRoomGate({
 
   useEffect(() => {
     return () => {
+      if (getActiveScreenShareLiveId()) return;
       void AudioSession.stopAudioSession();
     };
   }, []);
@@ -650,6 +659,10 @@ export function LiveKitRoomGate({
 
     void (async () => {
       if (!shouldConnect) {
+        const sharing =
+          Boolean(getActiveScreenShareLiveId()) ||
+          instance.localParticipant.isScreenShareEnabled;
+        if (sharing) return;
         if (!joined.current.url) return;
         joined.current = { url: "", token: "" };
         if (my !== connectGen.current) return;
@@ -928,16 +941,20 @@ const FILTER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export function LiveFilterBar() {
   const { look, pick, isHost } = useContext(LookCtx);
+  const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   if (!isHost) return null;
+  const menuMax = Math.max(220, Math.min(width - 96, 360));
 
   return (
     <View style={styles.studioWrap}>
       {open ? (
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.studioMenuScroll}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator
+          style={[styles.studioMenuScroll, { maxWidth: menuMax }]}
           contentContainerStyle={styles.studioMenu}
         >
           {AR_FILTERS.map((item) => {
@@ -947,10 +964,7 @@ export function LiveFilterBar() {
               <Pressable
                 key={item.id}
                 accessibilityLabel={item.name}
-                onPress={() => {
-                  pick(item.id);
-                  setOpen(false);
-                }}
+                onPress={() => pick(item.id)}
                 style={[styles.filterChip, on && styles.filterChipOn]}
               >
                 {icon ? (
@@ -1000,8 +1014,21 @@ function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
     if (!isScreenShareEnabled) {
       setMode(null);
       setActiveScreenShareLiveId(null);
+      return;
     }
-  }, [isScreenShareEnabled, setMode]);
+    if (liveId) setActiveScreenShareLiveId(liveId);
+  }, [isScreenShareEnabled, liveId, setMode]);
+
+  useEffect(() => {
+    if (!isScreenShareEnabled) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      // Re-assert session after returning from another app — keep viewers on screen.
+      if (liveId) setActiveScreenShareLiveId(liveId);
+      void AudioSession.startAudioSession().catch(() => undefined);
+    });
+    return () => sub.remove();
+  }, [isScreenShareEnabled, liveId]);
 
   const startShare = (requested: LiveScreenShareMode) => {
     void (async () => {
@@ -1042,8 +1069,8 @@ function LiveScreenShareHostInner({ liveId }: { liveId?: string }) {
         setOpen(false);
         showToast(
           nextMode === "full"
-            ? "Écran partagé — caméra coupée (comme WhatsApp)"
-            : "Écran actif partagé — caméra coupée",
+            ? "Diffusion écran — le bandeau rouge reste hors de l’app"
+            : "Écran actif partagé — bandeau rouge actif",
           "info",
         );
       } catch {
@@ -1136,7 +1163,7 @@ function LiveScreenShareBannerInner({ liveId }: { liveId?: string }) {
               : "Vous partagez l’écran actif"}
           </Text>
           <Text style={styles.shareBannerHint} numberOfLines={1}>
-            Notif sticky pour revenir au live
+            Les viewers voient ton téléphone en direct
           </Text>
         </View>
         {liveId ? (
@@ -1443,13 +1470,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 52,
     bottom: 0,
-    maxWidth: 268,
+    maxWidth: 320,
   },
   studioMenu: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    paddingRight: 8,
   },
   filterChip: {
     width: 40,

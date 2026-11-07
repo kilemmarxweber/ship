@@ -28,8 +28,15 @@ import { templateFor } from "@/src/challenge-place";
 import { compactCount, formatMoney } from "@/src/format";
 import { convertCents, eventFxRates } from "@/src/fx";
 import { coverOf, mediaList, productHasAudio } from "@/src/media";
+import { useOnline } from "@/src/offline/network";
+import { persistDiscover } from "@/src/offline/persist";
+import {
+    flattenUniqueProducts,
+    isLocalFeedCursor,
+    normalizeFeedPage,
+    safeNextCursor,
+} from "@/src/product-normalize";
 import { useSession } from "@/src/session";
-import { isListableProduct } from "@/src/stock";
 import { categories, categoryLooks, colors } from "@/src/theme";
 import type { PublicEvent } from "@/src/tickets";
 import { showToast } from "@/src/toast";
@@ -40,21 +47,6 @@ import type {
     Product,
 } from "@/src/types";
 import { parseWalletCurrency } from "@/src/wallet";
-
-function asProduct(product: Product): Product {
-  return {
-    ...product,
-    description: product.description ?? null,
-    colors: product.colors ?? [],
-    sizes: product.sizes ?? [],
-    quantity: product.quantity ?? 0,
-    soldCount: product.soldCount ?? 0,
-    status: product.status ?? "ACTIVE",
-    likesCount: product.likesCount ?? 0,
-    commentsCount: product.commentsCount ?? 0,
-    likedByMe: product.likedByMe ?? false,
-  };
-}
 
 function CategoryChip({
   name,
@@ -100,6 +92,7 @@ export function DiscoverScreen() {
   const { width } = useWindowDimensions();
   const focused = useIsFocused();
   const token = useSession((state) => state.token);
+  const online = useOnline();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -116,15 +109,34 @@ export function DiscoverScreen() {
   const feed = useInfiniteQuery({
     queryKey: ["discover", debounced, category, token ?? "guest"],
     initialPageParam: "",
-    queryFn: ({ pageParam }) => {
+    staleTime: 45_000,
+    gcTime: 24 * 60 * 60 * 1000,
+    networkMode: "offlineFirst",
+    queryFn: async ({ pageParam }) => {
+      if (isLocalFeedCursor(pageParam)) {
+        return { products: [], nextCursor: null };
+      }
       const params = new URLSearchParams({ status: "ACTIVE", limit: "16" });
-      if (pageParam) params.set("cursor", pageParam);
+      if (pageParam) params.set("cursor", String(pageParam));
       if (debounced) params.set("q", debounced);
       if (category) params.set("category", category);
-      return api<FeedPage>(`/api/products?${params.toString()}`);
+      try {
+        return normalizeFeedPage(
+          await api<FeedPage>(`/api/products?${params.toString()}`),
+        );
+      } catch (error) {
+        if (!pageParam) throw error;
+        return { products: [], nextCursor: null };
+      }
     },
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    getNextPageParam: (last) => safeNextCursor(last),
+    retry: 1,
   });
+
+  useEffect(() => {
+    if (debounced || category || !feed.data?.pages) return;
+    persistDiscover(token, feed.data.pages);
+  }, [debounced, category, token, feed.data]);
 
   const liveEvents = useQuery({
     queryKey: ["public-events"],
@@ -146,16 +158,28 @@ export function DiscoverScreen() {
   const deals = useInfiniteQuery({
     queryKey: ["discover-deals"],
     initialPageParam: "",
-    queryFn: ({ pageParam }) => {
+    networkMode: "offlineFirst",
+    queryFn: async ({ pageParam }) => {
+      if (isLocalFeedCursor(pageParam)) {
+        return { products: [], nextCursor: null };
+      }
       const params = new URLSearchParams({
         status: "ACTIVE",
         deals: "1",
         limit: "12",
       });
-      if (pageParam) params.set("cursor", pageParam);
-      return api<FeedPage>(`/api/products?${params.toString()}`);
+      if (pageParam) params.set("cursor", String(pageParam));
+      try {
+        return normalizeFeedPage(
+          await api<FeedPage>(`/api/products?${params.toString()}`),
+        );
+      } catch (error) {
+        if (!pageParam) throw error;
+        return { products: [], nextCursor: null };
+      }
     },
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    getNextPageParam: (last) => safeNextCursor(last),
+    retry: 1,
   });
 
   const surface = useQuery({
@@ -166,18 +190,11 @@ export function DiscoverScreen() {
 
   const searching = Boolean(debounced);
   const products = useMemo(
-    () =>
-      (feed.data?.pages.flatMap((page) => page.products) ?? [])
-        .map(asProduct)
-        .filter(isListableProduct),
+    () => flattenUniqueProducts(feed.data?.pages),
     [feed.data],
   );
   const dealProducts = useMemo(
-    () =>
-      (deals.data?.pages.flatMap((page) => page.products) ?? [])
-        .map(asProduct)
-        .filter(isListableProduct)
-        .slice(0, 12),
+    () => flattenUniqueProducts(deals.data?.pages).slice(0, 12),
     [deals.data],
   );
 
@@ -251,13 +268,13 @@ export function DiscoverScreen() {
 
   async function joinChallenge(item: GrowthChallenge) {
     try {
-      const data = await api<{ eventId?: string | null; event?: { id: string } | null }>(
-        "/api/growth/challenge",
-        {
-          method: "POST",
-          body: JSON.stringify({ challengeId: item.id }),
-        },
-      );
+      const data = await api<{
+        eventId?: string | null;
+        event?: { id: string } | null;
+      }>("/api/growth/challenge", {
+        method: "POST",
+        body: JSON.stringify({ challengeId: item.id }),
+      });
       showToast("Challenge relevé.", "success");
       void surface.refetch();
       const eventId = data.eventId ?? data.event?.id ?? item.event?.id;
@@ -386,10 +403,16 @@ export function DiscoverScreen() {
                     }
                   >
                     {cover ? (
-                      <Image source={{ uri: cover }} style={styles.eventCover} />
+                      <Image
+                        source={{ uri: cover }}
+                        style={styles.eventCover}
+                      />
                     ) : (
                       <View
-                        style={[styles.eventCover, { backgroundColor: "#16161f" }]}
+                        style={[
+                          styles.eventCover,
+                          { backgroundColor: "#16161f" },
+                        ]}
                       />
                     )}
                     <LinearGradient
@@ -624,7 +647,7 @@ export function DiscoverScreen() {
         <View style={[styles.center, { paddingTop: insets.top + 40 }]}>
           <ActivityIndicator color={colors.emerald} />
         </View>
-      ) : feed.isError ? (
+      ) : feed.isError && products.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>Découvrir indisponible</Text>
           <Pressable style={styles.retry} onPress={() => void feed.refetch()}>
@@ -641,9 +664,18 @@ export function DiscoverScreen() {
           contentContainerStyle={{
             paddingBottom: 96 + insets.bottom,
           }}
+          onEndReachedThreshold={0.7}
           onEndReached={() => {
-            if (feed.hasNextPage && !feed.isFetchingNextPage)
-              void feed.fetchNextPage();
+            if (
+              !online ||
+              !focused ||
+              !feed.hasNextPage ||
+              feed.isFetchingNextPage ||
+              feed.isError
+            ) {
+              return;
+            }
+            void feed.fetchNextPage().catch(() => undefined);
           }}
           onScroll={(event) => {
             if (event.nativeEvent.contentOffset.y > 80) {

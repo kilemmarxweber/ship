@@ -22,6 +22,7 @@ import { snapshotGet, snapshotSet } from "@/src/offline/db";
 import {
     cartSnapKey,
     commentsSnapKey,
+    discoverSnapKey,
     feedQueryKey,
     feedSnapKey,
     inboxQueryKey,
@@ -50,26 +51,42 @@ function later(key: string, write: () => void) {
 }
 
 function prefetchFeedAvMedia(products: CompactProduct[]) {
-  const posters = products
-    .map((row) => remoteMediaUrl(row.poster))
-    .filter((url): url is string => Boolean(url));
-  if (posters.length) void Image.prefetch(posters);
+  try {
+    const posters = products
+      .map((row) => remoteMediaUrl(row.poster))
+      .filter((url): url is string => Boolean(url));
+    if (posters.length) void Image.prefetch(posters);
 
-  enqueueMediaCache(
-    products.flatMap((row) => [
-      { url: remoteMediaUrl(row.videoUrl), kind: "video" as const },
-      { url: remoteMediaUrl(row.audioUrl), kind: "audio" as const },
-    ]),
-  );
+    enqueueMediaCache(
+      products.flatMap((row) => [
+        { url: remoteMediaUrl(row.videoUrl), kind: "video" as const },
+        { url: remoteMediaUrl(row.audioUrl), kind: "audio" as const },
+      ]),
+    );
+  } catch {
+    /* never crash the UI while warming offline media */
+  }
 }
 
 export function persistFeed(
   token: string | null | undefined,
   pages: FeedPage[] | undefined,
+  tab: "foryou" | "following" = "foryou",
 ) {
-  later(feedSnapKey(token), () => {
+  later(feedSnapKey(token, tab), () => {
     const compact = compactFeedPages(pages);
-    snapshotSet(feedSnapKey(token), compact);
+    snapshotSet(feedSnapKey(token, tab), compact);
+    prefetchFeedAvMedia(compact.products);
+  });
+}
+
+export function persistDiscover(
+  token: string | null | undefined,
+  pages: FeedPage[] | undefined,
+) {
+  later(discoverSnapKey(token), () => {
+    const compact = compactFeedPages(pages);
+    snapshotSet(discoverSnapKey(token), compact);
     prefetchFeedAvMedia(compact.products);
   });
 }
@@ -117,12 +134,42 @@ export function injectSnapshots(
   queryClient: QueryClient,
   token: string | null,
 ) {
-  const feed = snapshotGet<{ products?: CompactProduct[] }>(feedSnapKey(token));
-  if (feed?.products?.length) {
-    queryClient.setQueryData(feedQueryKey(token), expandFeedPages(feed));
-    // Resume video/audio downloads for offline playback after relaunch.
+  for (const tab of ["foryou", "following"] as const) {
+    const feed = snapshotGet<{ products?: CompactProduct[] }>(
+      feedSnapKey(token, tab),
+    );
+    if (!feed?.products?.length) continue;
+    const existing = queryClient.getQueryData(feedQueryKey(token, tab));
+    // Keep live online pages if already hydrated; only seed empty caches.
+    if (!existing) {
+      queryClient.setQueryData(feedQueryKey(token, tab), expandFeedPages(feed));
+    }
     prefetchFeedAvMedia(feed.products);
   }
+
+  // Legacy snap key (pre-tab) → foryou guest/user
+  const legacy = snapshotGet<{ products?: CompactProduct[] }>(
+    `feed.foryou:${token ?? "guest"}`,
+  );
+  if (legacy?.products?.length) {
+    const key = feedQueryKey(token, "foryou");
+    if (!queryClient.getQueryData(key)) {
+      queryClient.setQueryData(key, expandFeedPages(legacy));
+    }
+  }
+
+  const discover = snapshotGet<{ products?: CompactProduct[] }>(
+    discoverSnapKey(token),
+  );
+  if (discover?.products?.length) {
+    const key = ["discover", "", null, token ?? "guest"] as const;
+    // Discover query key includes search/category — seed the default empty search.
+    if (!queryClient.getQueryData(key)) {
+      queryClient.setQueryData(key, expandFeedPages(discover));
+    }
+    prefetchFeedAvMedia(discover.products);
+  }
+
   const cart = snapshotGet<CompactCartLine[]>(cartSnapKey(token));
   if (cart) {
     const payload = expandCart(cart);

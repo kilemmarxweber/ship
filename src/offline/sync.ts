@@ -5,7 +5,8 @@ import { api } from "@/src/api";
 import { kvSet } from "@/src/offline/db";
 import { isOnline, watchNetwork } from "@/src/offline/network";
 import { drainOutbox } from "@/src/offline/outbox";
-import { persistFeed } from "@/src/offline/persist";
+import { persistDiscover, persistFeed } from "@/src/offline/persist";
+import { normalizeFeedPage, normalizeProduct } from "@/src/product-normalize";
 import { useSession } from "@/src/session";
 import type { FeedPage, Product } from "@/src/types";
 
@@ -59,12 +60,12 @@ async function softRefreshFeeds(queryClient: QueryClient) {
         for (let i = 0; i < pageCount; i += 1) {
           const params = new URLSearchParams({
             status: "ACTIVE",
-            limit: "12",
+            limit: "8",
           });
           if (cursor) params.set("cursor", cursor);
           if (following) params.set("following", "1");
-          const page = await api<FeedPage>(
-            `/api/products?${params.toString()}`,
+          const page = normalizeFeedPage(
+            await api<FeedPage>(`/api/products?${params.toString()}`),
           );
           freshPages.push(page);
           cursor = page.nextCursor ?? "";
@@ -74,7 +75,12 @@ async function softRefreshFeeds(queryClient: QueryClient) {
         const freshById = new Map<string, Product>();
         for (const page of freshPages) {
           for (const product of page.products ?? []) {
-            freshById.set(product.id, product);
+            try {
+              const next = normalizeProduct(product);
+              if (next.id) freshById.set(next.id, next);
+            } catch {
+              /* skip */
+            }
           }
         }
 
@@ -87,9 +93,17 @@ async function softRefreshFeeds(queryClient: QueryClient) {
           });
         } else {
           const flat = current.pages.flatMap((page) => page.products ?? []);
-          const merged = mergeProductsPreserveOrder(flat, freshById);
+          const merged = mergeProductsPreserveOrder(flat, freshById).map(
+            (row) => {
+              try {
+                return normalizeProduct(row);
+              } catch {
+                return row;
+              }
+            },
+          );
           // Rebuild pages with same page size as before to keep FlashList stable.
-          const size = Math.max(1, current.pages[0]?.products?.length || 12);
+          const size = Math.max(1, current.pages[0]?.products?.length || 8);
           const apiCursor =
             freshPages[freshPages.length - 1]?.nextCursor ?? null;
           const pages: FeedPage[] = [];
@@ -98,7 +112,9 @@ async function softRefreshFeeds(queryClient: QueryClient) {
             const isLast = i + size >= merged.length;
             pages.push({
               products: slice,
-              nextCursor: isLast ? apiCursor : `local-${i + size}`,
+              // Only the last page may expose a real API cursor — never invent
+              // local-* cursors that would be POSTed on scroll.
+              nextCursor: isLast ? apiCursor : null,
             });
           }
           if (!pages.length) {
@@ -110,19 +126,62 @@ async function softRefreshFeeds(queryClient: QueryClient) {
           });
         }
 
-        if (tab === "foryou") {
+        if (tab === "foryou" || tab === "following") {
           const token =
             typeof tokenSlot === "string" && tokenSlot !== "guest"
               ? tokenSlot
               : useSession.getState().token;
           const data = queryClient.getQueryData<FeedInfinite>(queryKey);
-          persistFeed(token, data?.pages);
+          persistFeed(token, data?.pages, tab);
         }
       } catch {
-        await queryClient.invalidateQueries({ queryKey });
+        // Keep cached pages — wiping on sync failure closes the offline UX.
       }
     }),
   );
+
+  // Soft-refresh default Discover grid (empty search / no category).
+  try {
+    const discoverKey = [
+      "discover",
+      "",
+      null,
+      useSession.getState().token ?? "guest",
+    ] as const;
+    const current = queryClient.getQueryData<FeedInfinite>(discoverKey);
+    const params = new URLSearchParams({ status: "ACTIVE", limit: "16" });
+    const page = normalizeFeedPage(
+      await api<FeedPage>(`/api/products?${params.toString()}`),
+    );
+    if (current?.pages?.length) {
+      const freshById = new Map(page.products.map((row) => [row.id, row]));
+      const flat = current.pages.flatMap((row) => row.products ?? []);
+      const merged = mergeProductsPreserveOrder(flat, freshById);
+      const size = Math.max(1, current.pages[0]?.products?.length || 16);
+      const pages: FeedPage[] = [];
+      for (let i = 0; i < merged.length; i += size) {
+        const slice = merged.slice(i, i + size);
+        const isLast = i + size >= merged.length;
+        pages.push({
+          products: slice,
+          nextCursor: isLast ? (page.nextCursor ?? null) : null,
+        });
+      }
+      queryClient.setQueryData<FeedInfinite>(discoverKey, {
+        pages: pages.length ? pages : [page],
+        pageParams: current.pageParams.slice(0, Math.max(1, pages.length)),
+      });
+    } else {
+      queryClient.setQueryData<FeedInfinite>(discoverKey, {
+        pages: [page],
+        pageParams: [""],
+      });
+    }
+    const data = queryClient.getQueryData<FeedInfinite>(discoverKey);
+    persistDiscover(useSession.getState().token, data?.pages);
+  } catch {
+    /* keep discover cache */
+  }
 }
 
 async function runSync(

@@ -6,7 +6,7 @@ import type {
 } from "@/src/inbox";
 import type { CommentItem, FeedPage, Product } from "@/src/types";
 
-export const FEED_CAP = 16;
+export const FEED_CAP = 24;
 export const INBOX_CAP = 20;
 export const THREAD_CAP = 8;
 export const COMMENT_CAP = 20;

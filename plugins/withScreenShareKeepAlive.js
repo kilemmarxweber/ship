@@ -70,9 +70,28 @@ function patchGetUserMediaImpl(destDir) {
                     }`,
     );
   }
+  // Keep ScreenShareKeepAliveService running for the whole share session so
+  // Android does not kill the RN process when the host leaves the app.
   if (
-    !src.includes(
+    src.includes(
       "ScreenShareKeepAliveService.abort(activity);\n                        createScreenStream",
+    )
+  ) {
+    src = src.replace(
+      `ThreadUtils.runOnExecutor(() -> {
+                        MediaProjectionService.launch(activity);
+                        ScreenShareKeepAliveService.abort(activity);
+                        createScreenStream();
+                    });`,
+      `ThreadUtils.runOnExecutor(() -> {
+                        MediaProjectionService.launch(activity);
+                        // Keep-alive stays up with MediaProjection FGS (Meet-like).
+                        createScreenStream();
+                    });`,
+    );
+  } else if (
+    !src.includes(
+      "MediaProjectionService.launch(activity);\n                        // Keep-alive stays up",
     )
   ) {
     src = src.replace(
@@ -82,7 +101,7 @@ function patchGetUserMediaImpl(destDir) {
                     });`,
       `ThreadUtils.runOnExecutor(() -> {
                         MediaProjectionService.launch(activity);
-                        ScreenShareKeepAliveService.abort(activity);
+                        // Keep-alive stays up with MediaProjection FGS (Meet-like).
                         createScreenStream();
                     });`,
     );

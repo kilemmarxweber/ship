@@ -45,6 +45,11 @@ export function mediaUrl(path: string | null | undefined) {
   return `${origin}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
 }
 
+/** Alias used by offline media prefetch / cache writers. */
+export function remoteMediaUrl(path: string | null | undefined) {
+  return mediaUrl(path);
+}
+
 export function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i.test(url);
 }

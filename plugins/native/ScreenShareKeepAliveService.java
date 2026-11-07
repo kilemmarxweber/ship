@@ -56,10 +56,11 @@ public class ScreenShareKeepAliveService extends Service {
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return;
         NotificationChannel channel =
                 new NotificationChannel(
-                        CHANNEL_ID, "Live ShipShop", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Maintient le live pendant le partage d’écran");
+                        CHANNEL_ID, "Live ShipShop", NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("Maintient la diffusion écran hors de l’app");
         channel.enableVibration(false);
         channel.setShowBadge(false);
+        channel.setLightColor(0xFFDC2626);
         nm.createNotificationChannel(channel);
     }
 
@@ -96,14 +97,16 @@ public class ScreenShareKeepAliveService extends Service {
 
         Notification notification =
                 new NotificationCompat.Builder(this, CHANNEL_ID)
-                        .setContentTitle("Live en cours")
-                        .setContentText("Préparation du partage d’écran…")
+                        .setContentTitle("Vous diffusez votre écran")
+                        .setContentText("Bandeau rouge actif — viewers en direct")
                         .setSmallIcon(icon)
+                        .setColor(0xFFDC2626)
+                        .setColorized(true)
                         .setOngoing(true)
                         .setOnlyAlertOnce(true)
                         .setContentIntent(content)
-                        .setCategory(NotificationCompat.CATEGORY_CALL)
-                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
                         .setForegroundServiceBehavior(
                                 NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                         .build();

@@ -1,5 +1,12 @@
-export function feedSnapKey(token: string | null | undefined) {
-  return `feed.foryou:${token ?? "guest"}`;
+export function feedSnapKey(
+  token: string | null | undefined,
+  tab: "foryou" | "following" = "foryou",
+) {
+  return `feed.${tab}:${token ?? "guest"}`;
+}
+
+export function discoverSnapKey(token: string | null | undefined) {
+  return `discover:${token ?? "guest"}`;
 }
 
 export function cartSnapKey(token: string | null | undefined) {
@@ -22,9 +29,6 @@ export function inboxQueryKey(token: string | null | undefined) {
   return ["inbox", token ?? "guest"] as const;
 }
 
-export function feedQueryKey(
-  token: string | null | undefined,
-  tab = "foryou",
-) {
+export function feedQueryKey(token: string | null | undefined, tab = "foryou") {
   return ["feed", tab, token ?? "guest"] as const;
 }

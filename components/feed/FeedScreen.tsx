@@ -49,8 +49,14 @@ import { kvGet, kvSet } from "@/src/offline/db";
 import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
+import {
+    flattenUniqueProducts,
+    isLocalFeedCursor,
+    normalizeFeedPage,
+    safeNextCursor,
+} from "@/src/product-normalize";
 import { useSession } from "@/src/session";
-import { isListableProduct, stockAlertColor, stockFraction } from "@/src/stock";
+import { stockAlertColor, stockFraction } from "@/src/stock";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { FeedPage, GrowthSurface, LiveTeaser, Product } from "@/src/types";
@@ -60,16 +66,6 @@ import {
     useWantedOfferSync,
     WANTED_FEED_KEY,
 } from "@/src/wanted";
-
-function normalizeProduct(product: Product): Product {
-  return {
-    ...product,
-    colors: Array.isArray(product.colors) ? product.colors : [],
-    sizes: Array.isArray(product.sizes) ? product.sizes : [],
-    description: product.description ?? null,
-    quantity: product.quantity ?? 0,
-  };
-}
 
 type FeedTab = "foryou" | "following" | "search";
 
@@ -124,24 +120,32 @@ export function FeedScreen() {
   const wantedItems = wanted.data?.requests ?? [];
   useWantedOfferSync(Boolean(token) && focused);
 
+  const feedTab = tab === "following" ? "following" : "foryou";
   const feed = useInfiniteQuery({
-    queryKey: feedQueryKey(token, tab === "following" ? "following" : "foryou"),
+    queryKey: feedQueryKey(token, feedTab),
     enabled: tab !== "search" && (tab !== "following" || Boolean(token)),
     initialPageParam: "",
     staleTime: 45_000,
     gcTime: 24 * 60 * 60 * 1000,
     networkMode: "offlineFirst",
     queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams({ status: "ACTIVE", limit: "12" });
-      if (pageParam) params.set("cursor", pageParam);
+      if (isLocalFeedCursor(pageParam)) {
+        return { products: [], nextCursor: null };
+      }
+      const params = new URLSearchParams({ status: "ACTIVE", limit: "8" });
+      if (pageParam) params.set("cursor", String(pageParam));
       if (tab === "following") params.set("following", "1");
-      const page = await api<FeedPage>(`/api/products?${params.toString()}`);
-      return {
-        ...page,
-        products: (page.products ?? []).map(normalizeProduct),
-      };
+      try {
+        const page = await api<FeedPage>(`/api/products?${params.toString()}`);
+        return normalizeFeedPage(page);
+      } catch (error) {
+        // Offline / flaky network: keep prior pages; don't hard-crash the reel.
+        if (!pageParam) throw error;
+        return { products: [], nextCursor: null };
+      }
     },
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    getNextPageParam: (last) => safeNextCursor(last),
+    retry: 1,
   });
 
   useEffect(() => {
@@ -149,9 +153,9 @@ export function FeedScreen() {
   }, [tab]);
 
   useEffect(() => {
-    if (tab !== "foryou" || !feed.data?.pages) return;
-    persistFeed(token, feed.data.pages);
-  }, [tab, token, feed.data]);
+    if (tab === "search" || !feed.data?.pages) return;
+    persistFeed(token, feed.data.pages, feedTab);
+  }, [tab, feedTab, token, feed.data]);
 
   const surface = useQuery({
     queryKey: ["growth-surface"],
@@ -172,13 +176,13 @@ export function FeedScreen() {
   });
 
   const products = useMemo(
-    () =>
-      (feed.data?.pages.flatMap((page) => page.products) ?? [])
-        .map(normalizeProduct)
-        .filter(isListableProduct),
+    () => flattenUniqueProducts(feed.data?.pages),
     [feed.data],
   );
   const isReelTab = tab === "foryou" || tab === "following";
+  useEffect(() => {
+    weaveMemory.current = emptyWeaveMemory();
+  }, [tab]);
   const feedRows = useMemo(() => {
     const challenges = tab === "foryou" ? (surface.data?.challenges ?? []) : [];
     const now = new Date();
@@ -192,6 +196,16 @@ export function FeedScreen() {
       "feed",
     );
   }, [products, tab, surface.data?.challenges, me.data?.id]);
+
+  useEffect(() => {
+    if (feedRows.length === 0) {
+      setActive(0);
+      return;
+    }
+    setActive((current) =>
+      current >= feedRows.length ? feedRows.length - 1 : current,
+    );
+  }, [feedRows.length]);
 
   useEffect(() => {
     const row = feedRows[active];
@@ -677,11 +691,11 @@ export function FeedScreen() {
             <Text style={styles.retryText}>Se connecter</Text>
           </Pressable>
         </View>
-      ) : feed.isLoading ? (
+      ) : feed.isLoading && products.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.emerald} />
         </View>
-      ) : feed.isError ? (
+      ) : feed.isError && products.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>Fil indisponible</Text>
           <Text style={styles.emptyText}>
@@ -707,11 +721,21 @@ export function FeedScreen() {
             overScrollMode="never"
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.key}
-            drawDistance={height * 2}
+            getItemType={(item) => item.kind}
+            drawDistance={height}
+            onEndReachedThreshold={0.65}
             onMomentumScrollEnd={onMomentumScrollEnd}
             onEndReached={() => {
-              if (feed.hasNextPage && !feed.isFetchingNextPage)
-                void feed.fetchNextPage();
+              if (
+                !online ||
+                !focused ||
+                !feed.hasNextPage ||
+                feed.isFetchingNextPage ||
+                feed.isError
+              ) {
+                return;
+              }
+              void feed.fetchNextPage().catch(() => undefined);
             }}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={{

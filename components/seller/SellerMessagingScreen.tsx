@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
 import { safeBack } from "@/src/nav";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -46,7 +45,10 @@ export function SellerMessagingScreen() {
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<ConfigForm | null>(null);
+  const [formEdit, setFormEdit] = useState<{
+    token: string;
+    value: ConfigForm;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const q = useQuery({
@@ -59,9 +61,16 @@ export function SellerMessagingScreen() {
     retry: false,
   });
 
-  useEffect(() => {
-    if (q.data?.config) setForm(q.data.config);
-  }, [q.data?.config]);
+  const form =
+    formEdit?.token === token ? formEdit.value : (q.data?.config ?? null);
+
+  function updateForm<K extends keyof ConfigForm>(
+    key: K,
+    value: ConfigForm[K],
+  ) {
+    if (!token || !form) return;
+    setFormEdit({ token, value: { ...form, [key]: value } });
+  }
 
   async function save() {
     if (!form) return;
@@ -154,7 +163,7 @@ export function SellerMessagingScreen() {
               <TextInput
                 value={String(form[key] ?? "")}
                 onChangeText={(value) =>
-                  setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+                  updateForm(key, value)
                 }
                 style={[
                   styles.input,
@@ -181,7 +190,7 @@ export function SellerMessagingScreen() {
               <Switch
                 value={Boolean(form[key])}
                 onValueChange={(value) =>
-                  setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+                  updateForm(key, value)
                 }
                 trackColor={{ true: c.primary, false: "rgba(127,127,140,0.3)" }}
               />

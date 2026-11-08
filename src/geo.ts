@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
+import * as ExpoLocation from "expo-location";
 import { Linking, Platform } from "react-native";
 
 export type GeoCoords = {
@@ -53,7 +54,7 @@ export async function openAppPermissionSettings() {
 function loadExpoLocation() {
   const native = requireOptionalNativeModule("ExpoLocation");
   if (!native) return null;
-  return require("expo-location") as typeof import("expo-location");
+  return ExpoLocation;
 }
 
 async function fromExpoLocation(

@@ -173,10 +173,10 @@ export function ReelSoundtrack({
     next.muted = muted;
   });
 
+  // Expo's video player is intentionally controlled through mutable properties.
+  // eslint-disable-next-line react-hooks/immutability
   useEffect(() => {
-    player.loop = true;
-    player.volume = 1;
-    player.audioMixingMode = "mixWithOthers";
+    // eslint-disable-next-line react-hooks/immutability
     player.muted = muted;
     const restart = playing && !wasPlaying.current;
     wasPlaying.current = playing;

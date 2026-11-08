@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
 import { safeBack } from "@/src/nav";
 import { useMemo, useState } from "react";
 import {
@@ -38,6 +37,7 @@ type Contact = {
 };
 
 type Tab = "buyers" | "followers" | "invitees";
+const EMPTY_CONTACTS: Contact[] = [];
 
 export function SellerContactsScreen() {
   const insets = useSafeAreaInsets();
@@ -63,9 +63,9 @@ export function SellerContactsScreen() {
     },
   });
 
-  const buyers = q.data?.buyers ?? [];
-  const followers = q.data?.followers ?? [];
-  const invitees = q.data?.invitees ?? [];
+  const buyers = q.data?.buyers ?? EMPTY_CONTACTS;
+  const followers = q.data?.followers ?? EMPTY_CONTACTS;
+  const invitees = q.data?.invitees ?? EMPTY_CONTACTS;
   const list = useMemo(() => {
     if (tab === "buyers") return buyers;
     if (tab === "followers") return followers;

@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 
 import {
@@ -151,7 +151,7 @@ function BlushBeauty({ soft }: { soft: number }) {
 }
 
 function StickerLayer({ filter, soft }: { filter: ArFilter; soft: number }) {
-  const pulse = useRef(new Animated.Value(1)).current;
+  const [pulse] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     if (filter.type !== "animation") {

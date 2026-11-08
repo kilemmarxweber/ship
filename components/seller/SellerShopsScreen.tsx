@@ -49,6 +49,9 @@ type OrgMember = {
   user: { id: string; name: string; email: string; phone?: string | null };
 };
 
+const EMPTY_SHOPS: Shop[] = [];
+const EMPTY_MEMBERS: OrgMember[] = [];
+
 export function SellerShopsScreen() {
   const insets = useSafeAreaInsets();
   const t = useT();
@@ -93,10 +96,10 @@ export function SellerShopsScreen() {
     },
   });
 
-  const shops = shopsQ.data?.shops ?? [];
+  const shops = shopsQ.data?.shops ?? EMPTY_SHOPS;
   const isOwner = Boolean(shopsQ.data?.isOwner);
   const isOrgOwner = Boolean(shopsQ.data?.isOrgOwner);
-  const members = shopsQ.data?.members ?? [];
+  const members = shopsQ.data?.members ?? EMPTY_MEMBERS;
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();

@@ -148,6 +148,8 @@ function ClipPreview({
     if (!status.isLoaded) {
       showToast("Chargement du son… patiente une seconde", "info");
     }
+    // Expo Audio exposes player controls as mutable properties.
+    // eslint-disable-next-line react-hooks/immutability
     player.volume = 0.8;
     await player.seekTo(start / 1000);
     player.play();
@@ -248,6 +250,8 @@ function HitPreview({ uri }: { uri: string }) {
 
   useEffect(() => {
     if (!status.isLoaded) return;
+    // Expo Audio exposes player controls as mutable properties.
+    // eslint-disable-next-line react-hooks/immutability
     player.volume = 0.8;
     player.play();
   }, [player, status.isLoaded]);
@@ -344,8 +348,10 @@ function MontageSlides({
   const styles = studioStyles;
   const list = images.slice(0, 12);
   const [picked, setPicked] = useState(0);
-  const [live, setLive] = useState(0);
+  const [liveState, setLiveState] = useState({ key: "", index: 0 });
   const count = list.length;
+  const liveKey = `${playing}:${count}`;
+  const live = liveState.key === liveKey ? liveState.index : 0;
   const index = playing ? live : picked;
   const src = list[index] ?? list[0];
   const videoSlide = src ? isVideoUrl(src) : false;
@@ -353,16 +359,16 @@ function MontageSlides({
   const win = slideshowWindow(index, count);
 
   useEffect(() => {
-    if (!playing || count <= 1) {
-      setLive(0);
-      return;
-    }
+    if (!playing || count <= 1) return;
     const slot = slideshowWindow(0, count).slot;
     const timer = setInterval(() => {
-      setLive((i) => (i + 1) % count);
+      setLiveState((current) => {
+        const index = current.key === liveKey ? current.index : 0;
+        return { key: liveKey, index: (index + 1) % count };
+      });
     }, slot);
     return () => clearInterval(timer);
-  }, [playing, count]);
+  }, [playing, count, liveKey]);
 
   function cycleMotion(i: number) {
     const url = list[i];
@@ -469,20 +475,27 @@ export function MusicStudio({
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [tracks, setTracks] = useState<CatalogTrack[]>([]);
-  const [searchQ, setSearchQ] = useState("");
+  const [searchDraft, setSearchDraft] = useState<{
+    title: string;
+    value: string;
+  } | null>(null);
   const [searching, setSearching] = useState(false);
   const [hits, setHits] = useState<OnlineTrackHit[]>([]);
   const [fetchingId, setFetchingId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [clipPlaying, setClipPlaying] = useState(false);
-  const seeded = useRef(false);
+  const searchQ =
+    searchDraft?.title === (productTitle ?? "")
+      ? searchDraft.value
+      : (productTitle?.trim() ?? "");
+
+  function setSearchQ(value: string) {
+    setSearchDraft({ title: productTitle ?? "", value });
+  }
 
   useEffect(() => {
-    if (!open) {
-      setPreviewKey(null);
-      return;
-    }
+    if (!open) return;
     void setAudioModeAsync({
       playsInSilentMode: true,
       interruptionMode: "mixWithOthers",
@@ -494,14 +507,6 @@ export function MusicStudio({
       .then((data) => setTracks(data.soundtracks ?? []))
       .catch(() => setTracks([]));
   }, []);
-
-  useEffect(() => {
-    if (seeded.current) return;
-    const next = productTitle?.trim() ?? "";
-    if (!next) return;
-    setSearchQ(next);
-    seeded.current = true;
-  }, [productTitle]);
 
   const selectedTrack = useMemo(() => {
     if (soundtrackId === LOCAL_SOUNDTRACK_ID && localClip) {
@@ -556,7 +561,7 @@ export function MusicStudio({
     }
   }
 
-  async function useOnlineHit(hit: OnlineTrackHit) {
+  async function downloadOnlineHit(hit: OnlineTrackHit) {
     setFetchingId(hit.identifier);
     setPreviewKey(null);
     try {
@@ -600,6 +605,7 @@ export function MusicStudio({
           "Importe une musique (MP3, M4A…) ou une vidéo (MP4, MOV…)",
         );
       }
+
       const maxBytes = video ? VIDEO_INPUT_MAX_BYTES : AUDIO_INPUT_MAX_BYTES;
       if ((asset.size ?? 0) > maxBytes) {
         throw new Error(
@@ -628,6 +634,11 @@ export function MusicStudio({
     } finally {
       setImporting(false);
     }
+  }
+
+  function closeStudio() {
+    setOpen(false);
+    setPreviewKey(null);
   }
 
   function pickCatalog(track: CatalogTrack) {
@@ -677,10 +688,10 @@ export function MusicStudio({
         animationType="slide"
         transparent
         statusBarTranslucent
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={closeStudio}
       >
         <View style={styles.frame}>
-          <Pressable style={styles.backdrop} onPress={() => setOpen(false)} />
+          <Pressable style={styles.backdrop} onPress={closeStudio} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.handle} />
             <View style={styles.head}>
@@ -693,7 +704,7 @@ export function MusicStudio({
                   Écoute, coupe 1 minute, anime tes images
                 </Text>
               </View>
-              <Pressable onPress={() => setOpen(false)} hitSlop={10}>
+              <Pressable onPress={closeStudio} hitSlop={10}>
                 <Ionicons name="close" size={20} color={c.text} />
               </Pressable>
             </View>
@@ -796,7 +807,7 @@ export function MusicStudio({
                           </View>
                           <Pressable
                             disabled={fetchingId === hit.identifier}
-                            onPress={() => void useOnlineHit(hit)}
+                            onPress={() => void downloadOnlineHit(hit)}
                             hitSlop={8}
                           >
                             {fetchingId === hit.identifier ? (
@@ -908,7 +919,7 @@ export function MusicStudio({
                 </Text>
               )}
 
-              <Pressable style={styles.done} onPress={() => setOpen(false)}>
+              <Pressable style={styles.done} onPress={closeStudio}>
                 <Text style={styles.doneText}>Terminé</Text>
               </Pressable>
             </ScrollView>

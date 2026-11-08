@@ -119,7 +119,7 @@ export function ProfileScreen() {
   useEffect(() => {
     if (!user) return;
     void applyRemote({ locale: user.locale, theme: user.theme });
-  }, [applyRemote, user?.locale, user?.theme]);
+  }, [applyRemote, user]);
 
   function startEdit() {
     setName(user?.name ?? "");
@@ -468,7 +468,7 @@ export function ProfileScreen() {
                       ? "En revue"
                       : kycStatus === "REJECTED"
                         ? "Refusé"
-                        : "KYC vendeur"}
+                        : "KYC Business"}
                 </Text>
               </Pressable>
               <Pressable
@@ -588,7 +588,7 @@ export function ProfileScreen() {
                 {!isSeller ? (
                   <Text style={[styles.lead, { color: c.textMuted }]}>
                     Publie un article ou crée une boutique pour activer l’espace
-                    vendeur.
+                    Business.
                   </Text>
                 ) : null}
               </View>

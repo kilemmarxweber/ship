@@ -117,17 +117,15 @@ export function FeedScreen() {
   const me = useMe();
   const [tab, setTab] = useState<FeedTab>(readLastTab);
   const online = useOnline();
-  const [active, setActive] = useState(0);
+  const [activeState, setActiveState] = useState({ rowCount: 0, index: 0 });
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
   const fetchingNextPage = useRef(false);
   const pendingFollowShopIds = useRef(new Set<string>());
-  const weaveMemory = useRef(emptyWeaveMemory());
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [likeBurstId, setLikeBurstId] = useState<string | null>(null);
   const [shopProduct, setShopProduct] = useState<Product | null>(null);
-  const lastTapAt = useRef(0);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [commentProduct, setCommentProduct] = useState<Product | null>(null);
   const [buyProduct, setBuyProduct] = useState<Product | null>(null);
@@ -212,9 +210,6 @@ export function FeedScreen() {
     [feed.data],
   );
   const isReelTab = tab === "foryou" || tab === "following";
-  useEffect(() => {
-    weaveMemory.current = emptyWeaveMemory();
-  }, [tab]);
   const feedRows = useMemo(() => {
     const challenges = tab === "foryou" ? (surface.data?.challenges ?? []) : [];
     const now = new Date();
@@ -224,10 +219,27 @@ export function FeedScreen() {
       challenges,
       (item) => item.id,
       seed,
-      weaveMemory.current,
+      emptyWeaveMemory(seed),
       "feed",
     );
   }, [products, tab, surface.data?.challenges, me.data?.id]);
+  const active =
+    activeState.rowCount === feedRows.length
+      ? Math.max(0, Math.min(activeState.index, feedRows.length - 1))
+      : 0;
+  const setActive = useCallback(
+    (next: number | ((current: number) => number)) => {
+      setActiveState((current) => {
+        const index =
+          current.rowCount === feedRows.length ? current.index : 0;
+        return {
+          rowCount: feedRows.length,
+          index: typeof next === "function" ? next(index) : next,
+        };
+      });
+    },
+    [feedRows.length],
+  );
   const remainingProductsByRow = useMemo(() => {
     const remaining = new Array<number>(feedRows.length);
     let productCount = 0;
@@ -237,16 +249,6 @@ export function FeedScreen() {
     }
     return remaining;
   }, [feedRows]);
-
-  useEffect(() => {
-    if (feedRows.length === 0) {
-      setActive(0);
-      return;
-    }
-    setActive((current) =>
-      current >= feedRows.length ? feedRows.length - 1 : current,
-    );
-  }, [feedRows.length]);
 
   useEffect(() => {
     const row = feedRows[active];
@@ -268,7 +270,7 @@ export function FeedScreen() {
       setActive((current) => (current === next ? current : next));
       setPaused(false);
     },
-    [height, isReelTab, feedRows.length],
+    [height, isReelTab, feedRows.length, setActive],
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -470,13 +472,9 @@ export function FeedScreen() {
   }
 
   function onMediaPress(product: Product) {
-    const now = Date.now();
-    if (now - lastTapAt.current < 280) {
-      lastTapAt.current = 0;
-      if (pendingTap.current) {
-        clearTimeout(pendingTap.current);
-        pendingTap.current = null;
-      }
+    if (pendingTap.current) {
+      clearTimeout(pendingTap.current);
+      pendingTap.current = null;
       setMuted(false);
       if (!requireAuth()) return;
       void toggleLike(product, { forceLike: true });
@@ -490,7 +488,6 @@ export function FeedScreen() {
       );
       return;
     }
-    lastTapAt.current = now;
     pendingTap.current = setTimeout(() => {
       pendingTap.current = null;
       setPaused((value) => !value);
@@ -1008,24 +1005,10 @@ export function FeedScreen() {
                         logoUrl={item.shop.logoUrl}
                         name={item.shop.name}
                         size={44}
-                        onPress={() => {
-                          if (live) openLive(live.id);
-                          else setShopProduct(item);
-                        }}
+                        accentColor={colors.buyEnd}
+                        accessibilityLabel={`Ouvrir la boutique ${item.shop.name}`}
+                        onPress={() => setShopProduct(item)}
                       />
-                      <Pressable
-                        style={[
-                          styles.plusMini,
-                          item.shop.followedByMe && styles.minusMini,
-                        ]}
-                        onPress={() => void toggleFollow(item)}
-                      >
-                        <Ionicons
-                          name={item.shop.followedByMe ? "remove" : "add"}
-                          size={14}
-                          color="#fff"
-                        />
-                      </Pressable>
                     </View>
                     <RailButton
                       icon="heart"
@@ -1071,10 +1054,9 @@ export function FeedScreen() {
                             logoUrl={item.shop.logoUrl}
                             name={item.shop.name}
                             size={28}
-                            onPress={() => {
-                              if (live) openLive(live.id);
-                              else setShopProduct(item);
-                            }}
+                            accentColor={colors.buyEnd}
+                            accessibilityLabel={`Ouvrir la boutique ${item.shop.name}`}
+                            onPress={() => setShopProduct(item)}
                           />
                         </View>
                         <Pressable
@@ -1095,17 +1077,6 @@ export function FeedScreen() {
                               color="#3EC6FF"
                             />
                           ) : null}
-                        </Pressable>
-                        <Pressable
-                          style={[
-                            styles.follow,
-                            item.shop.followedByMe && styles.followOn,
-                          ]}
-                          onPress={() => void toggleFollow(item)}
-                        >
-                          <Text style={styles.followText}>
-                            {item.shop.followedByMe ? "Suivi" : "Suivre"}
-                          </Text>
                         </Pressable>
                       </View>
                       <Text style={styles.viewsLine}>
@@ -1379,6 +1350,7 @@ export function FeedScreen() {
               shopProduct.shop)
             : null
         }
+        activeProduct={shopProduct}
         onClose={() => setShopProduct(null)}
         onFollow={() => {
           if (shopProduct) void toggleFollow(shopProduct);
@@ -1646,26 +1618,6 @@ const styles = StyleSheet.create({
   railBtn: { alignItems: "center", width: 52 },
   railLabel: { color: "#fff", fontSize: 11, fontWeight: "700" },
   avatarWrap: { marginBottom: 2 },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#222",
-    borderWidth: 1,
-    borderColor: "#fff",
-  },
-  plusMini: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.emerald,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  minusMini: { backgroundColor: "#e11d48" },
   meta: { position: "absolute", left: 12, right: 58 },
   shopCopy: { minWidth: 0, gap: 3 },
   sellerRow: {
@@ -1740,19 +1692,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
-  },
-  follow: {
-    backgroundColor: "#fff",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    flexShrink: 0,
-  },
-  followOn: { backgroundColor: "rgba(255,255,255,0.82)" },
-  followText: {
-    color: colors.ink,
-    fontWeight: "800",
-    fontSize: 12,
   },
   caption: {
     color: "#fff",

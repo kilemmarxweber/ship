@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as MediaLibrary from "expo-media-library";
-import { router } from "expo-router";
+import {
+  getPermissionsAsync,
+  requestPermissionsAsync,
+  saveToLibraryAsync,
+} from "expo-media-library";
 import { safeBack } from "@/src/nav";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -39,9 +42,9 @@ export function ArStudioScreen() {
   }, [permission, requestPermission]);
 
   async function ensureLibrary() {
-    const current = await MediaLibrary.getPermissionsAsync();
+    const current = await getPermissionsAsync();
     if (current.granted) return true;
-    const asked = await MediaLibrary.requestPermissionsAsync();
+    const asked = await requestPermissionsAsync();
     return asked.granted;
   }
 
@@ -55,7 +58,7 @@ export function ArStudioScreen() {
       });
       if (!photo?.uri) throw new Error("Capture impossible");
       if (await ensureLibrary()) {
-        await MediaLibrary.saveToLibraryAsync(photo.uri);
+        await saveToLibraryAsync(photo.uri);
         showToast("Photo enregistrée dans la galerie", "info");
       } else {
         showToast("Photo prise — autorise la galerie pour sauvegarder", "info");
@@ -88,7 +91,7 @@ export function ArStudioScreen() {
       const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
       setRecording(false);
       if (video?.uri && (await ensureLibrary())) {
-        await MediaLibrary.saveToLibraryAsync(video.uri);
+        await saveToLibraryAsync(video.uri);
         showToast("Vidéo enregistrée (filtre visible à l’écran)", "info");
       }
     } catch (cause) {

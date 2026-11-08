@@ -2,15 +2,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import { router, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
     Keyboard,
     KeyboardAvoidingView,
+    Linking,
     Modal,
     Platform,
     Pressable,
+    ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -19,11 +23,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/Toast";
-import { api, mediaUrl } from "@/src/api";
+import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
+import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { colorHex, isLightColor } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
+import { coverOf } from "@/src/media";
 import { snapshotGet } from "@/src/offline/db";
 import { commentsSnapKey } from "@/src/offline/keys";
 import { persistComments } from "@/src/offline/persist";
@@ -39,6 +45,14 @@ import {
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { CommentItem, Product, ShopCard } from "@/src/types";
+
+function phoneDigits(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+function shopPublicUrl(slug: string) {
+  return `${apiOrigin()}/shop/${slug}`;
+}
 
 export function CommentsSheet({
   product,
@@ -212,32 +226,42 @@ function CommentsBody({
   );
 }
 
-export function BuySheet({
-  product,
-  onClose,
-  onAdded,
-}: {
+type BuySheetProps = {
   product: Product | null;
   onClose: () => void;
   onAdded: () => void;
-}) {
+};
+
+export function BuySheet(props: BuySheetProps) {
+  return (
+    <BuySheetContent
+      key={props.product?.id ?? "closed"}
+      {...props}
+    />
+  );
+}
+
+function BuySheetContent({
+  product,
+  onClose,
+  onAdded,
+}: BuySheetProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const token = useSession((state) => state.token);
-  const [size, setSize] = useState<string | null>(null);
-  const [color, setColor] = useState<string | null>(null);
-  const [qty, setQty] = useState(1);
-  const [stock, setStock] = useState(0);
-  const [soldCount, setSoldCount] = useState(0);
+  const initialStock = product ? productStock(product) : 0;
+  const [size, setSize] = useState<string | null>(
+    product?.sizes[0] ?? null,
+  );
+  const [color, setColor] = useState<string | null>(
+    product?.colors[0] ?? null,
+  );
+  const [qty, setQty] = useState(initialStock > 0 ? 1 : 0);
+  const [stock, setStock] = useState(initialStock);
+  const [soldCount, setSoldCount] = useState(product?.soldCount ?? 0);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    setSize(product?.sizes[0] ?? null);
-    setColor(product?.colors[0] ?? null);
-    const available = product ? productStock(product) : 0;
-    setStock(available);
-    setSoldCount(product?.soldCount ?? 0);
-    setQty(available > 0 ? 1 : 0);
     if (!product) return;
     void api<{
       product?: { quantity?: number; status?: string; soldCount?: number };
@@ -678,25 +702,182 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flexShrink: 0,
   },
-  shopLogo: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+});
+
+type ShopProfileDetail = ShopCard & {
+  contactPhone?: string | null;
+  description?: string | null;
+  productsCount?: number;
+  addressHint?: string | null;
+  followersCount?: number;
+  followedByMe?: boolean;
+  lat?: number | null;
+  lng?: number | null;
+  alwaysOpen?: boolean | null;
+  hoursStart?: string | null;
+  hoursEnd?: string | null;
+  categories?: { id: string; count: number }[];
+};
+
+const PRODUCT_PREVIEW = 6;
+
+const shopProfileStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: colors.sheet,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: "90%",
+    paddingTop: 8,
+  },
+  scroll: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 8,
+    alignItems: "center",
+    gap: 12,
+  },
+  shopIdentity: { alignItems: "center", gap: 8 },
+  shopName: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  meta: { color: colors.muted, fontSize: 13, textAlign: "center" },
+  desc: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  hours: { color: colors.muted, fontSize: 12, textAlign: "center" },
+  cats: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 },
+  catChip: {
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  catText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  socialRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 14,
+    marginTop: 4,
+  },
+  socialBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wa: { backgroundColor: "#25D366" },
+  tt: { backgroundColor: "#111111", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
+  fb: { backgroundColor: "#1877F2" },
+  linkCard: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 14,
+  },
+  linkText: {
+    flex: 1,
+    color: colors.emerald,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  tools: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+  },
+  toolChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+  },
+  toolText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  toolMuted: { color: colors.muted, fontWeight: "600", fontSize: 13 },
+  addressBox: {
+    width: "100%",
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    gap: 4,
+  },
+  addressTitle: { color: "#fff", fontWeight: "800" },
+  addressMeta: { color: colors.muted, fontSize: 11 },
+  addressLink: { color: colors.emerald, fontWeight: "800", marginTop: 4 },
+  section: { width: "100%", gap: 10, marginTop: 4 },
+  productsHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  productsTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  productsCount: { color: colors.muted, fontWeight: "700" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  productCard: {
+    width: "48%",
+    borderRadius: 14,
+    padding: 8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  productCover: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 10,
     backgroundColor: "#222",
   },
-  shopMeta: { color: colors.muted, fontSize: 14 },
+  currentProduct: { borderWidth: 1, borderColor: colors.buyEnd },
+  productTag: { color: colors.buyEnd, fontSize: 10, fontWeight: "800", marginTop: 5 },
+  productTitle: { color: "#fff", fontWeight: "700", fontSize: 12, marginTop: 4 },
+  productPrice: { color: colors.emerald, fontWeight: "800", fontSize: 12, marginTop: 4 },
+  emptyProducts: { color: colors.muted, fontSize: 13 },
+  moreProducts: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  moreProductsText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  follow: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 999,
+    backgroundColor: colors.buyEnd,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  followOff: { backgroundColor: "rgba(255,255,255,0.12)" },
+  followText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  error: { color: "#ff9c9c", fontSize: 12, textAlign: "center" },
 });
 
 export function ShopProfileSheet({
   shop,
+  activeProduct,
   onClose,
   onFollow,
 }: {
   shop: ShopCard | null;
+  activeProduct?: Product | null;
   onClose: () => void;
   onFollow: () => void;
 }) {
-  const insets = useSafeAreaInsets();
   return (
     <Modal
       visible={Boolean(shop)}
@@ -705,37 +886,439 @@ export function ShopProfileSheet({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={styles.frame}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View
-          style={[
-            styles.sheet,
-            { paddingBottom: Math.max(16, insets.bottom + 8) },
-          ]}
+      {shop ? (
+        <ShopProfileBody
+          key={shop.id}
+          shop={shop}
+          activeProduct={activeProduct}
+          onClose={onClose}
+          onFollow={onFollow}
+        />
+      ) : null}
+    </Modal>
+  );
+}
+
+function ShopProfileBody({
+  shop,
+  activeProduct,
+  onClose,
+  onFollow,
+}: {
+  shop: ShopCard;
+  activeProduct?: Product | null;
+  onClose: () => void;
+  onFollow: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const token = useSession((state) => state.token);
+  const [detail, setDetail] = useState<ShopProfileDetail | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showAddress, setShowAddress] = useState(false);
+  const shopUrl = shopPublicUrl(shop.slug);
+  const phone = detail?.contactPhone?.trim() || null;
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [shopRes, productsRes] = await Promise.all([
+          api<{ shop: ShopProfileDetail }>(`/api/shops/${shop.slug}`),
+          api<{ products: Product[] }>(
+            `/api/products?shopId=${encodeURIComponent(shop.id)}&limit=48&status=ACTIVE`,
+          ),
+        ]);
+        if (!active) return;
+        setDetail(shopRes.shop);
+        setProducts(productsRes.products ?? []);
+      } catch (cause) {
+        if (!active) return;
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : "Impossible de charger la boutique.";
+        setLoadError(message);
+        showToast(message, "error");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [shop.id, shop.slug]);
+
+  async function openUrl(url: string) {
+    try {
+      await Linking.openURL(url);
+    } catch (cause) {
+      showToast(
+        cause instanceof Error
+          ? cause.message
+          : "Application introuvable sur cet appareil.",
+        "error",
+      );
+    }
+  }
+
+  async function openWhatsApp() {
+    const message = `Bonjour, je vous contacte depuis ShipShop à propos de ${shop.name}.\n${shopUrl}`;
+    const suffix = `?text=${encodeURIComponent(message)}`;
+    await openUrl(
+      phone
+        ? `https://wa.me/${phoneDigits(phone)}${suffix}`
+        : `https://wa.me/${suffix}`,
+    );
+  }
+
+  async function shareToTikTok() {
+    try {
+      await Share.share({
+        message: `Découvre ${shop.name} sur ShipShop\n${shopUrl}`,
+        url: shopUrl,
+      });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Partage impossible.",
+        "error",
+      );
+    }
+  }
+
+  async function openFacebook() {
+    await openUrl(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shopUrl)}`,
+    );
+  }
+
+  async function shareShop() {
+    try {
+      await Share.share({
+        message: `Découvre ${shop.name} sur ShipShop\n${shopUrl}`,
+        url: shopUrl,
+      });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Partage impossible.",
+        "error",
+      );
+    }
+  }
+
+  async function messageSeller() {
+    if (!token) {
+      showToast("Connectez-vous pour écrire au vendeur.", "info");
+      return;
+    }
+    try {
+      const data = await api<{ conversation?: { id: string } }>(
+        "/api/conversations",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            shopId: shop.id,
+            message: `Bonjour, je suis intéressé(e) par ${shop.name}.`,
+          }),
+        },
+      );
+      if (!data.conversation?.id) {
+        throw new Error("Conversation introuvable.");
+      }
+      onClose();
+      router.push({
+        pathname: "/(tabs)/messages/[id]",
+        params: { id: data.conversation.id },
+      });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error
+          ? cause.message
+          : "Impossible d'ouvrir la conversation.",
+        "error",
+      );
+    }
+  }
+
+  function openShop() {
+    onClose();
+    router.push(`/shop/${shop.slug}#produits` as Href);
+  }
+
+  function openProduct(productId: string) {
+    onClose();
+    router.push({ pathname: "/product/[id]", params: { id: productId } });
+  }
+
+  const visibleProducts = [
+    ...(activeProduct?.shop.id === shop.id ? [activeProduct] : []),
+    ...products.filter((product) => product.id !== activeProduct?.id),
+  ];
+  const displayedProducts = showAllProducts
+    ? visibleProducts
+    : visibleProducts.slice(0, PRODUCT_PREVIEW);
+  const followers = shop.followersCount ?? detail?.followersCount ?? 0;
+  const productCount = detail?.productsCount ?? visibleProducts.length;
+  const hours = detail?.alwaysOpen
+    ? "Toujours disponible"
+    : detail?.hoursStart && detail?.hoursEnd
+      ? `Ouvert ${detail.hoursStart} – ${detail.hoursEnd}`
+      : null;
+  const mapsUrl =
+    detail?.lat != null && detail?.lng != null
+      ? `https://www.google.com/maps/search/?api=1&query=${detail.lat},${detail.lng}`
+      : null;
+  const followed = Boolean(shop.followedByMe ?? detail?.followedByMe);
+
+  return (
+    <View style={styles.frame}>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View
+        style={[
+          shopProfileStyles.sheet,
+          { paddingBottom: Math.max(12, insets.bottom + 6) },
+        ]}
+      >
+        <View style={styles.handle} />
+        <ScrollView
+          contentContainerStyle={shopProfileStyles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.handle} />
-          {shop?.logoUrl ? (
-            <Image
-              source={{ uri: mediaUrl(shop.logoUrl) ?? undefined }}
-              style={styles.shopLogo}
+          <View style={shopProfileStyles.shopIdentity}>
+            <ShopLiveAvatar
+              live={false}
+              logoUrl={shop.logoUrl}
+              name={shop.name}
+              size={88}
+              accentColor={colors.buyEnd}
+              accessibilityLabel={`Voir les produits de ${shop.name}`}
+              onPress={openShop}
             />
-          ) : (
-            <View style={styles.shopLogo} />
-          )}
-          <Text style={styles.title}>{shop?.name}</Text>
-          <Text style={styles.shopMeta}>
-            {compactCount(shop?.followersCount ?? 0)} abonnés · @{shop?.slug}
+            <Text style={shopProfileStyles.shopName} numberOfLines={2}>
+              {shop.name}
+            </Text>
+          </View>
+          <Text style={shopProfileStyles.meta}>
+            @{shop.slug} · {compactCount(followers)} abonnés
+            {productCount > 0
+              ? ` · ${compactCount(productCount)} produits`
+              : ""}
           </Text>
-          <Pressable style={styles.send} onPress={onFollow}>
-            <Text style={styles.sendText}>
-              {shop?.followedByMe ? "Ne plus suivre" : "Suivre"}
+
+          {detail?.description ? (
+            <Text style={shopProfileStyles.desc}>{detail.description}</Text>
+          ) : null}
+          {hours ? <Text style={shopProfileStyles.hours}>{hours}</Text> : null}
+
+          {(detail?.categories?.length ?? 0) > 0 ? (
+            <View style={shopProfileStyles.cats}>
+              {detail?.categories?.slice(0, 6).map((category) => (
+                <View key={category.id} style={shopProfileStyles.catChip}>
+                  <Text style={shopProfileStyles.catText}>
+                    {category.id} · {category.count}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={shopProfileStyles.socialRow}>
+            <Pressable
+              style={[shopProfileStyles.socialBtn, shopProfileStyles.wa]}
+              onPress={() => void openWhatsApp()}
+              accessibilityRole="button"
+              accessibilityLabel="Contacter sur WhatsApp"
+            >
+              <Ionicons name="logo-whatsapp" size={26} color="#fff" />
+            </Pressable>
+            <Pressable
+              style={[shopProfileStyles.socialBtn, shopProfileStyles.tt]}
+              onPress={() => void shareToTikTok()}
+              accessibilityRole="button"
+              accessibilityLabel="Partager sur TikTok"
+            >
+              <Ionicons name="logo-tiktok" size={24} color="#fff" />
+            </Pressable>
+            <Pressable
+              style={[shopProfileStyles.socialBtn, shopProfileStyles.fb]}
+              onPress={() => void openFacebook()}
+              accessibilityRole="button"
+              accessibilityLabel="Partager sur Facebook"
+            >
+              <Ionicons name="logo-facebook" size={26} color="#fff" />
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={shopProfileStyles.linkCard}
+            onPress={() => void shareShop()}
+            accessibilityRole="button"
+            accessibilityLabel="Partager le lien de la boutique"
+          >
+            <Ionicons name="link-outline" size={18} color={colors.emerald} />
+            <Text style={shopProfileStyles.linkText} numberOfLines={1}>
+              {shopUrl.replace(/^https?:\/\//, "")}
+            </Text>
+            <Ionicons name="share-outline" size={18} color="#fff" />
+          </Pressable>
+
+          <View style={shopProfileStyles.tools}>
+            {phone ? (
+              <Pressable
+                style={shopProfileStyles.toolChip}
+                onPress={() => void openUrl(`tel:${phone}`)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="call" size={16} color={colors.emerald} />
+                <Text style={shopProfileStyles.toolText}>{phone}</Text>
+              </Pressable>
+            ) : (
+              <View style={shopProfileStyles.toolChip}>
+                <Ionicons name="call-outline" size={16} color={colors.muted} />
+                <Text style={shopProfileStyles.toolMuted}>
+                  Contact non publié
+                </Text>
+              </View>
+            )}
+            <Pressable
+              style={shopProfileStyles.toolChip}
+              onPress={() => setShowAddress((value) => !value)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="location-outline" size={16} color="#fff" />
+              <Text style={shopProfileStyles.toolText}>Adresse</Text>
+            </Pressable>
+            <Pressable
+              style={shopProfileStyles.toolChip}
+              onPress={() => void messageSeller()}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={16}
+                color="#fff"
+              />
+              <Text style={shopProfileStyles.toolText}>Message</Text>
+            </Pressable>
+          </View>
+
+          {showAddress ? (
+            <View style={shopProfileStyles.addressBox}>
+              <Text style={shopProfileStyles.addressTitle}>
+                {detail?.addressHint ?? "Adresse non publiée"}
+              </Text>
+              {detail?.lat != null && detail.lng != null ? (
+                <Text style={shopProfileStyles.addressMeta}>
+                  {detail.lat.toFixed(5)}, {detail.lng.toFixed(5)}
+                </Text>
+              ) : null}
+              {mapsUrl ? (
+                <Pressable onPress={() => void openUrl(mapsUrl)}>
+                  <Text style={shopProfileStyles.addressLink}>
+                    Ouvrir dans Maps
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          <View style={shopProfileStyles.section}>
+            <View style={shopProfileStyles.productsHead}>
+              <Text style={shopProfileStyles.productsTitle}>
+                Produits actifs
+              </Text>
+              <Text style={shopProfileStyles.productsCount}>
+                {compactCount(productCount)}
+              </Text>
+            </View>
+            {loading ? (
+              <ActivityIndicator color={colors.buyEnd} />
+            ) : displayedProducts.length === 0 ? (
+              <Text style={shopProfileStyles.emptyProducts}>
+                Aucun produit actif pour le moment.
+              </Text>
+            ) : (
+              <>
+                <View style={shopProfileStyles.grid}>
+                  {displayedProducts.map((product) => {
+                    const isCurrent = product.id === activeProduct?.id;
+                    return (
+                      <Pressable
+                        key={product.id}
+                        style={[
+                          shopProfileStyles.productCard,
+                          isCurrent && shopProfileStyles.currentProduct,
+                        ]}
+                        onPress={() => openProduct(product.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ouvrir ${product.title}`}
+                      >
+                        <Image
+                          source={{ uri: coverOf(product.images) ?? undefined }}
+                          style={shopProfileStyles.productCover}
+                          contentFit="cover"
+                        />
+                        {isCurrent ? (
+                          <Text style={shopProfileStyles.productTag}>
+                            Produit en cours
+                          </Text>
+                        ) : null}
+                        <Text
+                          style={shopProfileStyles.productTitle}
+                          numberOfLines={2}
+                        >
+                          {product.title}
+                        </Text>
+                        <Text style={shopProfileStyles.productPrice}>
+                          {formatMoney(product.priceCents, product.currency)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {visibleProducts.length > PRODUCT_PREVIEW ? (
+                  <Pressable
+                    style={shopProfileStyles.moreProducts}
+                    onPress={() => {
+                      if (showAllProducts) openShop();
+                      else setShowAllProducts(true);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Text style={shopProfileStyles.moreProductsText}>
+                      {showAllProducts
+                        ? "Voir tous les produits de la boutique"
+                        : `Voir plus (${visibleProducts.length - PRODUCT_PREVIEW})`}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
+            {loadError ? (
+              <Text style={shopProfileStyles.error}>{loadError}</Text>
+            ) : null}
+          </View>
+
+          <Pressable
+            style={[
+              shopProfileStyles.follow,
+              followed && shopProfileStyles.followOff,
+            ]}
+            onPress={onFollow}
+            accessibilityRole="button"
+          >
+            <Text style={shopProfileStyles.followText}>
+              {followed ? "Ne plus suivre" : "Suivre"}
             </Text>
           </Pressable>
-          <Pressable onPress={onClose}>
+          <Pressable onPress={onClose} accessibilityRole="button">
             <Text style={styles.empty}>Fermer</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </View>
-    </Modal>
+    </View>
   );
 }

@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { router } from "expo-router";
 import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
@@ -142,10 +141,10 @@ export function KycScreen() {
           Retour{"\u00A0"}
         </Text>
       </Pressable>
-      <Text style={styles.title}>Devenir vendeur pro</Text>
+      <Text style={styles.title}>Devenir Business pro</Text>
       <Text style={styles.lead}>
-        Formulaire, puis photos de pièce d’identité. La vente reste possible
-        sans KYC.
+        Formulaire, puis photos de pièce d’identité. Publier reste possible sans
+        KYC.
       </Text>
 
       {!token ? (
@@ -165,7 +164,7 @@ export function KycScreen() {
       ) : kyc?.status === "APPROVED" ? (
         <View style={styles.status}>
           <Ionicons name="shield-checkmark" size={28} color={colors.emerald} />
-          <Text style={styles.statusTitle}>Vendeur pro vérifié</Text>
+          <Text style={styles.statusTitle}>Business pro vérifié</Text>
           <Text style={styles.lead}>
             Votre badge PRO est actif sur votre profil.
           </Text>
@@ -331,7 +330,7 @@ function KycForm({
 
       {step === 1 ? (
         <View style={styles.card}>
-          <Text style={styles.label}>Type de vendeur</Text>
+          <Text style={styles.label}>Type de Business</Text>
           <View style={styles.row}>
             {(
               [

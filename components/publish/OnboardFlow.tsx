@@ -121,9 +121,10 @@ export function OnboardFlow({
           Retour{"\u00A0"}
         </Text>
       </Pressable>
-      <Text style={styles.title}>Devenir vendeur</Text>
+      <Text style={styles.title}>Devenir Business</Text>
       <Text style={styles.lead}>
-        Crée ta boutique — ensuite tu publies en 3 gestes : vidéo, prix, poster.
+        Crée ta boutique Business — ensuite tu publies en 3 gestes : vidéo,
+        prix, poster. Mode, Aliment, Coiffure, Tech… tout s’y vend.
       </Text>
 
       <Text style={styles.label}>Logo (optionnel)</Text>
@@ -193,7 +194,7 @@ export function OnboardFlow({
       <TextInput
         value={description}
         onChangeText={setDescription}
-        placeholder="Ce que tu vends"
+        placeholder="Ce que tu publies (ex : Mode, Aliment, Coiffure)"
         placeholderTextColor={c.textMuted}
         style={[styles.input, styles.area]}
         multiline
@@ -206,7 +207,7 @@ export function OnboardFlow({
       >
         <View style={[styles.cta, { backgroundColor: c.primary }]}>
           <Text style={styles.ctaText}>
-            {busy ? "Création…" : "Lancer ma boutique"}
+            {busy ? "Création…" : "Lancer mon Business"}
           </Text>
         </View>
       </Pressable>

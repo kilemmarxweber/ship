@@ -1,59 +1,19 @@
-import { router } from "expo-router";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { safeBack } from "@/src/nav";
 import { useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { useT } from "@/src/i18n";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
-
-type CameraApi = typeof import("expo-camera");
-
-function loadCamera(): CameraApi | null {
-  try {
-    return require("expo-camera") as CameraApi;
-  } catch {
-    return null;
-  }
-}
-
-const cameraApi = loadCamera();
-
-function ManualEntry({
-  onSubmit,
-  last,
-}: {
-  onSubmit: (payload: string) => void;
-  last: string;
-}) {
-  const c = useColors();
-  const [manual, setManual] = useState("");
-  return (
-    <View style={{ padding: 16, gap: 8 }}>
-      <Text style={{ color: c.textMuted, fontSize: 13 }}>
-        Caméra indisponible ici — colle le code du billet, ou rebuild native
-        (`npx expo run:android`) pour scanner.
-      </Text>
-      <TextInput
-        value={manual}
-        onChangeText={setManual}
-        placeholder="SHIPSHOP-TIX|…"
-        placeholderTextColor={c.textMuted}
-        style={[styles.input, { color: c.text, borderColor: c.textMuted }]}
-        onSubmitEditing={() => onSubmit(manual)}
-      />
-      <Pressable
-        style={[styles.perm, { backgroundColor: c.card }]}
-        onPress={() => onSubmit(manual)}
-      >
-        <Text style={{ color: c.emerald, fontWeight: "800" }}>Valider</Text>
-      </Pressable>
-      {last ? <Text style={{ color: c.emerald }}>{last}</Text> : null}
-    </View>
-  );
-}
 
 function CameraScan({
   onScan,
@@ -63,8 +23,7 @@ function CameraScan({
   last: string;
 }) {
   const c = useColors();
-  const CameraView = cameraApi!.CameraView;
-  const [permission, requestPermission] = cameraApi!.useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState("");
 
   return (
@@ -137,11 +96,7 @@ export function TicketScanScreen() {
       <Pressable onPress={() => safeBack()} style={{ padding: 16 }}>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
       </Pressable>
-      {cameraApi ? (
-        <CameraScan onScan={(value) => void submit(value)} last={last} />
-      ) : (
-        <ManualEntry onSubmit={(value) => void submit(value)} last={last} />
-      )}
+      <CameraScan onScan={(value) => void submit(value)} last={last} />
     </View>
   );
 }

@@ -55,17 +55,16 @@ function SlideMedia({
   return <View style={styles.placeholder} />;
 }
 
-export function ReelGallery({
-  urls,
-  playing,
-  muted,
-  width,
-  height,
-  onTap,
-  dotsBottom,
-  restartToken,
-  poster,
-}: {
+export function ReelGallery(props: ReelGalleryProps) {
+  return (
+    <ReelGalleryContent
+      key={`${props.restartToken}:${props.urls.join("|")}`}
+      {...props}
+    />
+  );
+}
+
+type ReelGalleryProps = {
   urls: string[];
   playing: boolean;
   muted: boolean;
@@ -75,7 +74,19 @@ export function ReelGallery({
   dotsBottom: number;
   restartToken: string | number;
   poster?: string | null;
-}) {
+};
+
+function ReelGalleryContent({
+  urls,
+  playing,
+  muted,
+  width,
+  height,
+  onTap,
+  dotsBottom,
+  restartToken,
+  poster,
+}: ReelGalleryProps) {
   const scrollRef = useRef<{
     scrollTo: (opts: { x: number; y?: number; animated?: boolean }) => void;
   } | null>(null);
@@ -83,13 +94,6 @@ export function ReelGallery({
   const dragging = useRef(false);
   const resumeAt = useRef(0);
   const [index, setIndex] = useState(0);
-
-  const urlKey = urls.join("|");
-  useEffect(() => {
-    indexRef.current = 0;
-    setIndex(0);
-    scrollRef.current?.scrollTo({ x: 0, animated: false });
-  }, [restartToken, urlKey]);
 
   const canCarousel = urls.length > 1;
   const currentIsVideo = canCarousel && isVideoUrl(urls[index] ?? "");

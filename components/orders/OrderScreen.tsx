@@ -36,7 +36,7 @@ export function OrderScreen({ orderId }: { orderId: string }) {
   const insets = useSafeAreaInsets();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
 
   const orderQuery = useQuery({

@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
 import { safeBack } from "@/src/nav";
 import { useEffect, useMemo, useState } from "react";
 import {

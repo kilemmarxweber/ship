@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { safeBack } from "@/src/nav";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -36,6 +36,7 @@ import { usePaged } from "@/src/use-paged";
 import { useColors } from "@/src/use-colors";
 
 type Shop = { id: string; name: string };
+const EMPTY_SHOPS: Shop[] = [];
 type Courier = {
   id: string;
   name: string;
@@ -92,32 +93,29 @@ export function SellerOrdersScreen() {
     enabled: Boolean(token),
     queryFn: () => api<{ shops?: Shop[] }>("/api/shops?mine=1"),
   });
-  const shops = shopsQ.data?.shops ?? [];
-
-  useEffect(() => {
-    if (!shopId && shops[0]?.id) setShopId(shops[0].id);
-  }, [shops, shopId]);
+  const shops = shopsQ.data?.shops ?? EMPTY_SHOPS;
+  const activeShopId = shopId || shops[0]?.id || "";
 
   const ordersQ = useQuery({
-    queryKey: ["seller-orders", token ?? "guest", shopId],
-    enabled: Boolean(token && shopId),
+    queryKey: ["seller-orders", token ?? "guest", activeShopId],
+    enabled: Boolean(token && activeShopId),
     queryFn: () =>
       api<{ orders?: VendorOrder[] }>(
-        `/api/orders?shopId=${shopId}&status=all`,
+        `/api/orders?shopId=${activeShopId}&status=all`,
       ),
   });
   const couriersQ = useQuery({
-    queryKey: ["seller-couriers", token ?? "guest", shopId],
-    enabled: Boolean(token && shopId),
+    queryKey: ["seller-couriers", token ?? "guest", activeShopId],
+    enabled: Boolean(token && activeShopId),
     queryFn: () =>
       api<{ couriers?: Courier[] }>(
-        `/api/shops/delivery/couriers?shopId=${shopId}`,
+        `/api/shops/delivery/couriers?shopId=${activeShopId}`,
       ).catch(() => ({ couriers: [] as Courier[] })),
   });
 
   const orders = ordersQ.data?.orders ?? [];
   const couriers = couriersQ.data?.couriers ?? [];
-  const paged = usePaged(orders, `${shopId}-${orders.length}`);
+  const paged = usePaged(orders, `${activeShopId}-${orders.length}`);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["seller-orders"] });
@@ -316,9 +314,13 @@ export function SellerOrdersScreen() {
               </Text>
             </View>
 
-            <ShopPicker shops={shops} value={shopId} onChange={setShopId} />
+            <ShopPicker
+              shops={shops}
+              value={activeShopId}
+              onChange={setShopId}
+            />
 
-            {!shopId || ordersQ.isLoading ? (
+            {!activeShopId || ordersQ.isLoading ? (
               <ActivityIndicator color={c.primary} style={{ marginTop: 16 }} />
             ) : orders.length === 0 ? (
               <Text style={{ color: c.textMuted, textAlign: "center", paddingVertical: 28 }}>

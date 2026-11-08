@@ -99,14 +99,32 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
   const [national, setNational] = useState("");
   const [pickingCountry, setPickingCountry] = useState(false);
   const [countryQuery, setCountryQuery] = useState("");
-  const [city, setCity] = useState("Kinshasa");
+  const city = "Kinshasa";
   const [commune, setCommune] = useState("");
-  const [quartier, setQuartier] = useState("");
-  const [avenue, setAvenue] = useState("");
-  const [parcelle, setParcelle] = useState("");
+  const quartier = "";
+  const avenue = "";
+  const parcelle = "";
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
-  const [shippingCents, setShippingCents] = useState(0);
+  const [shippingQuote, setShippingQuote] = useState<{
+    key: string;
+    shippingCents: number;
+  } | null>(null);
+
+  const quoteKey =
+    intent === "DELIVERY" && offer?.shop?.id && city.trim()
+      ? JSON.stringify([
+          offer.shop.id,
+          city.trim(),
+          commune.trim(),
+          deliveryLat,
+          deliveryLng,
+        ])
+      : null;
+  const shippingCents =
+    quoteKey && shippingQuote?.key === quoteKey
+      ? shippingQuote.shippingCents
+      : 0;
 
   useEffect(() => {
     if (!token) return;
@@ -124,26 +142,36 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
   }, [token]);
 
   useEffect(() => {
-    if (intent !== "DELIVERY" || !offer?.shop?.id || !city.trim()) {
-      setShippingCents(0);
-      return;
-    }
+    if (!quoteKey) return;
+    const key = quoteKey;
     const timer = setTimeout(() => {
       void api<{ quote?: { shippingCents: number } }>("/api/shipping/quote", {
         method: "POST",
         body: JSON.stringify({
-          shopId: offer.shop?.id,
+          shopId: offer?.shop?.id,
           city: city.trim(),
           commune: commune.trim() || null,
           lat: deliveryLat,
           lng: deliveryLng,
         }),
       })
-        .then((data) => setShippingCents(data.quote?.shippingCents ?? 0))
-        .catch(() => setShippingCents(0));
+        .then((data) =>
+          setShippingQuote({
+            key,
+            shippingCents: data.quote?.shippingCents ?? 0,
+          }),
+        )
+        .catch(() => setShippingQuote({ key, shippingCents: 0 }));
     }, 450);
     return () => clearTimeout(timer);
-  }, [intent, offer?.shop?.id, city, commune, deliveryLat, deliveryLng]);
+  }, [
+    quoteKey,
+    commune,
+    deliveryLat,
+    deliveryLng,
+    offer?.shop?.id,
+    city,
+  ]);
 
   const filteredCountries = useMemo(() => {
     const needle = countryQuery.trim().toLowerCase();

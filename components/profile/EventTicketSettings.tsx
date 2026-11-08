@@ -110,7 +110,10 @@ export function EventTicketSettings() {
   const c = useColors();
   const [events, setEvents] = useState<PublicEvent[]>([]);
   const [selectedId, setSelectedId] = useState<string | "new" | null>(null);
-  const [sales, setSales] = useState<Sales | null>(null);
+  const [salesState, setSalesState] = useState<{
+    eventId: string;
+    sales: Sales | null;
+  } | null>(null);
   const [refunds, setRefunds] = useState<RefundRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState("");
@@ -120,7 +123,11 @@ export function EventTicketSettings() {
   const [organizerName, setOrganizerName] = useState("");
   const [organizerUserId, setOrganizerUserId] = useState("");
   const [pickedLabel, setPickedLabel] = useState("");
-  const [userHits, setUserHits] = useState<UserHit[]>([]);
+  const [userHitResults, setUserHitResults] = useState<{
+    query: string;
+    kind: OrganizerKind;
+    hits: UserHit[];
+  } | null>(null);
   const pickedIdRef = useRef("");
   const [feeMode, setFeeMode] = useState<FeeMode>("PERCENT");
   const [feePct, setFeePct] = useState("10");
@@ -135,6 +142,22 @@ export function EventTicketSettings() {
   const [fxCdf, setFxCdf] = useState(String(DEFAULT_FX_CDF));
   const [fxConfirmed, setFxConfirmed] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
+  const sales =
+    salesState?.eventId === selectedId ? salesState.sales : null;
+  const currentQuery = organizerName.trim();
+  const userHits =
+    userHitResults?.query === currentQuery &&
+    userHitResults.kind === organizerKind
+      ? userHitResults.hits
+      : [];
+
+  function setUserHits(hits: UserHit[]) {
+    setUserHitResults({
+      query: currentQuery,
+      kind: organizerKind,
+      hits,
+    });
+  }
 
   const load = useCallback(async () => {
     const [ev, rf] = await Promise.all([
@@ -145,50 +168,63 @@ export function EventTicketSettings() {
     setRefunds(rf.refunds ?? []);
   }, []);
 
+  const pickHit = useCallback(
+    (hit: UserHit, closeList = true) => {
+      const label = hitLabel(hit);
+      pickedIdRef.current = hit.id;
+      setOrganizerUserId(hit.id);
+      setPickedLabel(label);
+      setOrganizerName((current) => current.trim() || label);
+      if (closeList) {
+        setUserHitResults({
+          query: organizerName.trim(),
+          kind: organizerKind,
+          hits: [],
+        });
+      }
+    },
+    [organizerKind, organizerName],
+  );
+
   useEffect(() => {
-    void load().catch(() => undefined);
+    void Promise.resolve()
+      .then(load)
+      .catch(() => undefined);
   }, [load]);
 
   useEffect(() => {
-    if (!selectedId || selectedId === "new") {
-      setSales(null);
-      return;
-    }
+    if (!selectedId || selectedId === "new") return;
     void api<{ sales?: Sales }>(`/api/admin/events/${selectedId}/sales`)
-      .then((data) => setSales(data.sales ?? null))
-      .catch(() => setSales(null));
+      .then((data) =>
+        setSalesState({ eventId: selectedId, sales: data.sales ?? null }),
+      )
+      .catch(() => setSalesState({ eventId: selectedId, sales: null }));
   }, [selectedId]);
 
-  async function searchHits(query: string) {
+  const searchHits = useCallback(async (query: string) => {
     const q = query.trim();
     if (q.length < 2) return [] as UserHit[];
     const data = await api<{ users?: UserHit[] }>(
       `/api/admin/events/users?kind=${organizerKind}&q=${encodeURIComponent(q)}`,
     );
     return data.users ?? [];
-  }
+  }, [organizerKind]);
 
   useEffect(() => {
     const q = organizerName.trim();
-    if (q.length < 2) {
-      setUserHits([]);
-      return;
-    }
-    if (pickedIdRef.current && q === pickedLabel.trim()) {
-      setUserHits([]);
-      return;
-    }
+    if (q.length < 2) return;
+    if (pickedIdRef.current && q === pickedLabel.trim()) return;
     const timer = setTimeout(() => {
       void searchHits(q)
         .then((hits) => {
-          setUserHits(hits);
+          setUserHitResults({ query: q, kind: organizerKind, hits });
           const auto = matchHit(q, hits);
           if (auto && !pickedIdRef.current) pickHit(auto, true);
         })
-        .catch(() => setUserHits([]));
+        .catch(() => setUserHitResults({ query: q, kind: organizerKind, hits: [] }));
     }, 250);
     return () => clearTimeout(timer);
-  }, [organizerName, organizerKind, pickedLabel]);
+  }, [organizerName, organizerKind, pickedLabel, searchHits, pickHit]);
 
   function pickKind(next: OrganizerKind) {
     if (next === organizerKind) return;
@@ -197,15 +233,6 @@ export function EventTicketSettings() {
     pickedIdRef.current = "";
     setPickedLabel("");
     setUserHits([]);
-  }
-
-  function pickHit(hit: UserHit, closeList = true) {
-    const label = hitLabel(hit);
-    pickedIdRef.current = hit.id;
-    setOrganizerUserId(hit.id);
-    setPickedLabel(label);
-    setOrganizerName((current) => current.trim() || label);
-    if (closeList) setUserHits([]);
   }
 
   function resetNew() {
@@ -306,7 +333,7 @@ export function EventTicketSettings() {
             organizerName: typed,
             imageUrl:
               imageUrl.trim() ||
-              eventPosterUrl(null, `${title}|${organizerName}|${Date.now()}`),
+              eventPosterUrl(null, `${title}|${organizerName}`),
             ...(userId ? { organizerUserId: userId } : {}),
             platformFeeMode: feeMode,
             platformFeeBps: Math.round(Number(feePct) * 100),

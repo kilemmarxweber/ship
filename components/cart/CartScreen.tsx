@@ -97,9 +97,12 @@ export default function CartScreen() {
   const [quartier, setQuartier] = useState("");
   const [avenue, setAvenue] = useState("");
   const [parcelle, setParcelle] = useState("");
-  const [shippingCents, setShippingCents] = useState(0);
-  const [distanceKm, setDistanceKm] = useState<number | null>(null);
-  const [quoting, setQuoting] = useState(false);
+  const [shippingQuote, setShippingQuote] = useState<{
+    key: string;
+    shippingCents: number;
+    distanceKm: number | null;
+  } | null>(null);
+  const [quotingKey, setQuotingKey] = useState<string | null>(null);
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
@@ -143,7 +146,21 @@ export default function CartScreen() {
   const groups = groupByShop(payload.items);
   const shopId = groups[0]?.[0] ?? "";
   const currency = payload.items[0]?.product.currency ?? "USD";
-  const contactPhone = `+${country.dial}${national}`;
+  const quoteKey =
+    fulfillmentType === "DELIVERY" && shopId && city.trim()
+      ? JSON.stringify([
+          shopId,
+          city.trim(),
+          commune.trim(),
+          deliveryLat,
+          deliveryLng,
+        ])
+      : null;
+  const currentQuote =
+    quoteKey && shippingQuote?.key === quoteKey ? shippingQuote : null;
+  const shippingCents = currentQuote?.shippingCents ?? 0;
+  const distanceKm = currentQuote?.distanceKm ?? null;
+  const quoting = quoteKey !== null && quotingKey === quoteKey;
   const payable =
     payload.totalCents + (fulfillmentType === "DELIVERY" ? shippingCents : 0);
   const filledCart = Boolean(token) && payload.items.length > 0;
@@ -152,13 +169,10 @@ export default function CartScreen() {
   );
 
   useEffect(() => {
-    if (fulfillmentType !== "DELIVERY" || !shopId || !city.trim()) {
-      setShippingCents(0);
-      setDistanceKm(null);
-      return;
-    }
+    if (!quoteKey) return;
+    const key = quoteKey;
     const timer = setTimeout(() => {
-      setQuoting(true);
+      setQuotingKey(key);
       void api<{
         quote?: { shippingCents: number; distanceKm: number };
       }>("/api/shipping/quote", {
@@ -172,17 +186,21 @@ export default function CartScreen() {
         }),
       })
         .then((data) => {
-          setShippingCents(data.quote?.shippingCents ?? 0);
-          setDistanceKm(data.quote?.distanceKm ?? null);
+          setShippingQuote({
+            key,
+            shippingCents: data.quote?.shippingCents ?? 0,
+            distanceKm: data.quote?.distanceKm ?? null,
+          });
         })
         .catch(() => {
-          setShippingCents(0);
-          setDistanceKm(null);
+          setShippingQuote({ key, shippingCents: 0, distanceKm: null });
         })
-        .finally(() => setQuoting(false));
+        .finally(() => {
+          setQuotingKey((current) => (current === key ? null : current));
+        });
     }, 450);
     return () => clearTimeout(timer);
-  }, [fulfillmentType, shopId, city, commune, deliveryLat, deliveryLng]);
+  }, [quoteKey, shopId, city, commune, deliveryLat, deliveryLng]);
 
   useFocusEffect(
     useCallback(() => {

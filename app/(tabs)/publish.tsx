@@ -66,7 +66,7 @@ export default function PublishScreen() {
             </View>
             <Text style={[styles.title, { color: c.text }]}>Publier</Text>
             <Text style={[styles.text, { color: c.textMuted }]}>
-              Connecte-toi pour vendre en vidéo ou demander un article.
+              Connecte-toi pour publier en vidéo ou demander un article.
             </Text>
             <Pressable
               style={[styles.primary, { backgroundColor: c.primary }]}
@@ -120,21 +120,21 @@ export default function PublishScreen() {
               <Text
                 style={[styles.text, { color: c.textMuted, textAlign: "left" }]}
               >
-                Vends un article, ou demande ce que tu cherches — tout le monde
-                voit les demandes.
+                Publie un article, ou demande ce que tu cherches — tout le
+                monde voit les demandes.
               </Text>
             </Animated.View>
             <ChoiceCard
               icon="bag-add"
-              title="Vendre un article"
-              subtitle="Vendre en vidéo — 3 gestes : vidéo, prix, poster"
+              title="Publier un article"
+              subtitle="Publier en vidéo — 3 gestes : vidéo, prix, poster"
               delay={40}
               onPress={() => router.setParams({ mode: "sell" })}
             />
             <ChoiceCard
               icon="search"
               title="Je cherche"
-              subtitle="Budget, neuf ou occasion — les vendeurs te répondent"
+              subtitle="Budget, neuf ou occasion — les Business te répondent"
               delay={110}
               onPress={() => router.setParams({ mode: "wanted" })}
             />

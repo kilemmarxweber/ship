@@ -31,6 +31,25 @@ import { useColors } from "@/src/use-colors";
 export function AuthSheet() {
   const open = useSession((state) => state.authOpen);
   const closeAuth = useSession((state) => state.closeAuth);
+  const hideToast = useToast((state) => state.hide);
+
+  useEffect(() => {
+    if (open) return;
+    hideToast();
+    Keyboard.dismiss();
+  }, [open, hideToast]);
+
+  if (!open) return null;
+  return <AuthSheetContent closeAuth={closeAuth} hideToast={hideToast} />;
+}
+
+function AuthSheetContent({
+  closeAuth,
+  hideToast,
+}: {
+  closeAuth: () => void;
+  hideToast: () => void;
+}) {
   const setToken = useSession((state) => state.setToken);
   const insets = useSafeAreaInsets();
   const c = useColors();
@@ -46,7 +65,6 @@ export function AuthSheet() {
   const [hidePass, setHidePass] = useState(true);
   const [pending, setPending] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
-  const hideToast = useToast((state) => state.hide);
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -62,14 +80,6 @@ export function AuthSheet() {
       hide.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!open) {
-      setPicking(false);
-      hideToast();
-      Keyboard.dismiss();
-    }
-  }, [open, hideToast]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -148,7 +158,7 @@ export function AuthSheet() {
 
   return (
     <Modal
-      visible={open}
+      visible
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={closeAuth}

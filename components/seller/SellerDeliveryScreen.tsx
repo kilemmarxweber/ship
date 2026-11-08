@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
 import { safeBack } from "@/src/nav";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -24,6 +23,7 @@ import { usePaged } from "@/src/use-paged";
 import { useColors } from "@/src/use-colors";
 
 type Tab = "couriers" | "rates";
+type DeliveryShop = { id: string; name: string; slug: string };
 
 type Courier = {
   id: string;
@@ -56,34 +56,35 @@ export function SellerDeliveryScreen() {
     queryKey: ["delivery-shops", token ?? "guest"],
     enabled: Boolean(token),
     queryFn: () =>
-      api<{ shops?: { id: string; name: string; slug: string }[] }>(
-        "/api/shops?mine=1",
-      ),
+      api<{ shops?: DeliveryShop[] }>("/api/shops?mine=1"),
   });
   const shops = shopsQ.data?.shops ?? [];
-  useEffect(() => {
-    if (!shopId && shops[0]?.id) setShopId(shops[0].id);
-  }, [shops, shopId]);
+  const activeShopId = shopId || shops[0]?.id || "";
 
   const couriersQ = useQuery({
-    queryKey: ["delivery-couriers", token ?? "guest", shopId],
-    enabled: Boolean(token && shopId),
+    queryKey: ["delivery-couriers", token ?? "guest", activeShopId],
+    enabled: Boolean(token && activeShopId),
     queryFn: () =>
       api<{ couriers?: Courier[] }>(
-        `/api/shops/delivery/couriers?shopId=${shopId}`,
+        `/api/shops/delivery/couriers?shopId=${activeShopId}`,
       ),
   });
   const ratesQ = useQuery({
-    queryKey: ["delivery-rates", token ?? "guest", shopId],
-    enabled: Boolean(token && shopId),
+    queryKey: ["delivery-rates", token ?? "guest", activeShopId],
+    enabled: Boolean(token && activeShopId),
     queryFn: () =>
-      api<{ rates?: Rate[] }>(`/api/shops/delivery/rates?shopId=${shopId}`),
+      api<{ rates?: Rate[] }>(
+        `/api/shops/delivery/rates?shopId=${activeShopId}`,
+      ),
   });
 
   const couriers = couriersQ.data?.couriers ?? [];
   const rates = ratesQ.data?.rates ?? [];
-  const pagedCouriers = usePaged(couriers, `c-${shopId}-${couriers.length}`);
-  const pagedRates = usePaged(rates, `r-${shopId}-${rates.length}`);
+  const pagedCouriers = usePaged(
+    couriers,
+    `c-${activeShopId}-${couriers.length}`,
+  );
+  const pagedRates = usePaged(rates, `r-${activeShopId}-${rates.length}`);
 
   return (
     <ScrollView
@@ -120,7 +121,11 @@ export function SellerDeliveryScreen() {
         </Pressable>
       ) : (
         <>
-          <ShopPicker shops={shops} value={shopId} onChange={setShopId} />
+          <ShopPicker
+            shops={shops}
+            value={activeShopId}
+            onChange={setShopId}
+          />
           <View style={styles.tabs}>
             {(
               [
@@ -154,7 +159,7 @@ export function SellerDeliveryScreen() {
             })}
           </View>
 
-          {!shopId ||
+          {!activeShopId ||
           (tab === "couriers" ? couriersQ.isLoading : ratesQ.isLoading) ? (
             <ActivityIndicator color={c.primary} />
           ) : tab === "couriers" ? (

@@ -61,7 +61,14 @@ export function LiveProductsSheet({
   onBuy?: (product: Product) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [detail, setDetail] = useState<Product | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<{
+    id: string;
+    product: Product;
+  } | null>(null);
+  const [fetchedDetail, setFetchedDetail] = useState<{
+    id: string;
+    product: Product;
+  } | null>(null);
   const listRef = useRef<FlatList<CatalogRow>>(null);
   const viewH = useRef(1);
   const contentH = useRef(1);
@@ -97,30 +104,38 @@ export function LiveProductsSheet({
     return list;
   }, [catalog.data, featured, seed]);
 
+  const presentedRow = presentedProductId
+    ? rows.find((row) => row.id === presentedProductId)
+    : undefined;
+  const remoteDetail = useMemo(
+    () =>
+      presentedRow
+        ? asProduct(presentedRow, shopId)
+        : presentedProductId && fetchedDetail?.id === presentedProductId
+          ? fetchedDetail.product
+          : null,
+    [fetchedDetail, presentedProductId, presentedRow, shopId],
+  );
+  const detail = open
+    ? presentedProductId
+      ? remoteDetail
+      : selectedDetail?.product ?? null
+    : null;
+
   useEffect(() => {
-    if (!open) {
-      setDetail(null);
-      return;
-    }
-    if (!presentedProductId) {
-      setDetail(null);
-      return;
-    }
-    const hit = rows.find((row) => row.id === presentedProductId);
-    if (hit) {
-      setDetail(asProduct(hit, shopId));
-      return;
-    }
+    if (!open || !presentedProductId || presentedRow || remoteDetail) return;
     let cancel = false;
     void api<{ product?: Product }>(`/api/products/${presentedProductId}`)
       .then((data) => {
-        if (!cancel && data.product) setDetail(data.product);
+        if (!cancel && data.product) {
+          setFetchedDetail({ id: presentedProductId, product: data.product });
+        }
       })
       .catch(() => undefined);
     return () => {
       cancel = true;
     };
-  }, [isHost, open, presentedProductId, rows, shopId]);
+  }, [open, presentedProductId, presentedRow, remoteDetail]);
 
   useEffect(() => {
     if (isHost || detail) return;
@@ -134,14 +149,19 @@ export function LiveProductsSheet({
   function openDetail(row: CatalogRow) {
     if (!isHost) return;
     const product = asProduct(row, shopId);
-    setDetail(product);
+    setSelectedDetail({ id: product.id, product });
     onView(product);
   }
 
   function closeDetail() {
     if (!isHost) return;
-    setDetail(null);
+    setSelectedDetail(null);
     onClearView?.();
+  }
+
+  function closeSheet() {
+    setSelectedDetail(null);
+    onClose();
   }
 
   function onListScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -160,21 +180,21 @@ export function LiveProductsSheet({
       transparent
       statusBarTranslucent
       onRequestClose={
-        isHost ? (detail ? closeDetail : onClose) : () => undefined
+        isHost ? (detail ? closeDetail : closeSheet) : () => undefined
       }
     >
       <View style={styles.frame}>
         {isHost ? (
           <Pressable
             style={styles.backdrop}
-            onPress={detail ? closeDetail : onClose}
+            onPress={detail ? closeDetail : closeSheet}
           />
         ) : (
           <View style={styles.backdrop} />
         )}
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
           {isHost ? (
-            <SheetReduce onPress={detail ? closeDetail : onClose} />
+            <SheetReduce onPress={detail ? closeDetail : closeSheet} />
           ) : (
             <View style={styles.handle} />
           )}

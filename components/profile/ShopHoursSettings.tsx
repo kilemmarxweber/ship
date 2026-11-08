@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { ShopPicker } from "@/components/profile/ShopPicker";
@@ -27,6 +27,28 @@ type ShopRow = {
   owner?: { name?: string | null } | null;
 };
 
+type HoursDraft = {
+  shopId: string;
+  alwaysOpen: boolean;
+  hoursStart: string;
+  hoursEnd: string;
+  workDays: WeekdayJs[];
+};
+
+const EMPTY_SHOPS: ShopRow[] = [];
+
+function initialDraft(shop: ShopRow | null): HoursDraft {
+  const configured = shop ? hoursAreConfigured(shop) : false;
+  const days = shop ? parseWorkDays(shop.workDays) : [];
+  return {
+    shopId: shop?.id ?? "",
+    alwaysOpen: Boolean(shop?.alwaysOpen) || !configured,
+    hoursStart: shop?.hoursStart ?? "08:00",
+    hoursEnd: shop?.hoursEnd ?? "18:00",
+    workDays: configured && days.length ? days : [1, 2, 3, 4, 5],
+  };
+}
+
 export function ShopHoursSettings() {
   const t = useT();
   const c = useColors();
@@ -37,30 +59,25 @@ export function ShopHoursSettings() {
     enabled: Boolean(token),
     queryFn: () => api<{ shops?: ShopRow[] }>("/api/shops?mine=1"),
   });
-  const list = shops.data?.shops ?? [];
+  const list = shops.data?.shops ?? EMPTY_SHOPS;
   const [shopId, setShopId] = useState("");
-  const [alwaysOpen, setAlwaysOpen] = useState(true);
-  const [hoursStart, setHoursStart] = useState("08:00");
-  const [hoursEnd, setHoursEnd] = useState("18:00");
-  const [workDays, setWorkDays] = useState<WeekdayJs[]>([1, 2, 3, 4, 5]);
+  const [draft, setDraft] = useState<HoursDraft | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const shop = list.find((row) => row.id === shopId) ?? list[0] ?? null;
+  const shop =
+    list.find((row) => row.id === shopId) ?? list[0] ?? null;
   const selectedId = shop?.id ?? "";
+  const values =
+    draft?.shopId === selectedId ? draft : initialDraft(shop);
 
-  useEffect(() => {
-    if (list[0] && !shopId) setShopId(list[0].id);
-  }, [list, shopId]);
-
-  useEffect(() => {
+  function updateDraft(patch: Partial<HoursDraft>) {
     if (!shop) return;
-    const configured = hoursAreConfigured(shop);
-    setAlwaysOpen(Boolean(shop.alwaysOpen) || !configured);
-    setHoursStart(shop.hoursStart ?? "08:00");
-    setHoursEnd(shop.hoursEnd ?? "18:00");
-    const days = parseWorkDays(shop.workDays);
-    setWorkDays(configured && days.length ? days : [1, 2, 3, 4, 5]);
-  }, [shop]);
+    setDraft((current) => ({
+      ...(current?.shopId === selectedId ? current : initialDraft(shop)),
+      ...patch,
+      shopId: selectedId,
+    }));
+  }
 
   if (!token || list.length === 0) return null;
 
@@ -71,10 +88,10 @@ export function ShopHoursSettings() {
       await api(`/api/shops/${shop.slug}`, {
         method: "PATCH",
         body: JSON.stringify({
-          alwaysOpen,
-          hoursStart: alwaysOpen ? null : hoursStart,
-          hoursEnd: alwaysOpen ? null : hoursEnd,
-          workDays: alwaysOpen ? [] : workDays,
+          alwaysOpen: values.alwaysOpen,
+          hoursStart: values.alwaysOpen ? null : values.hoursStart,
+          hoursEnd: values.alwaysOpen ? null : values.hoursEnd,
+          workDays: values.alwaysOpen ? [] : values.workDays,
         }),
       });
       await queryClient.invalidateQueries({ queryKey: ["shops", "mine"] });
@@ -112,12 +129,12 @@ export function ShopHoursSettings() {
       ) : null}
       <View style={styles.modeRow}>
         <Pressable
-          onPress={() => setAlwaysOpen(true)}
+          onPress={() => updateDraft({ alwaysOpen: true })}
           style={[
             styles.mode,
             {
-              borderColor: alwaysOpen ? c.buyStart : "rgba(127,127,140,0.22)",
-              backgroundColor: alwaysOpen
+              borderColor: values.alwaysOpen ? c.buyStart : "rgba(127,127,140,0.22)",
+              backgroundColor: values.alwaysOpen
                 ? "rgba(255,77,141,0.12)"
                 : "transparent",
             },
@@ -128,12 +145,12 @@ export function ShopHoursSettings() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => setAlwaysOpen(false)}
+          onPress={() => updateDraft({ alwaysOpen: false })}
           style={[
             styles.mode,
             {
-              borderColor: !alwaysOpen ? c.buyStart : "rgba(127,127,140,0.22)",
-              backgroundColor: !alwaysOpen
+              borderColor: !values.alwaysOpen ? c.buyStart : "rgba(127,127,140,0.22)",
+              backgroundColor: !values.alwaysOpen
                 ? "rgba(255,77,141,0.12)"
                 : "transparent",
             },
@@ -144,12 +161,12 @@ export function ShopHoursSettings() {
           </Text>
         </Pressable>
       </View>
-      {!alwaysOpen ? (
+      {!values.alwaysOpen ? (
         <>
           <View style={styles.timeRow}>
             <TextInput
-              value={hoursStart}
-              onChangeText={setHoursStart}
+              value={values.hoursStart}
+              onChangeText={(hoursStart) => updateDraft({ hoursStart })}
               placeholder="08:00"
               placeholderTextColor={c.textMuted}
               style={[
@@ -159,8 +176,8 @@ export function ShopHoursSettings() {
             />
             <Text style={{ color: c.textMuted }}>—</Text>
             <TextInput
-              value={hoursEnd}
-              onChangeText={setHoursEnd}
+              value={values.hoursEnd}
+              onChangeText={(hoursEnd) => updateDraft({ hoursEnd })}
               placeholder="18:00"
               placeholderTextColor={c.textMuted}
               style={[
@@ -171,16 +188,16 @@ export function ShopHoursSettings() {
           </View>
           <View style={styles.days}>
             {WEEKDAY_UI.map((day) => {
-              const on = workDays.includes(day);
+              const on = values.workDays.includes(day);
               return (
                 <Pressable
                   key={day}
                   onPress={() =>
-                    setWorkDays((current) =>
-                      current.includes(day)
-                        ? current.filter((item) => item !== day)
-                        : [...current, day].sort(),
-                    )
+                    updateDraft({
+                      workDays: values.workDays.includes(day)
+                        ? values.workDays.filter((item) => item !== day)
+                        : [...values.workDays, day].sort(),
+                    })
                   }
                   style={[
                     styles.day,

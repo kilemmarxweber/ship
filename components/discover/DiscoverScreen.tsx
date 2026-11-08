@@ -268,7 +268,7 @@ export function DiscoverScreen() {
     [stripW],
   );
 
-  const onViewableItemsChanged = useRef(
+  const onViewableItemsChanged = useCallback(
     ({
       viewableItems,
     }: {
@@ -285,7 +285,8 @@ export function DiscoverScreen() {
       const key = `results:${pick.id}`;
       setFocusKey((current) => (current === key ? current : key));
     },
-  ).current;
+    [],
+  );
 
   async function joinChallenge(item: GrowthChallenge) {
     try {

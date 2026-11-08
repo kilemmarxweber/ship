@@ -74,9 +74,11 @@ export function paletteOf(theme: UserTheme) {
 export const categories = [
   "Tech",
   "Mode",
+  "Aliment",
+  "Beauté",
+  "Coiffure",
   "Maison",
   "Gaming",
-  "Beauté",
   "Auto",
   "Livres",
   "Sport",
@@ -88,9 +90,11 @@ export const categoryLooks: Record<
     icon:
       | "phone-portrait"
       | "shirt"
+      | "fast-food"
+      | "sparkles"
+      | "cut"
       | "home"
       | "game-controller"
-      | "sparkles"
       | "car-sport"
       | "book"
       | "barbell";
@@ -99,9 +103,11 @@ export const categoryLooks: Record<
 > = {
   Tech: { icon: "phone-portrait", colors: ["#0A84FF", "#0A84FF"] },
   Mode: { icon: "shirt", colors: ["#FF375F", "#FF375F"] },
+  Aliment: { icon: "fast-food", colors: ["#FF9500", "#FF9500"] },
+  Beauté: { icon: "sparkles", colors: ["#BF5AF2", "#BF5AF2"] },
+  Coiffure: { icon: "cut", colors: ["#FF6482", "#FF6482"] },
   Maison: { icon: "home", colors: ["#64D2FF", "#64D2FF"] },
   Gaming: { icon: "game-controller", colors: ["#5E5CE6", "#5E5CE6"] },
-  Beauté: { icon: "sparkles", colors: ["#BF5AF2", "#BF5AF2"] },
   Auto: { icon: "car-sport", colors: ["#636366", "#636366"] },
   Livres: { icon: "book", colors: ["#FF9F0A", "#FF9F0A"] },
   Sport: { icon: "barbell", colors: ["#30D158", "#30D158"] },

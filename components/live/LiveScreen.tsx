@@ -323,7 +323,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
 
   // Présence viewers — compte exact + liste (host)
   useEffect(() => {
-    if (!live || ended) return;
+    if (!live?.id || ended) return;
     let cancelled = false;
     const peerKey = me.data?.id ?? `anon:${sessionKey}`;
     const ping = async () => {

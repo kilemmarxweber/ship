@@ -304,17 +304,18 @@ function LiveLookProvider({
   isHost: boolean;
   children: ReactNode;
 }) {
-  const [look, setLook] = useState("studio");
+  const [localLook, setLocalLook] = useState("studio");
   const { send, message } = useDataChannel("ss-filter");
 
-  useEffect(() => {
-    if (isHost || !message?.payload) return;
+  const remoteLook = useMemo(() => {
+    if (!message?.payload) return null;
     const next = new TextDecoder().decode(message.payload);
-    if (isLiveLookId(next) || isArFilterId(next)) setLook(next);
-  }, [isHost, message]);
+    return isLiveLookId(next) || isArFilterId(next) ? next : null;
+  }, [message]);
+  const look = !isHost && remoteLook ? remoteLook : localLook;
 
   const pick = (id: string) => {
-    setLook(id);
+    setLocalLook(id);
     if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
   };
 
@@ -362,7 +363,10 @@ function LiveCatalogSyncInner({
   const lastOpen = useRef("");
   const lastScroll = useRef("");
   const scrollRef = useRef(scrollY);
-  scrollRef.current = scrollY;
+
+  useEffect(() => {
+    scrollRef.current = scrollY;
+  }, [scrollY]);
 
   useEffect(() => {
     if (!isHost) return;
@@ -571,8 +575,7 @@ export function LiveKitRoomGate({
     camera: !canPublish,
     microphone: !canPublish,
   });
-  const room = useRef<Room | null>(null);
-  if (!room.current) room.current = new Room(ROOM_OPTIONS);
+  const [room] = useState(() => new Room(ROOM_OPTIONS));
   const avApi = useMemo(
     () => ({
       setCamOk: (ok: boolean) => setAv((cur) => ({ ...cur, camera: ok })),
@@ -588,14 +591,14 @@ export function LiveKitRoomGate({
   );
 
   useEffect(() => {
-    const instance = room.current;
+    const instance = room;
     return () => {
       // Keep the room while screen-sharing so viewers still see the phone
       // after the host leaves ShipShop (FGS + MediaProjection).
       if (getActiveScreenShareLiveId()) return;
       void instance?.disconnect();
     };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
     let stop = false;
@@ -653,7 +656,7 @@ export function LiveKitRoomGate({
   const connectGen = useRef(0);
 
   useEffect(() => {
-    const instance = room.current;
+    const instance = room;
     if (!instance) return;
     const my = ++connectGen.current;
 
@@ -688,12 +691,12 @@ export function LiveKitRoomGate({
         if (my === connectGen.current) onLiveError(error as Error);
       }
     })();
-  }, [isHost, shouldConnect, token, url]);
+  }, [isHost, room, shouldConnect, token, url]);
 
   return (
     <AvCtx.Provider value={avApi}>
       <ScreenShareCtx.Provider value={screenShareApi}>
-        <RoomContext.Provider value={room.current}>
+        <RoomContext.Provider value={room}>
           <LiveLookProvider isHost={isHost}>
             <PublishLocalAv
               enabled={canPublish && audioOn}

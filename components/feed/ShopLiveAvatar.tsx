@@ -19,16 +19,20 @@ export function ShopLiveAvatar({
   logoUrl,
   name,
   size = 28,
+  accentColor,
+  accessibilityLabel,
   onPress,
 }: {
   live: boolean;
   logoUrl?: string | null;
   name: string;
   size?: number;
+  accentColor?: string;
+  accessibilityLabel?: string;
   onPress: () => void;
 }) {
   const tick = useSharedValue(0);
-  const ringColor = live ? colors.live : colors.emerald;
+  const ringColor = live ? colors.live : (accentColor ?? colors.emerald);
 
   useEffect(() => {
     tick.value = 0;
@@ -63,7 +67,12 @@ export function ShopLiveAvatar({
   const uri = mediaUrl(logoUrl ?? undefined);
 
   return (
-    <Pressable onPress={onPress} hitSlop={6}>
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? `Ouvrir la boutique ${name}`}
+    >
       <Animated.View
         style={[
           {

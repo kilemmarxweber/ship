@@ -311,6 +311,7 @@ export function MediaStrip({
   const replace = max === 1 && urls.length >= 1;
   const locked = busy || phase !== "idle";
   const full = locked || (urls.length >= max && max !== 1);
+  const montageImage = urls.find((url) => !isVideoUrl(url));
   const showPhotos = kind === "images" || kind === "mixed";
   const showVideos = kind === "videos" || kind === "mixed";
   const status =
@@ -476,6 +477,44 @@ export function MediaStrip({
         </View>
       ) : null}
 
+      {variant === "product" ? (
+        <Pressable
+          style={[
+            styles.montageButton,
+            {
+              backgroundColor: c.card,
+              borderColor: `${c.primary}66`,
+              opacity: montageImage && !locked ? 1 : 0.5,
+            },
+          ]}
+          disabled={!montageImage || locked}
+          accessibilityRole="button"
+          accessibilityLabel="Ouvrir le montage du produit"
+          onPress={() => {
+            if (!montageImage) return;
+            const meta = metas.find(
+              (item) => item.url === montageImage,
+            );
+            setEditing(
+              meta ?? {
+                url: montageImage,
+                originalUrl: montageImage,
+                width: 0,
+                height: 0,
+                ratio: 1,
+                fit: "contain",
+                isPrimary: urls[0] === montageImage,
+              },
+            );
+          }}
+        >
+          <Ionicons name="color-wand-outline" size={18} color={c.primary} />
+          <Text style={[styles.montageText, { color: c.text }]}>
+            Montage du produit
+          </Text>
+        </Pressable>
+      ) : null}
+
       <ProductImagePreviewSheet
         open={Boolean(preview)}
         meta={preview}
@@ -574,6 +613,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pendingText: { color: colors.primary, fontWeight: "800", fontSize: 12 },
+  montageButton: {
+    minHeight: 44,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  montageText: { fontSize: 13, fontWeight: "700" },
   banner: {
     marginTop: 8,
     flexDirection: "row",

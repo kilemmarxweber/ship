@@ -45,10 +45,19 @@ export function DiscoverCard({
 
   return (
     <View style={[styles.wrap, { width, height }]}>
-      {playing ? (
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => {
+          onFocus();
+          if (audio) onMute();
+        }}
+      >
+        {cover && !isVideoUrl(cover) ? <ReelCover uri={cover} /> : null}
+      </Pressable>
+      {playing && urls.length > 0 ? (
         <ReelGallery
           urls={urls}
-          playing={playing}
+          playing
           muted={muted || Boolean(product.soundtrack?.audioUrl)}
           width={width}
           height={height}
@@ -57,19 +66,10 @@ export function DiscoverCard({
             if (audio) onMute();
           }}
           dotsBottom={12}
-          restartToken={playing ? product.id : `${product.id}-off`}
+          restartToken={product.id}
+          poster={cover}
         />
-      ) : (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => {
-            onFocus();
-            if (audio) onMute();
-          }}
-        >
-          {cover ? <ReelCover uri={cover} /> : null}
-        </Pressable>
-      )}
+      ) : null}
       {product.soundtrack?.audioUrl && playing ? (
         <ReelSoundtrack
           uri={

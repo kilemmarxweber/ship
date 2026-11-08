@@ -32,7 +32,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ReelGallery } from "@/components/feed/ReelGallery";
-import { ReelSoundtrack } from "@/components/feed/ReelVideo";
+import { ReelCover, ReelSoundtrack } from "@/components/feed/ReelVideo";
 import {
     BuySheet,
     CommentsSheet,
@@ -41,7 +41,7 @@ import {
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
-import { api, ApiError, apiOrigin, mediaUrl } from "@/src/api";
+import { api, ApiError, apiOrigin, isVideoUrl, mediaUrl } from "@/src/api";
 import {
     emptyWeaveMemory,
     weaveChallenges,
@@ -120,6 +120,7 @@ export function FeedScreen() {
   const [active, setActive] = useState(0);
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
   const fetchingNextPage = useRef(false);
+  const pendingFollowShopIds = useRef(new Set<string>());
   const weaveMemory = useRef(emptyWeaveMemory());
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -162,7 +163,7 @@ export function FeedScreen() {
       if (isLocalFeedCursor(pageParam)) {
         return { products: [], nextCursor: null };
       }
-      const params = new URLSearchParams({ status: "ACTIVE", limit: "8" });
+      const params = new URLSearchParams({ status: "ACTIVE", limit: "16" });
       if (pageParam) params.set("cursor", String(pageParam));
       if (tab === "following") params.set("following", "1");
       try {
@@ -202,7 +203,7 @@ export function FeedScreen() {
       const open = (query.state.data?.lives ?? []).some(
         (row) => row.status !== "ENDED",
       );
-      return open ? 2000 : 8000;
+      return open ? 8000 : 15000;
     },
   });
 
@@ -227,6 +228,15 @@ export function FeedScreen() {
       "feed",
     );
   }, [products, tab, surface.data?.challenges, me.data?.id]);
+  const remainingProductsByRow = useMemo(() => {
+    const remaining = new Array<number>(feedRows.length);
+    let productCount = 0;
+    for (let index = feedRows.length - 1; index >= 0; index -= 1) {
+      if (feedRows[index]?.kind === "item") productCount += 1;
+      remaining[index] = productCount;
+    }
+    return remaining;
+  }, [feedRows]);
 
   useEffect(() => {
     if (feedRows.length === 0) {
@@ -267,20 +277,81 @@ export function FeedScreen() {
     },
     [settleCard],
   );
+  const {
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isError,
+  } = feed;
+  const fetchNextPageSilently = useCallback(() => {
+    if (
+      !online ||
+      !focused ||
+      !hasNextPage ||
+      isFetchingNextPage ||
+      isError ||
+      fetchingNextPage.current
+    ) {
+      return;
+    }
+    fetchingNextPage.current = true;
+    void fetchNextPage({ cancelRefetch: false })
+      .catch(() => undefined)
+      .finally(() => {
+        fetchingNextPage.current = false;
+      });
+  }, [
+    fetchNextPage,
+    focused,
+    hasNextPage,
+    isError,
+    isFetchingNextPage,
+    online,
+  ]);
 
-  const onViewableItemsChanged = useRef(
-    ({
-      viewableItems,
-    }: {
-      viewableItems: { index: number | null; isViewable: boolean }[];
-    }) => {
-      const next = viewableItems.find((item) => item.isViewable)?.index;
-      if (typeof next === "number") {
-        setActive((current) => (current === next ? current : next));
-        setPaused(false);
-      }
-    },
-  ).current;
+  useEffect(() => {
+    if (
+      isReelTab &&
+      remainingProductsByRow[active] !== undefined &&
+      remainingProductsByRow[active] <= 2
+    ) {
+      fetchNextPageSilently();
+    }
+  }, [
+    active,
+    fetchNextPageSilently,
+    isReelTab,
+    remainingProductsByRow,
+  ]);
+
+  const feedExtraData = useMemo(
+    () => ({
+      active,
+      paused,
+      muted,
+      focused,
+      likeBurstId,
+      expandedCaptionId,
+      startingLiveId,
+      liveStamp: lives.dataUpdatedAt,
+      meId: me.data?.id,
+      railEpoch,
+      busyChallengeId,
+    }),
+    [
+      active,
+      busyChallengeId,
+      expandedCaptionId,
+      focused,
+      likeBurstId,
+      lives.dataUpdatedAt,
+      me.data?.id,
+      muted,
+      paused,
+      railEpoch,
+      startingLiveId,
+    ],
+  );
 
   const requireAuth = useCallback(() => {
     if (token) return true;
@@ -432,6 +503,8 @@ export function FeedScreen() {
     const current = liveProduct(product.id, product);
     const followed = Boolean(current.shop.followedByMe);
     const shopId = current.shop.id;
+    if (pendingFollowShopIds.current.has(shopId)) return;
+    pendingFollowShopIds.current.add(shopId);
     patchFeed((item) => {
       if (item.shop.id !== shopId) return item;
       const was = Boolean(item.shop.followedByMe);
@@ -472,7 +545,7 @@ export function FeedScreen() {
           },
         };
       });
-    } catch {
+    } catch (cause) {
       patchFeed((item) => {
         if (item.shop.id !== shopId) return item;
         return {
@@ -484,6 +557,12 @@ export function FeedScreen() {
           },
         };
       });
+      showToast(
+        cause instanceof Error ? cause.message : "Abonnement impossible",
+        "error",
+      );
+    } finally {
+      pendingFollowShopIds.current.delete(shopId);
     }
   }
 
@@ -753,46 +832,8 @@ export function FeedScreen() {
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.key}
             getItemType={(item) => item.kind}
-            drawDistance={height}
-            onEndReachedThreshold={0.65}
             onMomentumScrollEnd={onMomentumScrollEnd}
-            onEndReached={() => {
-              if (
-                !online ||
-                !focused ||
-                !feed.hasNextPage ||
-                feed.isFetchingNextPage ||
-                feed.isError ||
-                fetchingNextPage.current
-              ) {
-                return;
-              }
-              fetchingNextPage.current = true;
-              void feed
-                .fetchNextPage({ cancelRefetch: false })
-                .catch(() => undefined)
-                .finally(() => {
-                  fetchingNextPage.current = false;
-                });
-            }}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={{
-              itemVisiblePercentThreshold: 60,
-              waitForInteraction: false,
-            }}
-            extraData={{
-              active,
-              paused,
-              muted,
-              focused,
-              likeBurstId,
-              expandedCaptionId,
-              startingLiveId,
-              liveStamp: lives.dataUpdatedAt,
-              meId: me.data?.id,
-              railEpoch,
-              busyChallengeId,
-            }}
+            extraData={feedExtraData}
             ListEmptyComponent={
               <View style={[styles.center, { paddingTop: 180 }]}>
                 <Text style={[styles.emptyTitle, { color: c.text }]}>Vide</Text>
@@ -838,6 +879,7 @@ export function FeedScreen() {
                 ? (live.viewerCount ?? live.viewerPeak ?? 0)
                 : (item.shop.followersCount ?? item.viewsCount ?? 0);
               const slides = mediaList(item.images);
+              const cover = coverOf(item.images);
               const promo =
                 item.promoPercent && item.promoPercent > 0
                   ? item.promoPercent
@@ -852,20 +894,32 @@ export function FeedScreen() {
                 Boolean(promo);
               return (
                 <View style={[styles.page, { height, width }]}>
-                  <ReelGallery
-                    urls={slides}
-                    playing={
-                      index === active &&
-                      !paused &&
-                      (focused || commentProduct?.id === item.id)
-                    }
-                    muted={muted || Boolean(item.soundtrack?.audioUrl)}
-                    width={width}
-                    height={height}
-                    onTap={() => onMediaPress(item)}
-                    dotsBottom={bottom + 100}
-                    restartToken={active}
-                  />
+                  {slides.length > 0 && Math.abs(index - active) <= 1 ? (
+                    <ReelGallery
+                      urls={slides}
+                      playing={
+                        index === active &&
+                        !paused &&
+                        (focused || commentProduct?.id === item.id)
+                      }
+                      muted={muted || Boolean(item.soundtrack?.audioUrl)}
+                      width={width}
+                      height={height}
+                      onTap={() => onMediaPress(item)}
+                      dotsBottom={bottom + 100}
+                      restartToken={`${item.id}:${index === active ? "on" : "off"}`}
+                      poster={cover}
+                    />
+                  ) : (
+                    <Pressable
+                      style={StyleSheet.absoluteFill}
+                      onPress={() => onMediaPress(item)}
+                    >
+                      {cover && !isVideoUrl(cover) ? (
+                        <ReelCover uri={cover} />
+                      ) : null}
+                    </Pressable>
+                  )}
                   {item.soundtrack?.audioUrl && index === active ? (
                     <ReelSoundtrack
                       uri={

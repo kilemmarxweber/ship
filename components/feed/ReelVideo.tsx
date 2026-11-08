@@ -30,14 +30,18 @@ export function ReelVideo({
   muted,
   loop = true,
   onEnded,
+  poster,
 }: {
   uri: string;
   playing: boolean;
   muted: boolean;
   loop?: boolean;
   onEnded?: () => void;
+  /** Still image shown on top of the player until the first video frame is ready. */
+  poster?: string | null;
 }) {
   const wasPlaying = useRef(false);
+  const [frameReady, setFrameReady] = useState(false);
   useEffect(() => {
     wasPlaying.current = false;
   }, [uri]);
@@ -63,27 +67,50 @@ export function ReelVideo({
   });
 
   return (
-    <VideoView
-      player={player}
-      nativeControls={false}
-      contentFit="cover"
-      surfaceType="textureView"
-      allowsPictureInPicture={false}
-      style={styles.media}
-    />
+    <View style={styles.media}>
+      <VideoView
+        player={player}
+        nativeControls={false}
+        contentFit="cover"
+        surfaceType="textureView"
+        allowsPictureInPicture={false}
+        onFirstFrameRender={() => setFrameReady(true)}
+        style={styles.media}
+      />
+      {poster && !frameReady ? <ReelCover uri={poster} /> : null}
+    </View>
   );
 }
 
+/** Aspect ratios are expensive to resolve (network round-trip), so keep them. */
+const ratioCache = new Map<string, number>();
+const RATIO_CACHE_MAX = 400;
+
+function cacheRatio(uri: string, ratio: number) {
+  if (ratioCache.size >= RATIO_CACHE_MAX) {
+    const oldest = ratioCache.keys().next().value;
+    if (oldest !== undefined) ratioCache.delete(oldest);
+  }
+  ratioCache.set(uri, ratio);
+}
+
 export function ReelCover({ uri }: { uri: string }) {
-  const [ratio, setRatio] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState<{ uri: string; ratio: number } | null>(
+    null,
+  );
+  const cached = ratioCache.get(uri);
+  const ratio = cached ?? (loaded?.uri === uri ? loaded.ratio : null);
 
   useEffect(() => {
+    if (ratioCache.has(uri)) return;
     let live = true;
-    setRatio(null);
     RNImage.getSize(
       uri,
       (nextW, nextH) => {
-        if (live && nextW > 0 && nextH > 0) setRatio(nextW / nextH);
+        if (!live || nextW <= 0 || nextH <= 0) return;
+        const next = nextW / nextH;
+        cacheRatio(uri, next);
+        setLoaded({ uri, ratio: next });
       },
       () => undefined,
     );
@@ -115,7 +142,11 @@ export function ReelCover({ uri }: { uri: string }) {
         onLoad={(event) => {
           const nextW = event.source.width;
           const nextH = event.source.height;
-          if (nextW > 0 && nextH > 0) setRatio(nextW / nextH);
+          if (nextW > 0 && nextH > 0) {
+            const next = nextW / nextH;
+            cacheRatio(uri, next);
+            setLoaded({ uri, ratio: next });
+          }
         }}
       />
     </View>

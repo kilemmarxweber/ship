@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,6 +47,11 @@ import type {
     Product,
 } from "@/src/types";
 import { parseWalletCurrency } from "@/src/wallet";
+
+const GRID_VIEWABILITY = {
+  itemVisiblePercentThreshold: 55,
+  waitForInteraction: false,
+} as const;
 
 function CategoryChip({
   name,
@@ -101,11 +106,17 @@ export function DiscoverScreen() {
   const [muted, setMuted] = useState(false);
   const stripFocusLock = useRef(false);
   const fetchingNextPage = useRef(false);
+  const listRef = useRef<FlashListRef<Product>>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 220);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // New query/category => the result set is different, jump back to the top.
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [debounced, category]);
 
   const feed = useInfiniteQuery({
     queryKey: ["discover", debounced, category, token ?? "guest"],
@@ -143,6 +154,7 @@ export function DiscoverScreen() {
   const liveEvents = useQuery({
     queryKey: ["public-events"],
     queryFn: () => api<{ events: PublicEvent[] }>("/api/events"),
+    staleTime: 60_000,
   });
 
   const wallet = useQuery({
@@ -160,6 +172,7 @@ export function DiscoverScreen() {
   const deals = useInfiniteQuery({
     queryKey: ["discover-deals"],
     initialPageParam: "",
+    staleTime: 60_000,
     networkMode: "offlineFirst",
     queryFn: async ({ pageParam }) => {
       if (isLocalFeedCursor(pageParam)) {
@@ -230,6 +243,11 @@ export function DiscoverScreen() {
   const colW = width / 2 - 12;
   const colH = colW * 1.42;
   const playing = Boolean(focused);
+
+  const cardExtraData = useMemo(
+    () => ({ activeFocus, muted, playing }),
+    [activeFocus, muted, playing],
+  );
   const challenge = surface.data?.challenges?.find((row) => !row.done) ?? null;
   const highlights = surface.data?.highlights ?? [];
   const stories = surface.data?.stories ?? [];
@@ -326,8 +344,6 @@ export function DiscoverScreen() {
           snapToInterval={stripW + stripGap}
           snapToAlignment="start"
           disableIntervalMomentum
-          onScroll={onStripScroll}
-          scrollEventThrottle={64}
           onMomentumScrollEnd={onStripScroll}
           onScrollEndDrag={onStripScroll}
         >
@@ -646,85 +662,85 @@ export function DiscoverScreen() {
 
   return (
     <View style={styles.root}>
-      {feed.isLoading && products.length === 0 ? (
-        <View style={[styles.center, { paddingTop: insets.top + 40 }]}>
-          <ActivityIndicator color={colors.emerald} />
-        </View>
-      ) : feed.isError && products.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Découvrir indisponible</Text>
-          <Pressable style={styles.retry} onPress={() => void feed.refetch()}>
-            <Text style={styles.retryText}>Réessayer</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlashList
-          key={`discover:${token ?? "guest"}:${debounced}:${category ?? "all"}`}
-          data={products}
-          masonry
-          numColumns={2}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={header}
-          contentContainerStyle={{
-            paddingBottom: 96 + insets.bottom,
-          }}
-          onEndReachedThreshold={0.7}
-          onEndReached={() => {
-            if (
-              !online ||
-              !focused ||
-              !feed.hasNextPage ||
-              feed.isFetchingNextPage ||
-              feed.isError ||
-              fetchingNextPage.current
-            ) {
-              return;
-            }
-            fetchingNextPage.current = true;
-            void feed
-              .fetchNextPage({ cancelRefetch: false })
-              .catch(() => undefined)
-              .finally(() => {
-                fetchingNextPage.current = false;
-              });
-          }}
-          onScroll={(event) => {
-            if (event.nativeEvent.contentOffset.y > 80) {
-              stripFocusLock.current = false;
-            }
-          }}
-          scrollEventThrottle={80}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{
-            itemVisiblePercentThreshold: 55,
-            waitForInteraction: false,
-          }}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Aucun résultat</Text>
+      <FlashList
+        ref={listRef}
+        data={products}
+        masonry
+        numColumns={2}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={header}
+        contentContainerStyle={{
+          paddingBottom: 96 + insets.bottom,
+        }}
+        onEndReachedThreshold={0.7}
+        onEndReached={() => {
+          if (
+            !online ||
+            !focused ||
+            !feed.hasNextPage ||
+            feed.isFetchingNextPage ||
+            feed.isError ||
+            fetchingNextPage.current
+          ) {
+            return;
           }
-          extraData={{ activeFocus, muted, playing }}
-          renderItem={({ item }) => {
-            const key = `results:${item.id}`;
-            return (
-              <View style={styles.gridItem}>
-                <DiscoverCard
-                  product={item}
-                  width={colW}
-                  height={colH}
-                  playing={playing && activeFocus === key}
-                  muted={muted || activeFocus !== key}
-                  onFocus={() => setFocusKey(key)}
-                  onMute={() => {
-                    setFocusKey(key);
-                    setMuted((value) => (activeFocus === key ? !value : false));
-                  }}
-                  onBuy={() => setBuyProduct(item)}
-                />
-              </View>
-            );
-          }}
-        />
-      )}
+          fetchingNextPage.current = true;
+          void feed
+            .fetchNextPage({ cancelRefetch: false })
+            .catch(() => undefined)
+            .finally(() => {
+              fetchingNextPage.current = false;
+            });
+        }}
+        onScroll={(event) => {
+          if (event.nativeEvent.contentOffset.y > 80) {
+            stripFocusLock.current = false;
+          }
+        }}
+        scrollEventThrottle={80}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={GRID_VIEWABILITY}
+        ListEmptyComponent={
+          feed.isLoading ? (
+            <View style={styles.emptyBox}>
+              <ActivityIndicator color={colors.emerald} />
+            </View>
+          ) : feed.isError ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>Découvrir indisponible</Text>
+              <Pressable
+                style={styles.retry}
+                onPress={() => void feed.refetch()}
+              >
+                <Text style={styles.retryText}>Réessayer</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>Aucun résultat</Text>
+          )
+        }
+        extraData={cardExtraData}
+        renderItem={({ item }) => {
+          const key = `results:${item.id}`;
+          return (
+            <View style={styles.gridItem}>
+              <DiscoverCard
+                product={item}
+                width={colW}
+                height={colH}
+                playing={playing && activeFocus === key}
+                muted={muted || activeFocus !== key}
+                onFocus={() => setFocusKey(key)}
+                onMute={() => {
+                  setFocusKey(key);
+                  setMuted((value) => (activeFocus === key ? !value : false));
+                }}
+                onBuy={() => setBuyProduct(item)}
+              />
+            </View>
+          );
+        }}
+      />
       <BuySheet
         product={buyProduct}
         onClose={() => setBuyProduct(null)}
@@ -736,13 +752,6 @@ export function DiscoverScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    padding: 24,
-  },
   hero: {
     color: "#fff",
     fontSize: 28,
@@ -935,6 +944,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   gridItem: { padding: 6 },
+  emptyBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 48,
+  },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
   emptyText: {
     color: colors.muted,

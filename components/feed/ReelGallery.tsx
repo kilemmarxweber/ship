@@ -39,7 +39,9 @@ function SlideMedia({
   if (active && playing) {
     return (
       <ReelVideo
+        key={uri}
         uri={uri}
+        poster={poster}
         playing
         muted={muted}
         loop={loop}
@@ -194,7 +196,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    backgroundColor: "#0A0A0F",
     overflow: "hidden",
   },
   placeholder: {

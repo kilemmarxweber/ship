@@ -1,8 +1,10 @@
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/src/api";
-import { inboxQueryKey } from "@/src/offline/keys";
+import { commentsSnapKey, inboxQueryKey } from "@/src/offline/keys";
+import { snapshotGet } from "@/src/offline/db";
 import { useSession } from "@/src/session";
+import type { CommentItem } from "@/src/types";
 
 export { inboxQueryKey };
 
@@ -11,7 +13,12 @@ export type InboxConversation = {
   updatedAt: string;
   urgentPending?: boolean;
   unreadCount?: number;
-  shop: { id: string; name: string; logoUrl?: string | null };
+  shop: {
+    id: string;
+    name: string;
+    logoUrl?: string | null;
+    ownerUserId?: string | null;
+  };
   product?: { id: string; title: string; images: string[] } | null;
   wantedRequest?: { id: string; title: string } | null;
   buyer: { id: string; name: string; image?: string | null };
@@ -146,6 +153,69 @@ export function markCommentsReadLocal(
       ...totals(current.conversations, unreadComments),
     };
   });
+}
+
+/** Retire immédiatement une conversation supprimée de l'inbox locale. */
+export function removeConversationLocal(
+  queryClient: ReturnType<typeof useQueryClient>,
+  token: string | null,
+  conversationId: string,
+) {
+  queryClient.setQueryData<InboxSnapshot>(inboxQueryKey(token), (current) => {
+    if (!current) return current;
+    const conversations = current.conversations.filter(
+      (row) => row.id !== conversationId,
+    );
+    const next = {
+      ...current,
+      conversations,
+      ...totals(conversations, current.unreadComments),
+    };
+    void import("@/src/offline/persist").then(({ persistInbox }) => {
+      persistInbox(token, next);
+    });
+    return next;
+  });
+}
+
+/** Retire immédiatement un commentaire supprimé de l'inbox locale. */
+export function removeCommentLocal(
+  queryClient: ReturnType<typeof useQueryClient>,
+  token: string | null,
+  commentId: string,
+  productId?: string,
+) {
+  queryClient.setQueryData<InboxSnapshot>(inboxQueryKey(token), (current) => {
+    if (!current) return current;
+    let dropped = 0;
+    const comments = current.comments.filter((row) => {
+      if (row.id !== commentId) return true;
+      if (row.unread) dropped += 1;
+      return false;
+    });
+    const unreadComments = Math.max(0, current.unreadComments - dropped);
+    const next = {
+      ...current,
+      comments,
+      unreadComments,
+      ...totals(current.conversations, unreadComments),
+    };
+    void import("@/src/offline/persist").then(({ persistInbox }) => {
+      persistInbox(token, next);
+    });
+    return next;
+  });
+  if (productId) {
+    const cached = snapshotGet<CommentItem[]>(commentsSnapKey(productId));
+    if (cached) {
+      void import("@/src/offline/persist").then(({ persistComments }) => {
+        persistComments(
+          productId,
+          cached.filter((row) => row.id !== commentId),
+        );
+      });
+    }
+  }
 }
 
 export function conversationTitle(

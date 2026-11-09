@@ -24,12 +24,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/Toast";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { colorHex, isLightColor } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
 import { coverOf } from "@/src/media";
+import { useMe } from "@/src/me";
 import { snapshotGet } from "@/src/offline/db";
 import { commentsSnapKey } from "@/src/offline/keys";
 import { persistComments } from "@/src/offline/persist";
@@ -58,10 +60,12 @@ export function CommentsSheet({
   product,
   onClose,
   onPosted,
+  onDeleted,
 }: {
   product: Product | null;
   onClose: () => void;
   onPosted?: (productId: string) => void;
+  onDeleted?: (productId: string) => void;
 }) {
   return (
     <Modal
@@ -77,6 +81,7 @@ export function CommentsSheet({
           product={product}
           onClose={onClose}
           onPosted={onPosted}
+          onDeleted={onDeleted}
         />
       ) : null}
     </Modal>
@@ -87,18 +92,58 @@ function CommentsBody({
   product,
   onClose,
   onPosted,
+  onDeleted,
 }: {
   product: Product;
   onClose: () => void;
   onPosted?: (productId: string) => void;
+  onDeleted?: (productId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const me = useMe();
   const [items, setItems] = useState<CommentItem[]>(
     () => snapshotGet<CommentItem[]>(commentsSnapKey(product.id)) ?? [],
   );
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [keyboard, setKeyboard] = useState(0);
+  const [commentToDelete, setCommentToDelete] = useState<CommentItem | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
+
+  const myId = me.data?.id;
+  const roles = me.data?.roles ?? [];
+  const isPlatformAdmin =
+    roles.includes("ADMIN") || roles.includes("OWNER");
+  function canDelete(comment: CommentItem) {
+    if (comment.id.startsWith("temp:")) return false;
+    return comment.user.id === myId || isPlatformAdmin;
+  }
+
+  async function removeComment(comment: CommentItem) {
+    setDeleting(true);
+    try {
+      await api(`/api/products/${product.id}/comments/${comment.id}`, {
+        method: "DELETE",
+      });
+      setItems((current) => {
+        const next = current.filter((row) => row.id !== comment.id);
+        persistComments(product.id, next);
+        return next;
+      });
+      setCommentToDelete(null);
+      onDeleted?.(product.id);
+      showToast("Commentaire supprimé", "success");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -200,10 +245,26 @@ function CommentsBody({
           keyboardShouldPersistTaps="handled"
           style={{ maxHeight: 280 }}
           renderItem={({ item }) => (
-            <Text style={styles.line}>
-              <Text style={styles.name}>{item.user.name} </Text>
-              {item.body}
-            </Text>
+            <View style={styles.commentRow}>
+              <Text style={styles.line}>
+                <Text style={styles.name}>{item.user.name} </Text>
+                {item.body}
+              </Text>
+              {canDelete(item) ? (
+                <Pressable
+                  onPress={() => setCommentToDelete(item)}
+                  hitSlop={8}
+                  style={styles.commentDelete}
+                  accessibilityLabel="Retirer le commentaire"
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={14}
+                    color="rgba(255,255,255,0.5)"
+                  />
+                </Pressable>
+              ) : null}
+            </View>
           )}
           ListEmptyComponent={
             <Text style={styles.empty}>Aucun commentaire</Text>
@@ -222,6 +283,16 @@ function CommentsBody({
           </Pressable>
         </View>
       </View>
+      <ConfirmDialog
+        open={Boolean(commentToDelete)}
+        title="Retirer ce commentaire ?"
+        message="Cette action est définitive."
+        busy={deleting}
+        onCancel={() => setCommentToDelete(null)}
+        onConfirm={() => {
+          if (commentToDelete) void removeComment(commentToDelete);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -544,8 +615,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: { fontSize: 22, fontWeight: "800", color: "#fff" },
-  line: { color: "rgba(255,255,255,0.88)", paddingVertical: 6 },
+  line: {
+    flex: 1,
+    color: "rgba(255,255,255,0.88)",
+    paddingVertical: 6,
+  },
   name: { fontWeight: "700", color: "#fff" },
+  commentRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  commentDelete: { padding: 4 },
   empty: { color: colors.muted, paddingVertical: 12 },
   row: { flexDirection: "row", gap: 8, alignItems: "center" },
   input: {

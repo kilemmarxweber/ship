@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
+import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -11,17 +13,20 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { mediaUrl } from "@/src/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { api, mediaUrl } from "@/src/api";
 import { compactCount } from "@/src/format";
 import {
     conversationAvatar,
     conversationTitle,
+    removeConversationLocal,
     useInbox,
     type InboxConversation,
 } from "@/src/inbox";
 import { useMe } from "@/src/me";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
+import { showToast } from "@/src/toast";
 
 function timeLabel(iso?: string) {
   if (!iso) return "";
@@ -52,14 +57,37 @@ function Avatar({ uri, name }: { uri: string | null; name: string }) {
 
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
   const me = useMe();
   const inbox = useInbox();
   const myId = me.data?.id;
   const rows = inbox.data?.conversations ?? [];
+  const roles = me.data?.roles ?? [];
+  const isPlatformAdmin = roles.includes("ADMIN") || roles.includes("OWNER");
+  const [target, setTarget] = useState<InboxConversation | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const unread = inbox.data?.unreadMessages ?? 0;
+
+  async function confirmDelete() {
+    if (!target || !token) return;
+    setDeleting(true);
+    try {
+      await api(`/api/conversations/${target.id}`, { method: "DELETE" });
+      removeConversationLocal(queryClient, token, target.id);
+      setTarget(null);
+      showToast("Conversation supprimée", "success");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <View
@@ -106,9 +134,28 @@ export function InboxScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.list}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ThreadRow item={item} myId={myId} />}
+          renderItem={({ item }) => (
+            <ThreadRow
+              item={item}
+              myId={myId}
+              canDelete={
+                item.buyer.id === myId ||
+                item.shop.ownerUserId === myId ||
+                isPlatformAdmin
+              }
+              onDelete={setTarget}
+            />
+          )}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(target)}
+        title="Supprimer la conversation ?"
+        message="Elle sera retirée de ta boîte de réception."
+        busy={deleting}
+        onCancel={() => setTarget(null)}
+        onConfirm={() => void confirmDelete()}
+      />
     </View>
   );
 }
@@ -116,75 +163,97 @@ export function InboxScreen() {
 function ThreadRow({
   item,
   myId,
+  canDelete,
+  onDelete,
 }: {
   item: InboxConversation;
   myId?: string | null;
+  canDelete: boolean;
+  onDelete: (item: InboxConversation) => void;
 }) {
   const title = conversationTitle(item, myId);
   const last = item.messages[0];
   const unread = (item.unreadCount ?? 0) > 0;
   const urgent = Boolean(item.urgentPending);
   return (
-    <Pressable
-      onPress={() => router.push(`/messages/${item.id}` as Href)}
+    <View
       style={[
         styles.row,
         urgent && styles.rowUrgent,
         unread && !urgent && styles.rowUnread,
       ]}
     >
-      <View>
-        <Avatar uri={conversationAvatar(item, myId)} name={title} />
-        {urgent ? (
-          <View style={styles.urgentDot}>
-            <Ionicons name="warning" size={10} color="#111" />
-          </View>
-        ) : null}
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.rowTop}>
-          <Text
-            style={[styles.name, unread && styles.nameUnread]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-          <View style={styles.meta}>
-            <Text style={styles.time}>{timeLabel(last?.createdAt)}</Text>
-            {unread ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {(item.unreadCount ?? 0) > 9
-                    ? "9+"
-                    : compactCount(item.unreadCount ?? 0)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+      <Pressable
+        onPress={() => router.push(`/messages/${item.id}` as Href)}
+        style={styles.rowMain}
+      >
+        <View>
+          <Avatar uri={conversationAvatar(item, myId)} name={title} />
+          {urgent ? (
+            <View style={styles.urgentDot}>
+              <Ionicons name="warning" size={10} color="#111" />
+            </View>
+          ) : null}
         </View>
-        {item.wantedRequest ? (
-          <Text style={styles.ctx} numberOfLines={1}>
-            Je cherche · {item.wantedRequest.title}
+        <View style={{ flex: 1 }}>
+          <View style={styles.rowTop}>
+            <Text
+              style={[styles.name, unread && styles.nameUnread]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            <View style={styles.meta}>
+              <Text style={styles.time}>{timeLabel(last?.createdAt)}</Text>
+              {unread ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {(item.unreadCount ?? 0) > 9
+                      ? "9+"
+                      : compactCount(item.unreadCount ?? 0)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          {item.wantedRequest ? (
+            <Text style={styles.ctx} numberOfLines={1}>
+              Je cherche · {item.wantedRequest.title}
+            </Text>
+          ) : null}
+          {item.product ? (
+            <Text style={styles.ctx} numberOfLines={1}>
+              {item.product.title}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.preview,
+              urgent && styles.previewUrgent,
+              unread && !urgent && styles.previewUnread,
+            ]}
+            numberOfLines={2}
+          >
+            {urgent ? "⚠ " : ""}
+            {last?.body ?? "Nouvelle conversation"}
           </Text>
-        ) : null}
-        {item.product ? (
-          <Text style={styles.ctx} numberOfLines={1}>
-            {item.product.title}
-          </Text>
-        ) : null}
-        <Text
-          style={[
-            styles.preview,
-            urgent && styles.previewUrgent,
-            unread && !urgent && styles.previewUnread,
-          ]}
-          numberOfLines={2}
+        </View>
+      </Pressable>
+      {canDelete ? (
+        <Pressable
+          onPress={() => onDelete(item)}
+          hitSlop={8}
+          style={styles.deleteBtn}
+          accessibilityLabel="Supprimer la conversation"
         >
-          {urgent ? "⚠ " : ""}
-          {last?.body ?? "Nouvelle conversation"}
-        </Text>
-      </View>
-    </Pressable>
+          <Ionicons
+            name="trash-outline"
+            size={16}
+            color="rgba(255,255,255,0.45)"
+          />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -239,6 +308,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 10,
     alignItems: "flex-start",
+  },
+  rowMain: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  deleteBtn: {
+    alignSelf: "center",
+    padding: 6,
   },
   rowUrgent: {
     backgroundColor: "rgba(245,158,11,0.12)",

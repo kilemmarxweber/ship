@@ -1337,6 +1337,16 @@ export function FeedScreen() {
               : item,
           );
         }}
+        onDeleted={(productId) => {
+          patchFeed((item) =>
+            item.id === productId
+              ? {
+                  ...item,
+                  commentsCount: Math.max(0, item.commentsCount - 1),
+                }
+              : item,
+          );
+        }}
       />
       <BuySheet
         product={buyProduct}

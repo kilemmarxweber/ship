@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { compactCount } from "@/src/format";
@@ -22,6 +23,7 @@ import {
     conversationTitle,
     inboxQueryKey,
     markCommentsReadLocal,
+    removeCommentLocal,
     useInbox,
     type InboxComment,
     type InboxConversation,
@@ -29,6 +31,7 @@ import {
 import { useMe } from "@/src/me";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
+import { showToast } from "@/src/toast";
 
 export function NotificationsSheet({
   open,
@@ -43,11 +46,40 @@ export function NotificationsSheet({
   const me = useMe();
   const inbox = useInbox();
   const [tab, setTab] = useState<"messages" | "comments">("messages");
+  const [commentTarget, setCommentTarget] = useState<InboxComment | null>(null);
+  const [deletingComment, setDeletingComment] = useState(false);
   const myId = me.data?.id;
   const conversations = inbox.data?.conversations ?? [];
   const comments = inbox.data?.comments ?? [];
   const unreadMessages = inbox.data?.unreadMessages ?? 0;
   const unreadComments = inbox.data?.unreadComments ?? 0;
+  const roles = me.data?.roles ?? [];
+  const isPlatformAdmin = roles.includes("ADMIN") || roles.includes("OWNER");
+
+  function canDeleteComment(row: InboxComment) {
+    return row.user.id === myId || isPlatformAdmin;
+  }
+
+  async function removeComment(row: InboxComment) {
+    if (!token) return;
+    setDeletingComment(true);
+    try {
+      await api(`/api/products/${row.product.id}/comments/${row.id}`, {
+        method: "DELETE",
+      });
+      removeCommentLocal(queryClient, token, row.id, row.product.id);
+      await queryClient.invalidateQueries({ queryKey: ["feed"] });
+      setCommentTarget(null);
+      showToast("Commentaire supprimé", "success");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeletingComment(false);
+    }
+  }
 
   async function openComments() {
     setTab("comments");
@@ -163,7 +195,14 @@ export function NotificationsSheet({
             ) : comments.length === 0 ? (
               <Text style={styles.empty}>Aucun commentaire</Text>
             ) : (
-              comments.map((row) => <CommentRow key={row.id} row={row} />)
+              comments.map((row) => (
+                <CommentRow
+                  key={row.id}
+                  row={row}
+                  canDelete={canDeleteComment(row)}
+                  onDelete={() => setCommentTarget(row)}
+                />
+              ))
             )}
           </ScrollView>
           <Pressable
@@ -183,6 +222,16 @@ export function NotificationsSheet({
             </LinearGradient>
           </Pressable>
         </View>
+        <ConfirmDialog
+          open={Boolean(commentTarget)}
+          title="Retirer ce commentaire ?"
+          message="Cette action est définitive."
+          busy={deletingComment}
+          onCancel={() => setCommentTarget(null)}
+          onConfirm={() => {
+            if (commentTarget) void removeComment(commentTarget);
+          }}
+        />
       </View>
     </Modal>
   );
@@ -247,7 +296,15 @@ function MessageRow({
   );
 }
 
-function CommentRow({ row }: { row: InboxComment }) {
+function CommentRow({
+  row,
+  canDelete,
+  onDelete,
+}: {
+  row: InboxComment;
+  canDelete: boolean;
+  onDelete: () => void;
+}) {
   return (
     <View style={styles.item}>
       <View style={styles.avatarFallback}>
@@ -261,6 +318,20 @@ function CommentRow({ row }: { row: InboxComment }) {
           {row.body}
         </Text>
       </View>
+      {canDelete ? (
+        <Pressable
+          onPress={onDelete}
+          hitSlop={8}
+          style={styles.deleteBtn}
+          accessibilityLabel="Retirer le commentaire"
+        >
+          <Ionicons
+            name="trash-outline"
+            size={16}
+            color="rgba(255,255,255,0.45)"
+          />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -356,6 +427,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   itemUnread: { borderWidth: 1, borderColor: "rgba(255,77,141,0.35)" },
+  deleteBtn: { alignSelf: "center", padding: 6 },
   avatar: { width: 56, height: 68, borderRadius: 10, backgroundColor: "#222" },
   avatarFallback: {
     width: 56,

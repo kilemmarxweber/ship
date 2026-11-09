@@ -16,8 +16,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { api } from "@/src/api";
-import { inboxQueryKey, markConversationSeenLocal } from "@/src/inbox";
+import {
+  inboxQueryKey,
+  markConversationSeenLocal,
+  removeConversationLocal,
+} from "@/src/inbox";
 import { useMe } from "@/src/me";
 import { snapshotGet } from "@/src/offline/db";
 import { threadSnapKey } from "@/src/offline/keys";
@@ -55,7 +60,7 @@ type OpenIssue = {
 
 type Conversation = {
   id: string;
-  shop: { id: string; name: string };
+  shop: { id: string; name: string; ownerUserId?: string | null };
   product: { id: string; title: string } | null;
   wantedRequest?: { id: string; title: string } | null;
   buyer: { id: string; name: string };
@@ -71,6 +76,11 @@ export function ThreadScreen({ id }: { id: string }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<ChatMessage | null>(
+    null,
+  );
+  const [conversationToDelete, setConversationToDelete] = useState(false);
   const [localMessages, setLocalMessages] = useState<ChatMessage[] | null>(
     null,
   );
@@ -113,6 +123,80 @@ export function ThreadScreen({ id }: { id: string }) {
   const isBuyer = conversation?.buyer.id === myId;
   const title = isBuyer ? conversation?.shop.name : conversation?.buyer.name;
   const hasUrgent = messages.some((row) => row.isUrgent && row.requiresAck);
+
+  const roles = me.data?.roles ?? [];
+  const isPlatformAdmin =
+    roles.includes("ADMIN") || roles.includes("OWNER");
+
+  function canDeleteMessage(row: ChatMessage) {
+    if (row.id.startsWith("temp:")) return false;
+    return row.senderId === myId || isPlatformAdmin;
+  }
+
+  function canDeleteConversation() {
+    if (!conversation || !myId) return false;
+    return (
+      conversation.buyer.id === myId ||
+      conversation.shop.ownerUserId === myId ||
+      isPlatformAdmin
+    );
+  }
+
+  async function deleteMessage(row: ChatMessage) {
+    if (!token) return;
+    setDeleting(true);
+    const next = (localMessages ?? remoteMessages).filter(
+      (item) => item.id !== row.id,
+    );
+    try {
+      await api(`/api/conversations/${id}/messages/${row.id}`, {
+        method: "DELETE",
+      });
+      setLocalMessages(next);
+      persistThread(id, next);
+      queryClient.setQueryData(
+        ["conversation", id, token],
+        (current: unknown) =>
+          current && typeof current === "object"
+            ? { ...(current as Record<string, unknown>), messages: next }
+            : current,
+      );
+      setMessageToDelete(null);
+      markConversationSeenLocal(queryClient, token, id);
+      await queryClient.invalidateQueries({ queryKey: inboxQueryKey(token) });
+      await thread.refetch();
+      setLocalMessages(null);
+      showToast("Message supprimé", "success");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deleteConversation() {
+    if (!token) return;
+    setDeleting(true);
+    try {
+      await api(`/api/conversations/${id}`, { method: "DELETE" });
+      removeConversationLocal(queryClient, token, id);
+      queryClient.removeQueries({ queryKey: ["conversation", id, token] });
+      persistThread(id, []);
+      setConversationToDelete(false);
+      showToast("Conversation supprimée", "success");
+      router.replace("/messages" as Href);
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Suppression impossible",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function send() {
     const text = draft.trim();
@@ -255,6 +339,20 @@ export function ThreadScreen({ id }: { id: string }) {
             <Text style={styles.urgentText}>Urgent</Text>
           </View>
         ) : null}
+        {conversation && canDeleteConversation() ? (
+          <Pressable
+            onPress={() => setConversationToDelete(true)}
+            hitSlop={8}
+            style={styles.headerAction}
+            accessibilityLabel="Supprimer la conversation"
+          >
+            <Ionicons
+              name="trash-outline"
+              size={18}
+              color="rgba(255,255,255,0.72)"
+            />
+          </Pressable>
+        ) : null}
       </View>
 
       {!isBuyer && issues.length > 0 ? (
@@ -315,12 +413,28 @@ export function ThreadScreen({ id }: { id: string }) {
                     </Text>
                   ) : null}
                   <Text style={styles.body}>{row.body}</Text>
-                  <Text style={styles.stamp}>
-                    {new Date(row.createdAt).toLocaleTimeString("fr-FR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
+                  <View style={styles.bubbleFoot}>
+                    <Text style={styles.stamp}>
+                      {new Date(row.createdAt).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                    {canDeleteMessage(row) ? (
+                      <Pressable
+                        onPress={() => setMessageToDelete(row)}
+                        hitSlop={8}
+                        style={styles.msgDelete}
+                        accessibilityLabel="Supprimer le message"
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={12}
+                          color="rgba(255,255,255,0.62)"
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               </View>
             );
@@ -367,6 +481,25 @@ export function ThreadScreen({ id }: { id: string }) {
           </Pressable>
         </View>
       </View>
+
+      <ConfirmDialog
+        open={Boolean(messageToDelete)}
+        title="Supprimer ce message ?"
+        message="Cette action est définitive pour tous les participants."
+        busy={deleting}
+        onCancel={() => setMessageToDelete(null)}
+        onConfirm={() => {
+          if (messageToDelete) void deleteMessage(messageToDelete);
+        }}
+      />
+      <ConfirmDialog
+        open={conversationToDelete}
+        title="Supprimer la conversation ?"
+        message="Elle sera retirée de ta boîte de réception."
+        busy={deleting}
+        onCancel={() => setConversationToDelete(false)}
+        onConfirm={() => void deleteConversation()}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -399,6 +532,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   urgentText: { color: "#fcd34d", fontSize: 10, fontWeight: "800" },
+  headerAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   issues: { gap: 8, marginBottom: 10 },
   issue: {
     borderRadius: 16,
@@ -459,7 +600,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   body: { color: "#fff", lineHeight: 20, fontWeight: "600" },
-  stamp: { color: "rgba(255,255,255,0.55)", fontSize: 10, marginTop: 4 },
+  bubbleFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  msgDelete: { padding: 2 },
+  stamp: { color: "rgba(255,255,255,0.55)", fontSize: 10 },
   dock: {
     paddingTop: 10,
     gap: 10,

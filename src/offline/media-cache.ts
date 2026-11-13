@@ -9,7 +9,8 @@ import {
     type MediaCacheRow,
 } from "@/src/offline/db";
 
-const MAX_ENTRIES = 48;
+/** ~24 feed products × (video + audio) with headroom for discover. */
+const MAX_ENTRIES = 72;
 const CONCURRENCY = 2;
 
 const inflight = new Map<string, Promise<string | null>>();
@@ -99,7 +100,10 @@ export function resolveCachedMedia(remoteUrl: string | null | undefined) {
   }
   if (Platform.OS === "web") return null;
   const row = mediaCacheGet(remoteUrl);
-  return row?.localUri ? withFileScheme(row.localUri) : null;
+  if (!row?.localUri) return null;
+  // Keep recently used AV at the front of the LRU prune window.
+  mediaCacheUpsert({ ...row, updatedAt: Date.now() });
+  return withFileScheme(row.localUri);
 }
 
 async function ensureDir(dir: string) {

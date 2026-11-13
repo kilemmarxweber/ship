@@ -19,7 +19,6 @@ export function ShopLiveAvatar({
   logoUrl,
   name,
   size = 28,
-  accentColor,
   accessibilityLabel,
   onPress,
 }: {
@@ -27,40 +26,68 @@ export function ShopLiveAvatar({
   logoUrl?: string | null;
   name: string;
   size?: number;
+  /** Kept for call-site compatibility; ring is white unless live. */
   accentColor?: string;
   accessibilityLabel?: string;
   onPress: () => void;
 }) {
   const tick = useSharedValue(0);
-  const ringColor = live ? colors.live : (accentColor ?? colors.emerald);
+  const liveSv = useSharedValue(live ? 1 : 0);
+  const ringColor = live ? colors.live : "#fff";
 
   useEffect(() => {
+    liveSv.value = live ? 1 : 0;
+    cancelAnimation(tick);
     tick.value = 0;
+    if (!live) return;
     tick.value = withRepeat(
       withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.quad) }),
       -1,
       false,
     );
     return () => cancelAnimation(tick);
-  }, [tick]);
+  }, [live, liveSv, tick]);
 
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(tick.value, [0, 0.5, 1], [1, 1.07, 1]) }],
-    shadowOpacity: interpolate(tick.value, [0, 0.5, 1], [0.18, 0.75, 0.18]),
-    shadowRadius: interpolate(tick.value, [0, 0.5, 1], [2, 9, 2]),
-  }));
+  const ringStyle = useAnimatedStyle(() => {
+    if (liveSv.value < 0.5) {
+      return {
+        transform: [{ scale: 1 }],
+        shadowOpacity: 0,
+        shadowRadius: 0,
+      };
+    }
+    return {
+      transform: [
+        { scale: interpolate(tick.value, [0, 0.5, 1], [1, 1.07, 1]) },
+      ],
+      shadowOpacity: interpolate(tick.value, [0, 0.5, 1], [0.18, 0.75, 0.18]),
+      shadowRadius: interpolate(tick.value, [0, 0.5, 1], [2, 9, 2]),
+    };
+  });
 
-  const faceStyle = useAnimatedStyle(() => ({
-    opacity: live
-      ? interpolate(tick.value, [0, 0.42, 0.5, 0.92, 1], [1, 1, 0, 0, 1])
-      : 1,
-  }));
+  const faceStyle = useAnimatedStyle(() =>
+    liveSv.value < 0.5
+      ? { opacity: 1 }
+      : {
+          opacity: interpolate(
+            tick.value,
+            [0, 0.42, 0.5, 0.92, 1],
+            [1, 1, 0, 0, 1],
+          ),
+        },
+  );
 
-  const labelStyle = useAnimatedStyle(() => ({
-    opacity: live
-      ? interpolate(tick.value, [0, 0.42, 0.5, 0.92, 1], [0, 0, 1, 1, 0])
-      : 0,
-  }));
+  const labelStyle = useAnimatedStyle(() =>
+    liveSv.value < 0.5
+      ? { opacity: 0 }
+      : {
+          opacity: interpolate(
+            tick.value,
+            [0, 0.42, 0.5, 0.92, 1],
+            [0, 0, 1, 1, 0],
+          ),
+        },
+  );
 
   const radius = size / 2;
   const letter = name.trim().slice(0, 1).toUpperCase() || "S";

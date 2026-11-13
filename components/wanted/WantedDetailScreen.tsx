@@ -1,9 +1,9 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ParcelMap } from "@/components/orders/ParcelMap";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, ApiError, apiPayment, mediaUrl } from "@/src/api";
 import {
     countries,
@@ -164,14 +165,7 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
         .catch(() => setShippingQuote({ key, shippingCents: 0 }));
     }, 450);
     return () => clearTimeout(timer);
-  }, [
-    quoteKey,
-    commune,
-    deliveryLat,
-    deliveryLng,
-    offer?.shop?.id,
-    city,
-  ]);
+  }, [quoteKey, commune, deliveryLat, deliveryLng, offer?.shop?.id, city]);
 
   const filteredCountries = useMemo(() => {
     const needle = countryQuery.trim().toLowerCase();
@@ -450,6 +444,7 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
               },
             ]}
           >
+            <SheetReduce onPress={() => setOffer(null)} />
             <Text style={[styles.sheetTitle, { color: c.text }]}>
               Accepter {offer?.seller?.name}
             </Text>

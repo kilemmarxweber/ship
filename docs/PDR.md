@@ -1,28 +1,29 @@
 # Plan de réalisation — ShipShop Android et iOS
 
-Version 1.0 — 1er novembre 2026
+Version 1.1 — 13 novembre 2026  
+(Annexe CIS fusionnée depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1)
 
 Ce document fixe l’interface, les parcours et les contrats d’API. Les maquettes sont dans `docs/design/`. Les marques, prix et prénoms dessinés sur les images sont des exemples. La disposition reste celle des images. Les produits, comptes et montants viennent des API.
 
 ## 1. Références visuelles
 
-| Fichier | Écran |
-| --- | --- |
-| `docs/design/pour-toi.jpg` | Fil Pour toi |
-| `docs/design/live-produits-sac.png` | Live : scène, liste du diffuseur, sac |
-| `docs/design/shipshop-logo.png` | Logo réel, à la place du mot « shop » générique de la maquette |
+| Fichier                             | Écran                                                          |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `docs/design/pour-toi.jpg`          | Fil Pour toi                                                   |
+| `docs/design/live-produits-sac.png` | Live : scène, liste du diffuseur, sac                          |
+| `docs/design/shipshop-logo.png`     | Logo réel, à la place du mot « shop » générique de la maquette |
 
 Couleurs, alignées sur la maquette et sur les jetons sombres du site :
 
-| Rôle | Valeur |
-| --- | --- |
-| Fond | `#0A0A0F` |
-| Vert émeraude | `#00D68F` |
-| Vert profond | `#00855A` |
-| Acheter, début | `#FF4D8D` |
-| Acheter, fin | `#FF8A3D` |
-| Live | `#7C5CFF` |
-| Surface sac | `#FFFFFF` |
+| Rôle            | Valeur    |
+| --------------- | --------- |
+| Fond            | `#0A0A0F` |
+| Vert émeraude   | `#00D68F` |
+| Vert profond    | `#00855A` |
+| Acheter, début  | `#FF4D8D` |
+| Acheter, fin    | `#FF8A3D` |
+| Live            | `#7C5CFF` |
+| Surface sac     | `#FFFFFF` |
 | Texte sur vidéo | `#FFFFFF` |
 
 Le chrome acheteur est sombre. L’écran sac (maquette live, troisième téléphone) est clair. Les textes de l’application sont en français. Les libellés anglais de la maquette live (`Follow`, `Product`, `Add to bag`, `My Bag`, `Checkout now`) sont repris tels quels sur ces trois états, parce qu’ils font partie de la maquette à reproduire.
@@ -58,16 +59,16 @@ Vidéo ou image en plein écran, sous tous les contrôles. Hauteur d’une page 
 
 Interactions déjà branchées :
 
-| Geste | API |
-| --- | --- |
-| Chargement | `GET /api/products?status=ACTIVE&limit=8&cursor=` |
-| Abonnements | même route avec `following=1` |
-| Recherche de l’onglet Je cherche | `q` et `category` sur la même route |
-| Like | `POST` ou `DELETE /api/products/{id}/like` |
-| Commentaires | `GET` et `POST /api/products/{id}/comments` |
-| Partage | `POST /api/products/{id}/share` |
-| Suivre | `POST` ou `DELETE /api/shops/{slug}/follow` |
-| Ajouter au sac | `POST /api/cart` avec `productId` et `quantity` |
+| Geste                            | API                                               |
+| -------------------------------- | ------------------------------------------------- |
+| Chargement                       | `GET /api/products?status=ACTIVE&limit=8&cursor=` |
+| Abonnements                      | même route avec `following=1`                     |
+| Recherche de l’onglet Je cherche | `q` et `category` sur la même route               |
+| Like                             | `POST` ou `DELETE /api/products/{id}/like`        |
+| Commentaires                     | `GET` et `POST /api/products/{id}/comments`       |
+| Partage                          | `POST /api/products/{id}/share`                   |
+| Suivre                           | `POST` ou `DELETE /api/shops/{slug}/follow`       |
+| Ajouter au sac                   | `POST /api/cart` avec `productId` et `quantity`   |
 
 Le corps liste est `{ products, nextCursor }`. Champs utiles : `id`, `title`, `description`, `priceCents`, `compareAtCents`, `promoPercent`, `currency`, `images`, `colors`, `sizes`, `likesCount`, `commentsCount`, `sharesCount`, `likedByMe`, `soundtrack`, `shop` (`name`, `slug`, `logoUrl`, `followedByMe`, `followersCount`). Les URLs relatives `/uploads` sont préfixées par l’origine de l’API. Les montants sont des centimes : `25,50 $US` pour 2550 USD.
 
@@ -154,4 +155,47 @@ Inscription : `POST /api/auth/sign-up/email` avec téléphone, mot de passe, et 
 
 ## 10. Performance
 
-Objectifs de lecture, dans l’ordre : une vidéo active, préchargement de la suivante, pause hors fil, chargement progressif, conservation des pages, animations natives, fichiers déjà compressés par le serveur (FFmpeg à l’upload). Pas de second lecteur décodé pour les vignettes hors écran.
+Objectifs de lecture, dans l’ordre : une vidéo active, préchargement de la suivante, pause hors fil, chargement progressif, conservation des pages, animations natives, fichiers déjà compressés par le serveur (FFmpeg à l’upload). Pas de second lecteur décodé pour les vignettes hors écran. Hors ligne : images, vidéos et soundtracks déjà mis en cache SQLite / fichiers locaux se rejouent via `playableMediaUrl` sans changer la disposition des cards.
+
+## 11. Annexe CIS — Customer Intelligence (UI / parcours)
+
+Référence complète : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` (v2.1). Cette annexe ne modifie pas les maquettes `docs/design/` sauf validation métier explicite.
+
+### 11.1 Objectif dans le fil
+
+Personnaliser le classement **Pour toi** et la pertinence recherche à partir d’interactions **autorisées**, sans espionnage hors app.
+
+### 11.2 Consentement privacy
+
+- À la première utilisation CIS (ou depuis Profil) : feuille ou écran de consentement clair (finalités, exemples de données, retrait).
+- États : accepté / refusé / retiré ; version du texte d’information conservée côté serveur.
+- Sans consentement CIS : le fil et le panier restent fonctionnels ; aucun événement CIS n’est envoyé.
+
+### 11.3 Événements déclenchés dans l’UI
+
+| Moment UI                                            | Événement CIS                           |
+| ---------------------------------------------------- | --------------------------------------- |
+| Card Pour toi / Abonnements visible ou ouverte       | `product_view`                          |
+| Like / unlike                                        | `product_like`                          |
+| Suivre / ne plus suivre                              | `shop_follow`                           |
+| Recherche Je cherche (`q`, `category`)               | `search`                                |
+| Ajout au sac (feuille Acheter ou live)               | `add_to_cart`                           |
+| Commande confirmée                                   | `purchase`                              |
+| Partage volontaire d’un message vendeur pour analyse | `chat_share_for_cis` (opt-in explicite) |
+
+La collecte mobile peut bufferiser hors ligne (SQLite / outbox) puis synchroniser vers `POST /api/cis/events`.
+
+### 11.4 Recommandations dans Pour toi
+
+- Feature flag serveur : CIS off = ranking actuel inchangé.
+- CIS on : le même chrome Pour toi ; ordre éventuellement influencé par les scores CIS.
+- Option UI (si activée) : libellé discret du type « Pourquoi ce produit » avec explication courte (catégorie, like, recherche) — jamais de score « probabilité d’achat » inventé.
+- Pas de pastille ou badge CIS obligatoire sur la maquette ; tout ajout visuel passe par validation design.
+
+### 11.5 Profil acheteur
+
+Dans Profil : section Confidentialité / CIS — voir consentement, retirer, demander accès ou suppression selon la politique publiée.
+
+### 11.6 Hors UI mobile
+
+Dashboard agrégats et fiches profils admin : Next.js `shop` (admin), pas une nouvelle app. Voir TDR § CIS.

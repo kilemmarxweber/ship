@@ -52,9 +52,10 @@ import { compactCount, formatMoney } from "@/src/format";
 import { useInbox } from "@/src/inbox";
 import { matchOpenLive } from "@/src/live";
 import { isSellerOfShop, useMe } from "@/src/me";
-import { coverOf, mediaList } from "@/src/media";
+import { coverOf, mediaList, playableMediaUrl } from "@/src/media";
 import { kvGet, kvSet } from "@/src/offline/db";
 import { feedQueryKey } from "@/src/offline/keys";
+import { cacheMediaNow } from "@/src/offline/media-cache";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import {
@@ -119,8 +120,10 @@ export function FeedScreen() {
   const online = useOnline();
   const [activeState, setActiveState] = useState({ rowCount: 0, index: 0 });
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
+  const weaveMemory = useMemo(() => emptyWeaveMemory(), []);
   const fetchingNextPage = useRef(false);
   const pendingFollowShopIds = useRef(new Set<string>());
+  const messagingShopId = useRef<string | null>(null);
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -219,10 +222,10 @@ export function FeedScreen() {
       challenges,
       (item) => item.id,
       seed,
-      emptyWeaveMemory(seed),
+      weaveMemory,
       "feed",
     );
-  }, [products, tab, surface.data?.challenges, me.data?.id]);
+  }, [products, tab, surface.data?.challenges, me.data?.id, weaveMemory]);
   const active =
     activeState.rowCount === feedRows.length
       ? Math.max(0, Math.min(activeState.index, feedRows.length - 1))
@@ -230,8 +233,7 @@ export function FeedScreen() {
   const setActive = useCallback(
     (next: number | ((current: number) => number)) => {
       setActiveState((current) => {
-        const index =
-          current.rowCount === feedRows.length ? current.index : 0;
+        const index = current.rowCount === feedRows.length ? current.index : 0;
         return {
           rowCount: feedRows.length,
           index: typeof next === "function" ? next(index) : next,
@@ -253,6 +255,32 @@ export function FeedScreen() {
   useEffect(() => {
     const row = feedRows[active];
     if (row?.kind === "item") kvSet("lastProductId", row.item.id);
+  }, [active, feedRows]);
+
+  // Prefetch local SQLite media for the visible reel (video + soundtrack).
+  useEffect(() => {
+    const row = feedRows[active];
+    if (row?.kind !== "item") return;
+    const item = row.item;
+    for (const raw of item.images ?? []) {
+      const remote = mediaUrl(raw);
+      if (
+        remote &&
+        !remote.startsWith("file://") &&
+        !remote.startsWith("content://") &&
+        isVideoUrl(remote)
+      ) {
+        void cacheMediaNow(remote, "video");
+      }
+    }
+    const remoteAudio = mediaUrl(item.soundtrack?.audioUrl);
+    if (
+      remoteAudio &&
+      !remoteAudio.startsWith("file://") &&
+      !remoteAudio.startsWith("content://")
+    ) {
+      void cacheMediaNow(remoteAudio, "audio");
+    }
   }, [active, feedRows]);
 
   function selectTab(next: FeedTab) {
@@ -279,12 +307,7 @@ export function FeedScreen() {
     },
     [settleCard],
   );
-  const {
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isError,
-  } = feed;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage, isError } = feed;
   const fetchNextPageSilently = useCallback(() => {
     if (
       !online ||
@@ -319,12 +342,7 @@ export function FeedScreen() {
     ) {
       fetchNextPageSilently();
     }
-  }, [
-    active,
-    fetchNextPageSilently,
-    isReelTab,
-    remainingProductsByRow,
-  ]);
+  }, [active, fetchNextPageSilently, isReelTab, remainingProductsByRow]);
 
   const feedExtraData = useMemo(
     () => ({
@@ -493,6 +511,42 @@ export function FeedScreen() {
       setPaused((value) => !value);
       setMuted(false);
     }, 280);
+  }
+
+  async function messageShop(product: Product) {
+    if (!requireAuth()) return;
+    const shopId = product.shop.id;
+    if (messagingShopId.current === shopId) return;
+    messagingShopId.current = shopId;
+    try {
+      const data = await api<{ conversation?: { id: string } }>(
+        "/api/conversations",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            shopId,
+            productId: product.id,
+            message: `Bonjour, je suis intéressé(e) par ${product.title}.`,
+          }),
+        },
+      );
+      if (!data.conversation?.id) {
+        throw new Error("Conversation introuvable.");
+      }
+      router.push({
+        pathname: "/(tabs)/messages/[id]",
+        params: { id: data.conversation.id },
+      });
+    } catch (cause) {
+      showToast(
+        cause instanceof Error
+          ? cause.message
+          : "Impossible d'ouvrir la conversation.",
+        "error",
+      );
+    } finally {
+      messagingShopId.current = null;
+    }
   }
 
   async function toggleFollow(product: Product) {
@@ -889,9 +943,16 @@ export function FeedScreen() {
                 item.promoTier === "FLASH" ||
                 item.promoTier === "FORTE" ||
                 Boolean(promo);
+              const followed = Boolean(item.shop.followedByMe);
               return (
                 <View style={[styles.page, { height, width }]}>
-                  {slides.length > 0 && Math.abs(index - active) <= 1 ? (
+                  {/* Cover stays mounted; gallery never remounts on scroll (no on/off swap). */}
+                  {cover && !isVideoUrl(cover) ? (
+                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                      <ReelCover uri={cover} />
+                    </View>
+                  ) : null}
+                  {slides.length > 0 ? (
                     <ReelGallery
                       urls={slides}
                       playing={
@@ -904,22 +965,19 @@ export function FeedScreen() {
                       height={height}
                       onTap={() => onMediaPress(item)}
                       dotsBottom={bottom + 100}
-                      restartToken={`${item.id}:${index === active ? "on" : "off"}`}
+                      restartToken={item.id}
                       poster={cover}
                     />
                   ) : (
                     <Pressable
                       style={StyleSheet.absoluteFill}
                       onPress={() => onMediaPress(item)}
-                    >
-                      {cover && !isVideoUrl(cover) ? (
-                        <ReelCover uri={cover} />
-                      ) : null}
-                    </Pressable>
+                    />
                   )}
                   {item.soundtrack?.audioUrl && index === active ? (
                     <ReelSoundtrack
                       uri={
+                        playableMediaUrl(item.soundtrack.audioUrl) ??
                         mediaUrl(item.soundtrack.audioUrl) ??
                         item.soundtrack.audioUrl
                       }
@@ -1009,6 +1067,34 @@ export function FeedScreen() {
                         accessibilityLabel={`Ouvrir la boutique ${item.shop.name}`}
                         onPress={() => setShopProduct(item)}
                       />
+                      <Pressable
+                        style={[
+                          styles.avatarAction,
+                          followed
+                            ? styles.avatarActionSend
+                            : styles.avatarActionFollow,
+                        ]}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          followed
+                            ? `Écrire à ${item.shop.name}`
+                            : `Suivre ${item.shop.name}, ${compactCount(item.shop.followersCount ?? 0)} abonnés`
+                        }
+                        onPress={() => {
+                          if (followed) void messageShop(item);
+                          else void toggleFollow(item);
+                        }}
+                      >
+                        <Ionicons
+                          name={followed ? "paper-plane" : "add"}
+                          size={followed ? 11 : 14}
+                          color="#fff"
+                        />
+                      </Pressable>
+                      <Text style={styles.railLabel}>
+                        {compactCount(item.shop.followersCount ?? 0)}
+                      </Text>
                     </View>
                     <RailButton
                       icon="heart"
@@ -1627,7 +1713,26 @@ const styles = StyleSheet.create({
   },
   railBtn: { alignItems: "center", width: 52 },
   railLabel: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  avatarWrap: { marginBottom: 2 },
+  avatarWrap: {
+    marginBottom: 2,
+    alignItems: "center",
+    paddingBottom: 14,
+  },
+  avatarAction: {
+    position: "absolute",
+    bottom: 14,
+    alignSelf: "center",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+    zIndex: 2,
+  },
+  avatarActionFollow: { backgroundColor: colors.live },
+  avatarActionSend: { backgroundColor: colors.buyStart },
   meta: { position: "absolute", left: 12, right: 58 },
   shopCopy: { minWidth: 0, gap: 3 },
   sellerRow: {

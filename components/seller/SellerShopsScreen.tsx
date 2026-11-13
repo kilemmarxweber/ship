@@ -1,9 +1,9 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -21,10 +21,18 @@ import { api, mediaUrl } from "@/src/api";
 import { useT } from "@/src/i18n";
 import { DEFAULT_FX_CDF } from "@/src/product-options";
 import { useSession } from "@/src/session";
+import { shopSocialPayload } from "@/src/shop-social";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
-import { usePaged } from "@/src/use-paged";
 import { useColors } from "@/src/use-colors";
+import { usePaged } from "@/src/use-paged";
+
+type ShopSocialDraft = {
+  tiktok: string;
+  facebook: string;
+  instagram: string;
+  x: string;
+};
 
 type Shop = {
   id: string;
@@ -37,7 +45,20 @@ type Shop = {
   owner?: { id: string; name: string; email: string } | null;
   _count?: { products: number };
   proUntil?: string | null;
+  tiktokUrl?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  xUrl?: string | null;
 };
+
+function socialDraftFromShop(shop: Shop): ShopSocialDraft {
+  return {
+    tiktok: shop.tiktokUrl?.trim() ?? "",
+    facebook: shop.facebookUrl?.trim() ?? "",
+    instagram: shop.instagramUrl?.trim() ?? "",
+    x: shop.xUrl?.trim() ?? "",
+  };
+}
 
 type OrgMember = {
   id: string;
@@ -62,6 +83,10 @@ export function SellerShopsScreen() {
   const [query, setQuery] = useState("");
   const [fxDrafts, setFxDrafts] = useState<Record<string, string>>({});
   const [fxSavingId, setFxSavingId] = useState<string | null>(null);
+  const [socialDrafts, setSocialDrafts] = useState<
+    Record<string, ShopSocialDraft>
+  >({});
+  const [socialSavingId, setSocialSavingId] = useState<string | null>(null);
   const [memberFilter, setMemberFilter] = useState<"all" | "vendor" | "buyer">(
     "all",
   );
@@ -100,6 +125,19 @@ export function SellerShopsScreen() {
   const isOwner = Boolean(shopsQ.data?.isOwner);
   const isOrgOwner = Boolean(shopsQ.data?.isOrgOwner);
   const members = shopsQ.data?.members ?? EMPTY_MEMBERS;
+
+  useEffect(() => {
+    setSocialDrafts((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const shop of shops) {
+        if (next[shop.id]) continue;
+        next[shop.id] = socialDraftFromShop(shop);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [shops]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -148,6 +186,53 @@ export function SellerShopsScreen() {
       );
     } finally {
       setFxSavingId(null);
+    }
+  }
+
+  function patchSocial(
+    shopId: string,
+    key: keyof ShopSocialDraft,
+    value: string,
+  ) {
+    setSocialDrafts((prev) => ({
+      ...prev,
+      [shopId]: {
+        ...(prev[shopId] ??
+          socialDraftFromShop(
+            shops.find((s) => s.id === shopId) ?? {
+              id: shopId,
+              name: "",
+              slug: "",
+            },
+          )),
+        [key]: value,
+      },
+    }));
+  }
+
+  async function saveSocials(shop: Shop) {
+    const draft = socialDrafts[shop.id] ?? socialDraftFromShop(shop);
+    setSocialSavingId(shop.id);
+    try {
+      const payload = shopSocialPayload(draft);
+      await api(`/api/shops/${shop.slug}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      setSocialDrafts((prev) => {
+        const next = { ...prev };
+        delete next[shop.id];
+        return next;
+      });
+      showToast("Réseaux sociaux enregistrés", "success");
+      await refresh();
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Réseaux non enregistrés",
+        "error",
+      );
+    } finally {
+      setSocialSavingId(null);
     }
   }
 
@@ -201,7 +286,10 @@ export function SellerShopsScreen() {
                 );
                 showToast("Mot de passe réinitialisé et envoyé", "success");
                 if (data.temporaryPassword) {
-                  showToast(`MDP temporaire : ${data.temporaryPassword}`, "info");
+                  showToast(
+                    `MDP temporaire : ${data.temporaryPassword}`,
+                    "info",
+                  );
                 }
               } catch (cause) {
                 showToast(
@@ -299,9 +387,7 @@ export function SellerShopsScreen() {
                 <Text
                   style={{
                     color:
-                      item.label === "Produits"
-                        ? c.primaryForeground
-                        : c.text,
+                      item.label === "Produits" ? c.primaryForeground : c.text,
                     fontWeight: "700",
                     fontSize: 12,
                   }}
@@ -319,7 +405,13 @@ export function SellerShopsScreen() {
               style={[styles.addBtn, { backgroundColor: c.primary }]}
             >
               <Ionicons name="add" size={14} color={c.primaryForeground} />
-              <Text style={{ color: c.primaryForeground, fontWeight: "800", fontSize: 12 }}>
+              <Text
+                style={{
+                  color: c.primaryForeground,
+                  fontWeight: "800",
+                  fontSize: 12,
+                }}
+              >
                 Shop
               </Text>
             </Pressable>
@@ -345,8 +437,7 @@ export function SellerShopsScreen() {
 
           {pagedShops.visible.map((shop) => {
             const fx =
-              fxDrafts[shop.id] ??
-              String(shop.fxCdfPerUsd ?? DEFAULT_FX_CDF);
+              fxDrafts[shop.id] ?? String(shop.fxCdfPerUsd ?? DEFAULT_FX_CDF);
             const logo = mediaUrl(shop.logoUrl);
             const proActive =
               shop.proUntil != null && new Date(shop.proUntil) > new Date();
@@ -391,9 +482,10 @@ export function SellerShopsScreen() {
                       {shop.owner?.name ? ` · ${shop.owner.name}` : ""}
                       {shop.isActive === false ? " · off" : ""}
                     </Text>
-                    <Text style={{ color: c.emerald, fontSize: 11, marginTop: 2 }}>
-                      1 $US ={" "}
-                      {Number(fx).toLocaleString("fr-CD")} CDF
+                    <Text
+                      style={{ color: c.emerald, fontSize: 11, marginTop: 2 }}
+                    >
+                      1 $US = {Number(fx).toLocaleString("fr-CD")} CDF
                     </Text>
                   </View>
                 </View>
@@ -433,11 +525,67 @@ export function SellerShopsScreen() {
                   </Pressable>
                 </View>
 
+                <Text style={[styles.label, { color: c.textMuted }]}>
+                  Réseaux sociaux (contact boutique)
+                </Text>
+                {(
+                  [
+                    ["tiktok", "TikTok — @compte ou lien"],
+                    ["instagram", "Instagram — @compte ou lien"],
+                    ["facebook", "Facebook — page ou lien"],
+                    ["x", "X — @compte ou lien"],
+                  ] as const
+                ).map(([key, placeholder]) => (
+                  <TextInput
+                    key={key}
+                    value={
+                      (socialDrafts[shop.id] ?? socialDraftFromShop(shop))[key]
+                    }
+                    onChangeText={(value) => patchSocial(shop.id, key, value)}
+                    placeholder={placeholder}
+                    placeholderTextColor={c.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[
+                      styles.socialInput,
+                      {
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                ))}
+                <Pressable
+                  disabled={socialSavingId === shop.id}
+                  onPress={() => void saveSocials(shop)}
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: c.primary,
+                      alignSelf: "stretch",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: c.primaryForeground,
+                      fontWeight: "800",
+                      fontSize: 13,
+                    }}
+                  >
+                    {socialSavingId === shop.id
+                      ? "…"
+                      : "Enregistrer les réseaux"}
+                  </Text>
+                </Pressable>
+
                 <Pressable
                   onPress={() => void activatePro(shop)}
                   style={[styles.proBtn, { borderColor: HAIRLINE }]}
                 >
-                  <Text style={{ color: c.text, fontWeight: "700", fontSize: 12 }}>
+                  <Text
+                    style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
+                  >
                     {proActive ? "ShipPro actif" : "ShipPro 10 $/mois"}
                   </Text>
                 </Pressable>
@@ -449,19 +597,21 @@ export function SellerShopsScreen() {
                     }
                     style={[styles.action, { borderColor: HAIRLINE }]}
                   >
-                    <Text style={{ color: c.text, fontWeight: "700", fontSize: 12 }}>
+                    <Text
+                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
+                    >
                       Entrer
                     </Text>
                   </Pressable>
                   <Pressable
                     onPress={() =>
-                      router.push(
-                        `/seller/products?shopId=${shop.id}` as Href,
-                      )
+                      router.push(`/seller/products?shopId=${shop.id}` as Href)
                     }
                     style={[styles.action, { borderColor: HAIRLINE }]}
                   >
-                    <Text style={{ color: c.text, fontWeight: "700", fontSize: 12 }}>
+                    <Text
+                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
+                    >
                       Produits
                     </Text>
                   </Pressable>
@@ -476,7 +626,9 @@ export function SellerShopsScreen() {
                       { backgroundColor: "rgba(127,127,140,0.14)" },
                     ]}
                   >
-                    <Text style={{ color: c.text, fontWeight: "700", fontSize: 12 }}>
+                    <Text
+                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
+                    >
                       Publier
                     </Text>
                   </Pressable>
@@ -490,7 +642,13 @@ export function SellerShopsScreen() {
             onMore={pagedShops.more}
           />
           {visible.length === 0 ? (
-            <Text style={{ color: c.textMuted, textAlign: "center", paddingVertical: 24 }}>
+            <Text
+              style={{
+                color: c.textMuted,
+                textAlign: "center",
+                paddingVertical: 24,
+              }}
+            >
               {shops.length === 0
                 ? "Aucune boutique — créez-en une pour publier."
                 : "Aucune boutique ne correspond."}
@@ -498,9 +656,13 @@ export function SellerShopsScreen() {
           ) : null}
 
           <View style={{ marginTop: 8, gap: 8 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
               <Ionicons name="people-outline" size={16} color={c.primary} />
-              <Text style={[styles.section, { color: c.text }]}>Utilisateurs</Text>
+              <Text style={[styles.section, { color: c.text }]}>
+                Utilisateurs
+              </Text>
             </View>
             <Text style={{ color: c.textMuted, fontSize: 11, lineHeight: 16 }}>
               {isOwner
@@ -594,7 +756,13 @@ export function SellerShopsScreen() {
                       onPress={() => resetPassword(m.user)}
                       style={[styles.miniBtn, { borderColor: HAIRLINE }]}
                     >
-                      <Text style={{ color: c.text, fontSize: 11, fontWeight: "700" }}>
+                      <Text
+                        style={{
+                          color: c.text,
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
                         Reset MDP
                       </Text>
                     </Pressable>
@@ -710,6 +878,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
     fontSize: 15,
+  },
+  socialInput: {
+    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    fontSize: 14,
   },
   saveBtn: {
     minWidth: 80,

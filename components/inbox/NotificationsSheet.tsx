@@ -356,13 +356,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     elevation: 18,
   },
-  handle: {
-    alignSelf: "center",
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.22)",
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -379,14 +372,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   hint: { color: colors.muted, fontSize: 13, lineHeight: 20, marginTop: -4 },
   modeRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
   mode: {

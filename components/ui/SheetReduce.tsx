@@ -1,11 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { colors } from "@/src/theme";
-
-/** Poignée seule — le libellé / chevron restent en code mais sont masqués (Android a déjà l’indicateur). */
+/** Poignée seule en haut du sheet — ferme / réduit au tap (sans libellé). */
 export function SheetReduce({ onPress }: { onPress: () => void }) {
-  const showReduceHint = false;
   return (
     <Pressable
       style={styles.hit}
@@ -15,12 +11,6 @@ export function SheetReduce({ onPress }: { onPress: () => void }) {
       hitSlop={12}
     >
       <View style={styles.handle} />
-      {showReduceHint ? (
-        <View style={styles.row}>
-          <Ionicons name="chevron-down" size={18} color={colors.muted} />
-          <Text style={styles.label}>Réduire</Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
@@ -32,7 +22,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingTop: 10,
     paddingBottom: 8,
-    gap: 6,
     minHeight: 36,
   },
   handle: {
@@ -40,17 +29,5 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: "rgba(255,255,255,0.28)",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "center",
   },
 });

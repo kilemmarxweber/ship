@@ -1,8 +1,8 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -27,6 +27,7 @@ import { MediaStrip } from "@/components/publish/MediaStrip";
 import { ShipRewardsCard } from "@/components/seller/ShipRewardsCard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PagedMore } from "@/components/ui/PagedMore";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { useT } from "@/src/i18n";
@@ -649,6 +650,7 @@ export function SellerProductsScreen() {
               },
             ]}
           >
+            <SheetReduce onPress={() => setEditing(null)} />
             <Text style={[styles.sheetTitle, { color: c.text }]}>Éditer</Text>
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -849,6 +851,7 @@ export function SellerProductsScreen() {
               },
             ]}
           >
+            <SheetReduce onPress={() => setRepublishOpen(false)} />
             <Text style={[styles.sheetTitle, { color: c.text }]}>
               Republier des produits
             </Text>

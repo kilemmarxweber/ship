@@ -3,6 +3,7 @@ import { Image } from "expo-image";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { mediaUrl } from "@/src/api";
 import {
   formatRatio,
@@ -50,7 +51,7 @@ export function ProductImagePreviewSheet({
             },
           ]}
         >
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <Text style={[styles.title, { color: c.text }]}>Aperçu photo</Text>
           <Text style={[styles.meta, { color: c.textMuted }]}>
             {meta.width}×{meta.height} · {formatRatio(meta.ratio)} · {orient}
@@ -148,15 +149,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     maxHeight: "92%",
   },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    marginBottom: 10,
-  },
-  title: { fontSize: 18, fontWeight: "800" },
+  title: { fontSize: 18, fontWeight: "800", marginTop: 4 },
   meta: { marginTop: 4, fontSize: 13, fontWeight: "600" },
   tip: { marginTop: 8, fontSize: 12, lineHeight: 17 },
   warn: {

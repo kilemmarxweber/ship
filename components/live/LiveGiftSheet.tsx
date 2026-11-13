@@ -142,13 +142,6 @@ const styles = StyleSheet.create({
     height: 96,
     backgroundColor: "rgba(125,255,179,0.12)",
   },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
   head: {
     flexDirection: "row",
     alignItems: "center",

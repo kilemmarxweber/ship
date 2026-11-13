@@ -1,8 +1,8 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ShopPicker } from "@/components/profile/ShopPicker";
 import { PagedMore } from "@/components/ui/PagedMore";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { useT } from "@/src/i18n";
@@ -32,8 +33,8 @@ import { statusLabel } from "@/src/orders";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
-import { usePaged } from "@/src/use-paged";
 import { useColors } from "@/src/use-colors";
+import { usePaged } from "@/src/use-paged";
 
 type Shop = { id: string; name: string };
 const EMPTY_SHOPS: Shop[] = [];
@@ -221,7 +222,10 @@ export function SellerOrdersScreen() {
           }),
         },
       );
-      showToast(data.message ?? "Commande annulée — client remboursé", "success");
+      showToast(
+        data.message ?? "Commande annulée — client remboursé",
+        "success",
+      );
       setCancelOrderId(null);
       setCancelNote("");
       setCancelReason("OUT_OF_STOCK");
@@ -277,10 +281,15 @@ export function SellerOrdersScreen() {
             <View
               style={[
                 styles.scanCard,
-                { backgroundColor: `${c.primary}18`, borderColor: `${c.primary}55` },
+                {
+                  backgroundColor: `${c.primary}18`,
+                  borderColor: `${c.primary}55`,
+                },
               ]}
             >
-              <Text style={{ color: c.primary, fontWeight: "800", fontSize: 12 }}>
+              <Text
+                style={{ color: c.primary, fontWeight: "800", fontSize: 12 }}
+              >
                 Valider une remise (QR ou code)
               </Text>
               <TextInput
@@ -304,7 +313,9 @@ export function SellerOrdersScreen() {
                   },
                 ]}
               >
-                <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
+                <Text
+                  style={[styles.primaryText, { color: c.primaryForeground }]}
+                >
                   {scanBusy ? "…" : "Confirmer"}
                 </Text>
               </Pressable>
@@ -323,7 +334,13 @@ export function SellerOrdersScreen() {
             {!activeShopId || ordersQ.isLoading ? (
               <ActivityIndicator color={c.primary} style={{ marginTop: 16 }} />
             ) : orders.length === 0 ? (
-              <Text style={{ color: c.textMuted, textAlign: "center", paddingVertical: 28 }}>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  textAlign: "center",
+                  paddingVertical: 28,
+                }}
+              >
                 Aucune commande
               </Text>
             ) : (
@@ -371,11 +388,15 @@ export function SellerOrdersScreen() {
                           />
                         )}
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Text style={{ color: c.text, fontWeight: "800" }} numberOfLines={1}>
+                          <Text
+                            style={{ color: c.text, fontWeight: "800" }}
+                            numberOfLines={1}
+                          >
                             {o.product.title}
                           </Text>
                           <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                            {o.buyer.name} · {o.contactPhone || o.buyer.phone || "—"}
+                            {o.buyer.name} ·{" "}
+                            {o.contactPhone || o.buyer.phone || "—"}
                           </Text>
                           <Text style={{ color: c.textMuted, fontSize: 11 }}>
                             {statusLabel(o.status)} · {o.fulfillmentType} ·{" "}
@@ -407,7 +428,13 @@ export function SellerOrdersScreen() {
                           onPress={() => router.push(`/orders/${o.id}` as Href)}
                           style={[styles.chip, { borderColor: HAIRLINE }]}
                         >
-                          <Text style={{ color: c.text, fontWeight: "700", fontSize: 11 }}>
+                          <Text
+                            style={{
+                              color: c.text,
+                              fontWeight: "700",
+                              fontSize: 11,
+                            }}
+                          >
                             Suivi
                           </Text>
                         </Pressable>
@@ -417,17 +444,37 @@ export function SellerOrdersScreen() {
                           <>
                             <Pressable
                               onPress={() => void assignCourier(o.id)}
-                              style={[styles.chip, { backgroundColor: "rgba(127,127,140,0.14)" }]}
+                              style={[
+                                styles.chip,
+                                { backgroundColor: "rgba(127,127,140,0.14)" },
+                              ]}
                             >
-                              <Text style={{ color: c.text, fontWeight: "700", fontSize: 11 }}>
+                              <Text
+                                style={{
+                                  color: c.text,
+                                  fontWeight: "700",
+                                  fontSize: 11,
+                                }}
+                              >
                                 Auto-livreur
                               </Text>
                             </Pressable>
                             <Pressable
-                              onPress={() => void setStatus(o.id, "OUT_FOR_DELIVERY")}
-                              style={[styles.chip, { backgroundColor: "rgba(127,127,140,0.14)" }]}
+                              onPress={() =>
+                                void setStatus(o.id, "OUT_FOR_DELIVERY")
+                              }
+                              style={[
+                                styles.chip,
+                                { backgroundColor: "rgba(127,127,140,0.14)" },
+                              ]}
                             >
-                              <Text style={{ color: c.text, fontWeight: "700", fontSize: 11 }}>
+                              <Text
+                                style={{
+                                  color: c.text,
+                                  fontWeight: "700",
+                                  fontSize: 11,
+                                }}
+                              >
                                 En livraison
                               </Text>
                             </Pressable>
@@ -436,9 +483,18 @@ export function SellerOrdersScreen() {
                         {canCancel ? (
                           <Pressable
                             onPress={() => setCancelOrderId(o.id)}
-                            style={[styles.chip, { borderColor: "rgba(255,69,58,0.4)" }]}
+                            style={[
+                              styles.chip,
+                              { borderColor: "rgba(255,69,58,0.4)" },
+                            ]}
                           >
-                            <Text style={{ color: "#FF453A", fontWeight: "700", fontSize: 11 }}>
+                            <Text
+                              style={{
+                                color: "#FF453A",
+                                fontWeight: "700",
+                                fontSize: 11,
+                              }}
+                            >
                               Annuler
                             </Text>
                           </Pressable>
@@ -448,17 +504,27 @@ export function SellerOrdersScreen() {
                       !redeemed &&
                       !awaitingClient &&
                       couriers.filter((x) => x.isAvailable).length > 0 ? (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                        >
                           <View style={{ flexDirection: "row", gap: 6 }}>
                             {couriers
                               .filter((x) => x.isAvailable)
                               .map((courier) => (
                                 <Pressable
                                   key={courier.id}
-                                  onPress={() => void assignCourier(o.id, courier.id)}
-                                  style={[styles.chip, { borderColor: HAIRLINE }]}
+                                  onPress={() =>
+                                    void assignCourier(o.id, courier.id)
+                                  }
+                                  style={[
+                                    styles.chip,
+                                    { borderColor: HAIRLINE },
+                                  ]}
                                 >
-                                  <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                                  <Text
+                                    style={{ color: c.textMuted, fontSize: 11 }}
+                                  >
                                     {courier.name}
                                   </Text>
                                 </Pressable>
@@ -500,6 +566,7 @@ export function SellerOrdersScreen() {
               },
             ]}
           >
+            <SheetReduce onPress={() => setCancelOrderId(null)} />
             <Text style={[styles.title, { color: c.text, fontSize: 18 }]}>
               Annuler la commande
             </Text>
@@ -545,26 +612,15 @@ export function SellerOrdersScreen() {
                 { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
               ]}
             />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable
-                onPress={() => setCancelOrderId(null)}
-                style={[styles.chip, { flex: 1, borderColor: HAIRLINE, minHeight: 44 }]}
-              >
-                <Text style={{ color: c.text, fontWeight: "700" }}>Retour</Text>
-              </Pressable>
-              <Pressable
-                disabled={cancelBusy}
-                onPress={() => void vendorCancel()}
-                style={[
-                  styles.primary,
-                  { flex: 1, backgroundColor: "#FF453A" },
-                ]}
-              >
-                <Text style={[styles.primaryText, { color: "#fff" }]}>
-                  {cancelBusy ? "…" : "Annuler & rembourser"}
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              disabled={cancelBusy}
+              onPress={() => void vendorCancel()}
+              style={[styles.primary, { backgroundColor: "#FF453A" }]}
+            >
+              <Text style={[styles.primaryText, { color: "#fff" }]}>
+                {cancelBusy ? "…" : "Annuler & rembourser"}
+              </Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

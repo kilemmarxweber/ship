@@ -1,12 +1,15 @@
 # Termes de référence — ShipShop Android et iOS
 
-Version 1.0 — 1er novembre 2026
+Version 1.1 — 13 novembre 2026  
+(Module CIS fusionné depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1)
 
 ## 1. Objet
 
 Construire l’application native ShipShop pour Android et iOS. Elle reprend l’identité des deux maquettes de `docs/design/` et consomme le backend déjà en production de développement dans le dépôt web `shop` (Next.js 16, Prisma, Postgres).
 
 Le site n’est pas réécrit. L’application n’est pas une WebView du site.
+
+Le module **Customer Intelligence System (CIS)** s’ajoute sur ce même socle (Expo + Next.js `shop` + Better Auth + Postgres). Il n’autorise **pas** un second backend, une auth parallèle, ni un dashboard Next séparé.
 
 ## 2. Contexte
 
@@ -33,20 +36,22 @@ Les secrets (CinetPay, LiveKit, SMTP, Sanity, base de données) restent dans l�
 
 Une seule application Expo. La navigation change selon le rôle.
 
-| Espace | Contenu |
-| --- | --- |
+| Espace   | Contenu                                                                                                                                                                                        |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Acheteur | Pour toi, Abonnements, Recherche, live en trois états, likes, commentaires, partage, suivi, fiche et variantes, panier, commandes, portefeuille, messages, profil, demandes wanted, communauté |
-| Vendeur | Publication, boutique, commandes, livraison, rapports, contacts, KYC, cadeaux. En direct, le diffuseur affiche ou retire sa liste de produits pour toute la room |
-| Livreur | Missions, départ, position |
-| Admin | Vendeurs, produits, modération, grand livre, zones de livraison, campagnes, défis, contenu, attention, expansion |
+| Vendeur  | Publication, boutique, commandes, livraison, rapports, contacts, KYC, cadeaux. En direct, le diffuseur affiche ou retire sa liste de produits pour toute la room                               |
+| Livreur  | Missions, départ, position                                                                                                                                                                     |
+| Admin    | Vendeurs, produits, modération, grand livre, zones de livraison, campagnes, défis, contenu, attention, expansion                                                                               |
 
 Sanity Studio reste sur le web. L’admin mobile appelle `/api/admin/*`. Les écrans `/shops/admin` ne sont pas recopiés dans une WebView.
 
 ## 5. Hors périmètre de cette version de cadrage
 
 - Nouveau backend, nouvelle base, nouvel agrégateur de paiement.
-- Clés CinetPay, LiveKit, SMTP ou Sanity dans le binaire ou dans le dépôt mobile.
+- Serveur Express séparé, JWT « maison », ou dashboard Next.js parallèle pour le CIS.
+- Clés CinetPay, LiveKit, SMTP, Sanity ou IA dans le binaire ou le dépôt mobile.
 - Infrastructure de direct maison. Les lives passent par LiveKit, déjà intégré au serveur.
+- Espionnage SMS, WhatsApp, e-mail, Chrome ou apps tierces ; surveillance hors ShipShop.
 - Parité visuelle du site web actuel. La référence visuelle est `docs/design/`, pas les écrans Next.js.
 
 ## 6. Acteurs
@@ -99,9 +104,35 @@ Stack imposée : React Native, TypeScript, Expo Router, expo-video, Reanimated, 
 4. Messages, profil, notifications.
 5. Live calé sur `docs/design/live-produits-sac.png` : scène, chat, liste montrée par le diffuseur, sac, achat sans quitter le direct.
 6. Espaces vendeur, livreur, admin.
+7. **CIS (MVP)** : consentements, collecte + sync SQLite, profilage, recos flaggées sur Pour toi / search, admin agrégats dans `shop`. Détail : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md`.
+8. **CIS phase 2 (option)** : analyse chat opt-in, IA structurée, explications UI « Pourquoi ce produit ».
 
 ## 11. Livrables
 
-- `docs/TDR.md`, `docs/PDR.md`, `docs/design/pour-toi.jpg`, `docs/design/live-produits-sac.png`
+- `docs/TDR.md`, `docs/PDR.md`, `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md`, `docs/design/pour-toi.jpg`, `docs/design/live-produits-sac.png`
 - Application dans `Desktop/ShipShop`
-- Ajustement minimal du backend `shop` : plugin bearer, origines de confiance, lecture du jeton sur les routes métier
+- Ajustement du backend `shop` : plugin bearer, origines de confiance, lecture du jeton sur les routes métier, module `/api/cis/*` et migrations Prisma CIS lorsque le chantier CIS est lancé
+
+## 12. Annexe CIS — critères et contraintes
+
+Référence normative : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1.
+
+### 12.1 Stack imposée (rappel)
+
+Expo (Android + iOS), Next.js `shop` (`/api/*`), PostgreSQL/Prisma, Better Auth bearer, SQLite offline existant (`src/offline`), dashboard admin dans la même app Next. **Interdiction** d’un second backend CIS.
+
+### 12.2 Critères d’acceptation CIS
+
+1. Consentement CIS versionné ; sans opt-in, aucun événement CIS n’est persisté côté serveur.
+2. `POST /api/cis/events` authentifié ; l’identité vient de la session, jamais d’un `userId` client libre.
+3. Sync hors ligne idempotente (`clientEventId`) ; retry sans doublon.
+4. Retrait de consentement stoppe les traitements concernés.
+5. Feature flag CIS off : Pour toi / search / panier / live / CinetPay inchangés (non-régression PDR).
+6. Feature flag CIS on : recommandations mesurables et explicables ; pas de « probabilité d’achat » non évaluée.
+7. Dashboard admin n’expose que les profils autorisés ; contrôles d’accès côté serveur.
+8. Pas de collecte hors app (SMS, WA, navigation tierce).
+9. Tests documentés : sync offline, dédup, authz, non-régression commerce et live.
+
+### 12.3 Livrables CIS (quand le chantier est ouvert)
+
+Schéma Prisma + migrations, routes `/api/cis/*`, module Expo de collecte/sync, moteur de scores, branchement ranking (flag), UI consentement / privacy, admin agrégats, dossier de tests et doc d’exploitation — selon L1–L12 du plan CIS.

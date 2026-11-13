@@ -35,27 +35,26 @@ function SlideMedia({
   if (!isVideoUrl(uri)) {
     return <ReelCover uri={uri} />;
   }
-  // Mount at most one video decoder per gallery — avoids Android crashes & jank.
-  if (active && playing) {
-    return (
-      <ReelVideo
-        key={uri}
-        uri={uri}
-        poster={poster}
-        playing
-        muted={muted}
-        loop={loop}
-        onEnded={onEnded}
-      />
-    );
-  }
-  if (poster && !isVideoUrl(poster)) {
-    return <ReelCover uri={poster} />;
-  }
-  return <View style={styles.placeholder} />;
+  // Poster stays mounted under the video so play/pause never flashes black.
+  return (
+    <View style={styles.placeholder}>
+      {poster && !isVideoUrl(poster) ? <ReelCover uri={poster} /> : null}
+      {active && playing ? (
+        <ReelVideo
+          uri={uri}
+          poster={poster}
+          playing
+          muted={muted}
+          loop={loop}
+          onEnded={onEnded}
+        />
+      ) : null}
+    </View>
+  );
 }
 
 export function ReelGallery(props: ReelGalleryProps) {
+  // Remount only when the product / slide set changes — never on active on/off.
   return (
     <ReelGalleryContent
       key={`${props.restartToken}:${props.urls.join("|")}`}
@@ -84,7 +83,6 @@ function ReelGalleryContent({
   height,
   onTap,
   dotsBottom,
-  restartToken,
   poster,
 }: ReelGalleryProps) {
   const scrollRef = useRef<{
@@ -204,7 +202,6 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "#0A0A0F",
   },
   dots: {
     position: "absolute",

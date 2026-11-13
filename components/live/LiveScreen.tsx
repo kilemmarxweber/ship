@@ -1,14 +1,14 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
-import { useKeepAwake } from "expo-keep-awake";
 import {
     keepPreviousData,
     useQuery,
     useQueryClient,
 } from "@tanstack/react-query";
 import { Image } from "expo-image";
+import { useKeepAwake } from "expo-keep-awake";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -41,6 +41,7 @@ import {
 import { LiveProductsSheet } from "@/components/live/LiveProductsSheet";
 import { LiveViewersSheet } from "@/components/live/LiveViewersSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, ApiError, apiOrigin, apiPayment, mediaUrl } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
 import {
@@ -623,558 +624,569 @@ export function LiveScreen({ liveId }: { liveId: string }) {
     <>
       {live && !ended ? <LiveKeepAwake /> : null}
       <View style={styles.root} collapsable={false}>
-      <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
-        {shopAvatar ? (
-          <Image source={{ uri: shopAvatar }} style={styles.avatar} />
-        ) : (
-          <View style={styles.avatar} />
-        )}
-        <Text style={styles.shopName} numberOfLines={1}>
-          {shopName}
-        </Text>
-        <Pressable
-          onPress={() => void onStopPress()}
-          accessibilityRole="button"
-          accessibilityLabel={
-            ended
-              ? "Live terminé, quitter"
-              : isHost
-                ? "Arrêter le live"
-                : "Quitter le live"
-          }
-          style={[
-            styles.livePill,
-            showPaused && { backgroundColor: "#F59E0B" },
-            ended && { backgroundColor: "rgba(255,255,255,0.28)" },
-          ]}
-        >
-          <Ionicons name={ended ? "radio" : "stop"} size={11} color="#fff" />
-          <Text style={styles.livePillText}>{ended ? "FINI" : "STOP"}</Text>
-        </Pressable>
-        <View style={styles.metaPill}>
-          <Ionicons name="time-outline" size={12} color="#fff" />
-          <Text style={styles.metaText}>{formatLiveClock(elapsed)}</Text>
-        </View>
-        <Pressable
-          style={styles.metaPill}
-          onPress={() => setViewersOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Voir les spectateurs"
-        >
-          <Ionicons name="eye" size={12} color="#fff" />
-          <Text style={styles.metaText}>
-            {compactCount(
-              localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0,
-            )}
+        <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
+          {shopAvatar ? (
+            <Image source={{ uri: shopAvatar }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatar} />
+          )}
+          <Text style={styles.shopName} numberOfLines={1}>
+            {shopName}
           </Text>
-        </Pressable>
-      </View>
-
-      {isHost && !ended ? (
-        <View
-          style={[styles.guestQueue, { top: insets.top + 58 }]}
-          pointerEvents="box-none"
-        >
-          <LiveGuestQueue
-            pending={(live.guests ?? []).filter(
-              (row) => row.status === "PENDING",
-            )}
-            busy={busy}
-            onAccept={(guestId) => {
-              void (async () => {
-                setBusy(true);
-                const ok = await hostPost({ action: "guest_accept", guestId });
-                setBusy(false);
-                if (ok) showToast("Invité sur scène", "success");
-              })();
-            }}
-            onRefuse={(guestId) => {
-              void (async () => {
-                setBusy(true);
-                await hostPost({ action: "guest_refuse", guestId });
-                setBusy(false);
-              })();
-            }}
-          />
-        </View>
-      ) : null}
-
-      {ended ? (
-        <View style={styles.statusBox} pointerEvents="box-none">
-          <Text style={styles.statusTitle}>Live terminé</Text>
-          <Text style={styles.statusBody}>
-            {live.statusMessage ?? "Le diffuseur a arrêté le live."}
-          </Text>
-          <Pressable style={styles.resume} onPress={goHome}>
-            <Text style={styles.resumeText}>Quitter</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {showPaused ? (
-        <View style={styles.statusBox} pointerEvents="box-none">
-          <Text style={styles.statusTitle}>Live en pause</Text>
-          {live.statusMessage ? (
-            <Text style={styles.statusBody}>{live.statusMessage}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!ended && token && sfuQuery.isError ? (
-        <View style={styles.statusBox} pointerEvents="box-none">
-          <Text style={styles.statusTitle}>Vidéo et son indisponibles</Text>
-          <Text style={styles.statusBody}>
-            {sfuQuery.error instanceof Error
-              ? sfuQuery.error.message
-              : "Réessaie la connexion au live"}
-          </Text>
-        </View>
-      ) : null}
-      {!ended && token && sfu && !rtcAvailable ? (
-        <View style={styles.statusBox} pointerEvents="box-none">
-          <Text style={styles.statusTitle}>Caméra et micro indisponibles</Text>
-          <Text style={styles.statusBody}>
-            Relance le build de développement pour activer la vidéo
-          </Text>
-        </View>
-      ) : null}
-      {paused && isHost && !ended ? (
-        <View style={styles.resumeWrap} pointerEvents="box-none">
           <Pressable
-            style={styles.resume}
-            onPress={() => void hostPost({ action: "resume" })}
+            onPress={() => void onStopPress()}
+            accessibilityRole="button"
+            accessibilityLabel={
+              ended
+                ? "Live terminé, quitter"
+                : isHost
+                  ? "Arrêter le live"
+                  : "Quitter le live"
+            }
+            style={[
+              styles.livePill,
+              showPaused && { backgroundColor: "#F59E0B" },
+              ended && { backgroundColor: "rgba(255,255,255,0.28)" },
+            ]}
           >
-            <Ionicons name="play" size={16} color="#05140F" />
-            <Text style={styles.resumeText}>Reprendre</Text>
+            <Ionicons name={ended ? "radio" : "stop"} size={11} color="#fff" />
+            <Text style={styles.livePillText}>{ended ? "FINI" : "STOP"}</Text>
+          </Pressable>
+          <View style={styles.metaPill}>
+            <Ionicons name="time-outline" size={12} color="#fff" />
+            <Text style={styles.metaText}>{formatLiveClock(elapsed)}</Text>
+          </View>
+          <Pressable
+            style={styles.metaPill}
+            onPress={() => setViewersOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Voir les spectateurs"
+          >
+            <Ionicons name="eye" size={12} color="#fff" />
+            <Text style={styles.metaText}>
+              {compactCount(
+                localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0,
+              )}
+            </Text>
           </Pressable>
         </View>
-      ) : null}
 
-      {!token && !ended && !sfuReady ? (
-        <Pressable style={styles.authBanner} onPress={openAuth}>
-          <Text style={styles.authBannerText}>
-            Connecte-toi pour voir la vidéo et entendre le son
-          </Text>
-        </Pressable>
-      ) : null}
-
-      {sfuQuery.isError && !ended ? (
-        <View style={styles.authBanner}>
-          <Text style={styles.authBannerText}>
-            Vidéo indisponible — le chat et la boutique restent actifs
-          </Text>
-        </View>
-      ) : null}
-
-      {isHost && canPublish && !ended ? (
-        <LiveScreenShareBanner enabled liveId={liveId} />
-      ) : null}
-
-      <Pressable
-        style={styles.stage}
-        onPress={() => {
-          const now = Date.now();
-          if (now - lastTap.current < 280) {
-            lastTap.current = 0;
-            void sendLike();
-            return;
-          }
-          lastTap.current = now;
-        }}
-      >
-        {sfuReady ? (
-          <LiveKitVideo
-            isHost={isHost}
-            hostUserId={live.user?.id}
-            cameraOn={live.cameraOn !== false}
-            hostAvatar={shopAvatar}
-            ended={ended}
-            paused={paused}
-            stageLayout={live.stageLayout}
-            onKickPlayback={() => void sfuQuery.refetch()}
-          />
-        ) : ended || paused ? (
-          <View style={styles.stage} />
-        ) : (
-          <LiveWaiting
-            avatar={shopAvatar}
-            isHost={isHost}
-            onRetry={() => void sfuQuery.refetch()}
-          />
-        )}
-        <LinearGradient
-          colors={["rgba(0,0,0,0.35)", "transparent", "rgba(0,0,0,0.4)"]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-      </Pressable>
-
-      <View
-        style={[
-          styles.bottom,
-          {
-            bottom: composerBottom,
-            paddingBottom: composerBottom > 0 ? 8 : insets.bottom + 8,
-          },
-        ]}
-        pointerEvents="box-none"
-      >
-        {chatVisible ? (
-          <LiveComments chats={chats} hostUserId={live.user?.id} />
+        {isHost && !ended ? (
+          <View
+            style={[styles.guestQueue, { top: insets.top + 58 }]}
+            pointerEvents="box-none"
+          >
+            <LiveGuestQueue
+              pending={(live.guests ?? []).filter(
+                (row) => row.status === "PENDING",
+              )}
+              busy={busy}
+              onAccept={(guestId) => {
+                void (async () => {
+                  setBusy(true);
+                  const ok = await hostPost({
+                    action: "guest_accept",
+                    guestId,
+                  });
+                  setBusy(false);
+                  if (ok) showToast("Invité sur scène", "success");
+                })();
+              }}
+              onRefuse={(guestId) => {
+                void (async () => {
+                  setBusy(true);
+                  await hostPost({ action: "guest_refuse", guestId });
+                  setBusy(false);
+                })();
+              }}
+            />
+          </View>
         ) : null}
 
-        <View style={styles.composerRow}>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => setChatVisible((value) => !value)}
-          >
-            <Ionicons
-              name={chatVisible ? "chatbubble-ellipses" : "chatbubble-outline"}
-              size={18}
-              color="#fff"
-            />
-          </Pressable>
-          <TextInput
-            value={chat}
-            onChangeText={setChat}
-            placeholder="Commenter…"
-            placeholderTextColor="rgba(255,255,255,0.45)"
-            style={styles.input}
-            editable={!ended && !busy}
-            onSubmitEditing={() => void sendChat()}
-            returnKeyType="send"
-          />
-          <Pressable onPress={() => void sendChat()} hitSlop={8}>
-            <Ionicons name="send" size={18} color="#00D68F" />
-          </Pressable>
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.rail,
-          {
-            bottom: (composerBottom > 0 ? composerBottom : insets.bottom) + 118,
-          },
-        ]}
-        pointerEvents="box-none"
-      >
-        <Pressable
-          style={styles.railBtn}
-          onPress={() => {
-            setBagOpen(true);
-            if (isHost) void hostPost({ action: "catalog", open: true });
-          }}
-        >
-          <Ionicons name="bag-handle" size={20} color="#fff" />
-        </Pressable>
-        {!isHost ? (
-          <Pressable style={styles.railBtn} onPress={() => void sendLike()}>
-            <Ionicons name="heart" size={22} color="#FF5BA0" />
-            <Text style={styles.railCount}>
-              {compactCount(live.likeCount ?? 0)}
+        {ended ? (
+          <View style={styles.statusBox} pointerEvents="box-none">
+            <Text style={styles.statusTitle}>Live terminé</Text>
+            <Text style={styles.statusBody}>
+              {live.statusMessage ?? "Le diffuseur a arrêté le live."}
             </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.railBtn}>
-            <Ionicons name="heart" size={20} color="#FF5BA0" />
-            <Text style={styles.railCount}>
-              {compactCount(live.likeCount ?? 0)}
+            <Pressable style={styles.resume} onPress={goHome}>
+              <Text style={styles.resumeText}>Quitter</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {showPaused ? (
+          <View style={styles.statusBox} pointerEvents="box-none">
+            <Text style={styles.statusTitle}>Live en pause</Text>
+            {live.statusMessage ? (
+              <Text style={styles.statusBody}>{live.statusMessage}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {!ended && token && sfuQuery.isError ? (
+          <View style={styles.statusBox} pointerEvents="box-none">
+            <Text style={styles.statusTitle}>Vidéo et son indisponibles</Text>
+            <Text style={styles.statusBody}>
+              {sfuQuery.error instanceof Error
+                ? sfuQuery.error.message
+                : "Réessaie la connexion au live"}
             </Text>
           </View>
-        )}
-        {!isHost ? (
+        ) : null}
+        {!ended && token && sfu && !rtcAvailable ? (
+          <View style={styles.statusBox} pointerEvents="box-none">
+            <Text style={styles.statusTitle}>
+              Caméra et micro indisponibles
+            </Text>
+            <Text style={styles.statusBody}>
+              Relance le build de développement pour activer la vidéo
+            </Text>
+          </View>
+        ) : null}
+        {paused && isHost && !ended ? (
+          <View style={styles.resumeWrap} pointerEvents="box-none">
+            <Pressable
+              style={styles.resume}
+              onPress={() => void hostPost({ action: "resume" })}
+            >
+              <Ionicons name="play" size={16} color="#05140F" />
+              <Text style={styles.resumeText}>Reprendre</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!token && !ended && !sfuReady ? (
+          <Pressable style={styles.authBanner} onPress={openAuth}>
+            <Text style={styles.authBannerText}>
+              Connecte-toi pour voir la vidéo et entendre le son
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {sfuQuery.isError && !ended ? (
+          <View style={styles.authBanner}>
+            <Text style={styles.authBannerText}>
+              Vidéo indisponible — le chat et la boutique restent actifs
+            </Text>
+          </View>
+        ) : null}
+
+        {isHost && canPublish && !ended ? (
+          <LiveScreenShareBanner enabled liveId={liveId} />
+        ) : null}
+
+        <Pressable
+          style={styles.stage}
+          onPress={() => {
+            const now = Date.now();
+            if (now - lastTap.current < 280) {
+              lastTap.current = 0;
+              void sendLike();
+              return;
+            }
+            lastTap.current = now;
+          }}
+        >
+          {sfuReady ? (
+            <LiveKitVideo
+              isHost={isHost}
+              hostUserId={live.user?.id}
+              cameraOn={live.cameraOn !== false}
+              hostAvatar={shopAvatar}
+              ended={ended}
+              paused={paused}
+              stageLayout={live.stageLayout}
+              onKickPlayback={() => void sfuQuery.refetch()}
+            />
+          ) : ended || paused ? (
+            <View style={styles.stage} />
+          ) : (
+            <LiveWaiting
+              avatar={shopAvatar}
+              isHost={isHost}
+              onRetry={() => void sfuQuery.refetch()}
+            />
+          )}
+          <LinearGradient
+            colors={["rgba(0,0,0,0.35)", "transparent", "rgba(0,0,0,0.4)"]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        </Pressable>
+
+        <View
+          style={[
+            styles.bottom,
+            {
+              bottom: composerBottom,
+              paddingBottom: composerBottom > 0 ? 8 : insets.bottom + 8,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          {chatVisible ? (
+            <LiveComments chats={chats} hostUserId={live.user?.id} />
+          ) : null}
+
+          <View style={styles.composerRow}>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => setChatVisible((value) => !value)}
+            >
+              <Ionicons
+                name={
+                  chatVisible ? "chatbubble-ellipses" : "chatbubble-outline"
+                }
+                size={18}
+                color="#fff"
+              />
+            </Pressable>
+            <TextInput
+              value={chat}
+              onChangeText={setChat}
+              placeholder="Commenter…"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              style={styles.input}
+              editable={!ended && !busy}
+              onSubmitEditing={() => void sendChat()}
+              returnKeyType="send"
+            />
+            <Pressable onPress={() => void sendChat()} hitSlop={8}>
+              <Ionicons name="send" size={18} color="#00D68F" />
+            </Pressable>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.rail,
+            {
+              bottom:
+                (composerBottom > 0 ? composerBottom : insets.bottom) + 118,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
           <Pressable
             style={styles.railBtn}
             onPress={() => {
-              if (!token) {
-                openAuth();
-                return;
-              }
-              setGiftOpen(true);
+              setBagOpen(true);
+              if (isHost) void hostPost({ action: "catalog", open: true });
             }}
           >
-            <Ionicons name="gift" size={20} color="#7dffb3" />
+            <Ionicons name="bag-handle" size={20} color="#fff" />
           </Pressable>
-        ) : (
-          <View style={styles.railBtn}>
-            <Ionicons name="gift" size={18} color="#7dffb3" />
-            <Text style={styles.railCount}>
-              {formatMoney(live.giftCents ?? 0)}
-            </Text>
-          </View>
-        )}
-        {!isHost && !ended ? (
-          <Pressable
-            style={[
-              styles.railBtn,
-              live.myGuest?.status === "PENDING" && styles.railBtnWait,
-              live.myGuest?.status === "ON_STAGE" && styles.railBtnOn,
-              live.guestJoinLocked &&
-                live.myGuest?.status !== "ON_STAGE" &&
-                live.myGuest?.status !== "PENDING" &&
-                styles.railBtnWait,
-            ]}
-            onPress={() => {
-              if (!token) {
-                openAuth();
-                return;
-              }
-              const status = live.myGuest?.status;
-              if (
+          {!isHost ? (
+            <Pressable style={styles.railBtn} onPress={() => void sendLike()}>
+              <Ionicons name="heart" size={22} color="#FF5BA0" />
+              <Text style={styles.railCount}>
+                {compactCount(live.likeCount ?? 0)}
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={styles.railBtn}>
+              <Ionicons name="heart" size={20} color="#FF5BA0" />
+              <Text style={styles.railCount}>
+                {compactCount(live.likeCount ?? 0)}
+              </Text>
+            </View>
+          )}
+          {!isHost ? (
+            <Pressable
+              style={styles.railBtn}
+              onPress={() => {
+                if (!token) {
+                  openAuth();
+                  return;
+                }
+                setGiftOpen(true);
+              }}
+            >
+              <Ionicons name="gift" size={20} color="#7dffb3" />
+            </Pressable>
+          ) : (
+            <View style={styles.railBtn}>
+              <Ionicons name="gift" size={18} color="#7dffb3" />
+              <Text style={styles.railCount}>
+                {formatMoney(live.giftCents ?? 0)}
+              </Text>
+            </View>
+          )}
+          {!isHost && !ended ? (
+            <Pressable
+              style={[
+                styles.railBtn,
+                live.myGuest?.status === "PENDING" && styles.railBtnWait,
+                live.myGuest?.status === "ON_STAGE" && styles.railBtnOn,
                 live.guestJoinLocked &&
-                status !== "PENDING" &&
-                status !== "ON_STAGE"
-              ) {
-                showToast(
-                  "Live host-only — le diffuseur a fermé les montées",
-                  "info",
-                );
-                return;
-              }
-              void (async () => {
-                setBusy(true);
-                if (status === "PENDING") {
-                  await hostPost({ action: "guest_cancel" });
-                  showToast("Demande annulée", "info");
-                } else if (status === "ON_STAGE") {
-                  await hostPost({ action: "guest_leave" });
-                  showToast("Hors scène", "info");
-                } else {
-                  const ok = await hostPost({ action: "guest_request" });
-                  if (ok) showToast("Demande envoyée au diffuseur", "success");
+                  live.myGuest?.status !== "ON_STAGE" &&
+                  live.myGuest?.status !== "PENDING" &&
+                  styles.railBtnWait,
+              ]}
+              onPress={() => {
+                if (!token) {
+                  openAuth();
+                  return;
                 }
-                setBusy(false);
-                await liveQuery.refetch();
-              })();
-            }}
-          >
-            <Ionicons
-              name={
-                live.myGuest?.status === "ON_STAGE"
-                  ? "mic"
-                  : live.myGuest?.status === "PENDING"
-                    ? "hourglass"
-                    : live.guestJoinLocked
-                      ? "lock-closed"
-                      : "person-add"
-              }
-              size={20}
-              color={
-                live.myGuest?.status === "PENDING" ||
-                (live.guestJoinLocked && live.myGuest?.status !== "ON_STAGE")
-                  ? "#FBBF24"
-                  : "#fff"
-              }
-            />
+                const status = live.myGuest?.status;
+                if (
+                  live.guestJoinLocked &&
+                  status !== "PENDING" &&
+                  status !== "ON_STAGE"
+                ) {
+                  showToast(
+                    "Live host-only — le diffuseur a fermé les montées",
+                    "info",
+                  );
+                  return;
+                }
+                void (async () => {
+                  setBusy(true);
+                  if (status === "PENDING") {
+                    await hostPost({ action: "guest_cancel" });
+                    showToast("Demande annulée", "info");
+                  } else if (status === "ON_STAGE") {
+                    await hostPost({ action: "guest_leave" });
+                    showToast("Hors scène", "info");
+                  } else {
+                    const ok = await hostPost({ action: "guest_request" });
+                    if (ok)
+                      showToast("Demande envoyée au diffuseur", "success");
+                  }
+                  setBusy(false);
+                  await liveQuery.refetch();
+                })();
+              }}
+            >
+              <Ionicons
+                name={
+                  live.myGuest?.status === "ON_STAGE"
+                    ? "mic"
+                    : live.myGuest?.status === "PENDING"
+                      ? "hourglass"
+                      : live.guestJoinLocked
+                        ? "lock-closed"
+                        : "person-add"
+                }
+                size={20}
+                color={
+                  live.myGuest?.status === "PENDING" ||
+                  (live.guestJoinLocked && live.myGuest?.status !== "ON_STAGE")
+                    ? "#FBBF24"
+                    : "#fff"
+                }
+              />
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.railBtn} onPress={() => void shareLive()}>
+            <Ionicons name="share-social" size={20} color="#fff" />
           </Pressable>
-        ) : null}
-        <Pressable style={styles.railBtn} onPress={() => void shareLive()}>
-          <Ionicons name="share-social" size={20} color="#fff" />
-        </Pressable>
-        {canPublish ? (
-          <>
-            <LiveHostAvButtons
-              onCamera={(enabled) => {
-                void hostPost({ action: "camera", cameraOn: enabled });
-              }}
-              onMic={(enabled) => {
-                void hostPost({ action: "mic", micOn: enabled });
-              }}
-            />
-            {isHost ? <LiveScreenShareHost enabled liveId={liveId} /> : null}
-            {isHost ? (
-              <Pressable
-                style={[
-                  styles.railBtn,
-                  live.guestJoinLocked && styles.railBtnWait,
-                ]}
-                onPress={() => {
-                  void (async () => {
-                    setBusy(true);
-                    const locked = !live.guestJoinLocked;
-                    const ok = await hostPost({
-                      action: "guest_join_lock",
-                      locked,
-                    });
-                    setBusy(false);
-                    if (ok) {
-                      showToast(
-                        locked
-                          ? "Montées fermées — live host-only"
-                          : "Montées ouvertes — viewers peuvent demander",
-                        "info",
-                      );
-                      await liveQuery.refetch();
-                    }
-                  })();
+          {canPublish ? (
+            <>
+              <LiveHostAvButtons
+                onCamera={(enabled) => {
+                  void hostPost({ action: "camera", cameraOn: enabled });
                 }}
-                accessibilityLabel={
-                  live.guestJoinLocked
-                    ? "Ouvrir les montées viewers"
-                    : "Fermer les montées (host-only)"
-                }
-              >
-                <Ionicons
-                  name={live.guestJoinLocked ? "lock-closed" : "lock-open"}
-                  size={20}
-                  color={live.guestJoinLocked ? "#FBBF24" : "#fff"}
-                />
-              </Pressable>
-            ) : null}
-            {isHost ? (
-              <Pressable
-                style={styles.railBtn}
-                onPress={() => setLayoutPickerOpen(true)}
-                accessibilityLabel="Disposition scène"
-              >
-                <Ionicons name="grid-outline" size={20} color="#fff" />
-              </Pressable>
-            ) : null}
-          </>
-        ) : null}
-      </View>
-      <LiveLikeRise events={stageFx} />
-      <LiveCatalogSync
-        isHost={isHost}
-        open={catalogSheetOpen}
-        presentedProductId={presentedProductId}
-        scrollY={catalogScrollY}
-        onRemote={onRemoteCatalog}
-      />
-
-      <LiveProductsSheet
-        open={catalogSheetOpen}
-        liveId={liveId}
-        shopId={live.product?.shop?.id}
-        isHost={isHost}
-        featured={featured}
-        presentedProductId={presentedProductId}
-        scrollY={catalogScrollY}
-        seed={live.catalogProducts}
-        onScroll={isHost ? setLocalScroll : undefined}
-        onClose={() => {
-          setBagOpen(false);
-          setLocalPresented(null);
-          setLocalScroll(0);
-          if (isHost) void hostPost({ action: "catalog", open: false });
-        }}
-        onView={(product) => {
-          if (isHost) {
-            setLocalPresented(product.id);
-            void hostPost({
-              action: "catalog",
-              open: true,
-              presentedProductId: product.id,
-            });
-          }
-        }}
-        onClearView={() => {
-          setLocalPresented(null);
-          if (isHost) {
-            void hostPost({
-              action: "catalog",
-              open: true,
-              presentedProductId: null,
-            });
-          }
-        }}
-        onBuy={
-          isHost
-            ? undefined
-            : (product) => {
-                setBuyProduct(product);
-              }
-        }
-      />
-      <LiveGiftSheet
-        open={giftOpen}
-        busy={busy}
-        onClose={() => setGiftOpen(false)}
-        onSend={(amount) => void sendGift(amount)}
-      />
-      <LiveViewersSheet
-        open={viewersOpen}
-        onClose={() => setViewersOpen(false)}
-        viewerCount={
-          localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0
-        }
-        qualifiedCount={localQualifiedCount || live.qualifiedViewerCount || 0}
-        viewers={localViewers.length ? localViewers : (live.viewers ?? [])}
-      />
-      <Modal
-        visible={layoutPickerOpen && isHost && !ended}
-        animationType="slide"
-        transparent
-        statusBarTranslucent
-        onRequestClose={() => setLayoutPickerOpen(false)}
-      >
-        <View style={styles.layoutFrame}>
-          <Pressable
-            style={styles.layoutBackdrop}
-            onPress={() => setLayoutPickerOpen(false)}
-          />
-          <View
-            style={[
-              styles.layoutSheet,
-              { paddingBottom: Math.max(insets.bottom, 14) + 8 },
-            ]}
-          >
-            <Text style={styles.layoutTitle}>Disposition scène</Text>
-            <Text style={styles.layoutSub}>
-              Placement des invités — visible pour tout le monde
-            </Text>
-            {LIVE_STAGE_LAYOUTS.map((row) => {
-              const active = normalizeStageLayout(live.stageLayout) === row.id;
-              return (
+                onMic={(enabled) => {
+                  void hostPost({ action: "mic", micOn: enabled });
+                }}
+              />
+              {isHost ? <LiveScreenShareHost enabled liveId={liveId} /> : null}
+              {isHost ? (
                 <Pressable
-                  key={row.id}
-                  disabled={busy}
-                  style={[styles.layoutRow, active && styles.layoutRowOn]}
+                  style={[
+                    styles.railBtn,
+                    live.guestJoinLocked && styles.railBtnWait,
+                  ]}
                   onPress={() => {
                     void (async () => {
                       setBusy(true);
+                      const locked = !live.guestJoinLocked;
                       const ok = await hostPost({
-                        action: "stage_layout",
-                        layout: row.id,
+                        action: "guest_join_lock",
+                        locked,
                       });
                       setBusy(false);
                       if (ok) {
-                        setLayoutPickerOpen(false);
-                        showToast(`Disposition « ${row.label} »`, "success");
+                        showToast(
+                          locked
+                            ? "Montées fermées — live host-only"
+                            : "Montées ouvertes — viewers peuvent demander",
+                          "info",
+                        );
                         await liveQuery.refetch();
                       }
                     })();
                   }}
+                  accessibilityLabel={
+                    live.guestJoinLocked
+                      ? "Ouvrir les montées viewers"
+                      : "Fermer les montées (host-only)"
+                  }
                 >
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.layoutRowTitle}>
-                      {row.label}
-                      {active ? " · actif" : ""}
-                    </Text>
-                    <Text style={styles.layoutRowHint}>{row.hint}</Text>
-                  </View>
-                  {active ? (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color="#00D68F"
-                    />
-                  ) : null}
+                  <Ionicons
+                    name={live.guestJoinLocked ? "lock-closed" : "lock-open"}
+                    size={20}
+                    color={live.guestJoinLocked ? "#FBBF24" : "#fff"}
+                  />
                 </Pressable>
-              );
-            })}
-          </View>
+              ) : null}
+              {isHost ? (
+                <Pressable
+                  style={styles.railBtn}
+                  onPress={() => setLayoutPickerOpen(true)}
+                  accessibilityLabel="Disposition scène"
+                >
+                  <Ionicons name="grid-outline" size={20} color="#fff" />
+                </Pressable>
+              ) : null}
+            </>
+          ) : null}
         </View>
-      </Modal>
-      <BuySheet
-        product={buyProduct}
-        onClose={() => setBuyProduct(null)}
-        onAdded={() => {
-          setBuyProduct(null);
-          showToast("Ajouté au panier", "success");
-        }}
-      />
+        <LiveLikeRise events={stageFx} />
+        <LiveCatalogSync
+          isHost={isHost}
+          open={catalogSheetOpen}
+          presentedProductId={presentedProductId}
+          scrollY={catalogScrollY}
+          onRemote={onRemoteCatalog}
+        />
+
+        <LiveProductsSheet
+          open={catalogSheetOpen}
+          liveId={liveId}
+          shopId={live.product?.shop?.id}
+          isHost={isHost}
+          featured={featured}
+          presentedProductId={presentedProductId}
+          scrollY={catalogScrollY}
+          seed={live.catalogProducts}
+          onScroll={isHost ? setLocalScroll : undefined}
+          onClose={() => {
+            setBagOpen(false);
+            setLocalPresented(null);
+            setLocalScroll(0);
+            if (isHost) void hostPost({ action: "catalog", open: false });
+          }}
+          onView={(product) => {
+            if (isHost) {
+              setLocalPresented(product.id);
+              void hostPost({
+                action: "catalog",
+                open: true,
+                presentedProductId: product.id,
+              });
+            }
+          }}
+          onClearView={() => {
+            setLocalPresented(null);
+            if (isHost) {
+              void hostPost({
+                action: "catalog",
+                open: true,
+                presentedProductId: null,
+              });
+            }
+          }}
+          onBuy={
+            isHost
+              ? undefined
+              : (product) => {
+                  setBuyProduct(product);
+                }
+          }
+        />
+        <LiveGiftSheet
+          open={giftOpen}
+          busy={busy}
+          onClose={() => setGiftOpen(false)}
+          onSend={(amount) => void sendGift(amount)}
+        />
+        <LiveViewersSheet
+          open={viewersOpen}
+          onClose={() => setViewersOpen(false)}
+          viewerCount={
+            localViewerCount ?? live.viewerCount ?? live.viewerPeak ?? 0
+          }
+          qualifiedCount={localQualifiedCount || live.qualifiedViewerCount || 0}
+          viewers={localViewers.length ? localViewers : (live.viewers ?? [])}
+        />
+        <Modal
+          visible={layoutPickerOpen && isHost && !ended}
+          animationType="slide"
+          transparent
+          statusBarTranslucent
+          onRequestClose={() => setLayoutPickerOpen(false)}
+        >
+          <View style={styles.layoutFrame}>
+            <Pressable
+              style={styles.layoutBackdrop}
+              onPress={() => setLayoutPickerOpen(false)}
+            />
+            <View
+              style={[
+                styles.layoutSheet,
+                { paddingBottom: Math.max(insets.bottom, 14) + 8 },
+              ]}
+            >
+              <SheetReduce onPress={() => setLayoutPickerOpen(false)} />
+              <Text style={styles.layoutTitle}>Disposition scène</Text>
+              <Text style={styles.layoutSub}>
+                Placement des invités — visible pour tout le monde
+              </Text>
+              {LIVE_STAGE_LAYOUTS.map((row) => {
+                const active =
+                  normalizeStageLayout(live.stageLayout) === row.id;
+                return (
+                  <Pressable
+                    key={row.id}
+                    disabled={busy}
+                    style={[styles.layoutRow, active && styles.layoutRowOn]}
+                    onPress={() => {
+                      void (async () => {
+                        setBusy(true);
+                        const ok = await hostPost({
+                          action: "stage_layout",
+                          layout: row.id,
+                        });
+                        setBusy(false);
+                        if (ok) {
+                          setLayoutPickerOpen(false);
+                          showToast(`Disposition « ${row.label} »`, "success");
+                          await liveQuery.refetch();
+                        }
+                      })();
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.layoutRowTitle}>
+                        {row.label}
+                        {active ? " · actif" : ""}
+                      </Text>
+                      <Text style={styles.layoutRowHint}>{row.hint}</Text>
+                    </View>
+                    {active ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#00D68F"
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </Modal>
+        <BuySheet
+          product={buyProduct}
+          onClose={() => setBuyProduct(null)}
+          onAdded={() => {
+            setBuyProduct(null);
+            showToast("Ajouté au panier", "success");
+          }}
+        />
       </View>
     </>
   );

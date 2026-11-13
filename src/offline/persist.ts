@@ -57,11 +57,18 @@ function prefetchFeedAvMedia(products: CompactProduct[]) {
       .filter((url): url is string => Boolean(url));
     if (posters.length) void Image.prefetch(posters);
 
+    // Absolute URLs only — media_cache keys must match playableMediaUrl lookups.
     enqueueMediaCache(
-      products.flatMap((row) => [
-        { url: remoteMediaUrl(row.videoUrl), kind: "video" as const },
-        { url: remoteMediaUrl(row.audioUrl), kind: "audio" as const },
-      ]),
+      products.flatMap((row) => {
+        const video = remoteMediaUrl(row.videoUrl);
+        const audio = remoteMediaUrl(row.audioUrl);
+        return [
+          video ? { url: video, kind: "video" as const } : null,
+          audio ? { url: audio, kind: "audio" as const } : null,
+        ].filter((item): item is { url: string; kind: "video" | "audio" } =>
+          Boolean(item?.url),
+        );
+      }),
     );
   } catch {
     /* never crash the UI while warming offline media */

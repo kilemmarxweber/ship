@@ -33,6 +33,13 @@ export function mediaUrl(path: string | null | undefined) {
   if (!path) return null;
   const trimmed = path.trim();
   if (!trimmed) return null;
+  if (
+    trimmed.startsWith("file://") ||
+    trimmed.startsWith("content://") ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed;
+  }
   if (trimmed.startsWith("//")) return `https:${trimmed}`;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed)) {
     return trimmed.replace(
@@ -51,7 +58,16 @@ export function remoteMediaUrl(path: string | null | undefined) {
 }
 
 export function isVideoUrl(url: string) {
-  return /\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i.test(url);
+  if (!url) return false;
+  // Local offline cache files keep their extension: …/hash.mp4
+  const clean = url.split("?")[0]?.split("#")[0] ?? url;
+  return /\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(clean);
+}
+
+export function isAudioUrl(url: string) {
+  if (!url) return false;
+  const clean = url.split("?")[0]?.split("#")[0] ?? url;
+  return /\.(mp3|m4a|aac|wav|ogg|opus|flac|caf)$/i.test(clean);
 }
 
 export class ApiError extends Error {

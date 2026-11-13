@@ -1,10 +1,18 @@
+import { remoteMediaUrl } from "@/src/api";
 import type { CartItem, CartPayload } from "@/src/cart";
 import type {
     InboxComment,
     InboxConversation,
     InboxSnapshot,
 } from "@/src/inbox";
+import { resolveCachedMedia } from "@/src/offline/media-cache";
 import type { CommentItem, FeedPage, Product } from "@/src/types";
+
+function localOrRemote(path: string | null | undefined) {
+  const remote = remoteMediaUrl(path);
+  if (!remote) return null;
+  return resolveCachedMedia(remote) ?? remote;
+}
 
 export const FEED_CAP = 24;
 export const INBOX_CAP = 20;
@@ -119,7 +127,11 @@ export function compactProduct(product: Product): CompactProduct {
 }
 
 export function expandProduct(row: CompactProduct): Product {
-  const images = [row.poster, row.videoUrl].filter((url): url is string =>
+  const poster = localOrRemote(row.poster);
+  const videoUrl = localOrRemote(row.videoUrl);
+  const audioUrl = localOrRemote(row.audioUrl);
+  // Preserve reel order: poster then video so offline gallery keeps the same feel.
+  const images = [poster, videoUrl].filter((url): url is string =>
     Boolean(url),
   );
   return {
@@ -137,9 +149,7 @@ export function expandProduct(row: CompactProduct): Product {
     commentsCount: 0,
     viewsCount: row.viewsCount ?? 0,
     likedByMe: false,
-    soundtrack: row.audioUrl
-      ? { audioUrl: row.audioUrl, title: undefined }
-      : null,
+    soundtrack: audioUrl ? { audioUrl, title: undefined } : null,
     shop: {
       id: row.shopId,
       name: row.shopName,

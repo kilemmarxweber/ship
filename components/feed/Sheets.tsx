@@ -25,13 +25,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ToastHost } from "@/components/Toast";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { colorHex, isLightColor } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
-import { coverOf } from "@/src/media";
 import { useMe } from "@/src/me";
+import { coverOf } from "@/src/media";
 import { snapshotGet } from "@/src/offline/db";
 import { commentsSnapKey } from "@/src/offline/keys";
 import { persistComments } from "@/src/offline/persist";
@@ -114,8 +115,7 @@ function CommentsBody({
 
   const myId = me.data?.id;
   const roles = me.data?.roles ?? [];
-  const isPlatformAdmin =
-    roles.includes("ADMIN") || roles.includes("OWNER");
+  const isPlatformAdmin = roles.includes("ADMIN") || roles.includes("OWNER");
   function canDelete(comment: CommentItem) {
     if (comment.id.startsWith("temp:")) return false;
     return comment.user.id === myId || isPlatformAdmin;
@@ -236,7 +236,7 @@ function CommentsBody({
           },
         ]}
       >
-        <View style={styles.handle} />
+        <SheetReduce onPress={onClose} />
         <Text style={styles.title}>Commentaires</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
@@ -304,29 +304,16 @@ type BuySheetProps = {
 };
 
 export function BuySheet(props: BuySheetProps) {
-  return (
-    <BuySheetContent
-      key={props.product?.id ?? "closed"}
-      {...props}
-    />
-  );
+  return <BuySheetContent key={props.product?.id ?? "closed"} {...props} />;
 }
 
-function BuySheetContent({
-  product,
-  onClose,
-  onAdded,
-}: BuySheetProps) {
+function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const token = useSession((state) => state.token);
   const initialStock = product ? productStock(product) : 0;
-  const [size, setSize] = useState<string | null>(
-    product?.sizes[0] ?? null,
-  );
-  const [color, setColor] = useState<string | null>(
-    product?.colors[0] ?? null,
-  );
+  const [size, setSize] = useState<string | null>(product?.sizes[0] ?? null);
+  const [color, setColor] = useState<string | null>(product?.colors[0] ?? null);
   const [qty, setQty] = useState(initialStock > 0 ? 1 : 0);
   const [stock, setStock] = useState(initialStock);
   const [soldCount, setSoldCount] = useState(product?.soldCount ?? 0);
@@ -416,7 +403,7 @@ function BuySheetContent({
             { paddingBottom: Math.max(18, insets.bottom + 10) },
           ]}
         >
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <View style={styles.buyHead}>
             {cover ? (
               <Image
@@ -598,14 +585,6 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.55)",
-  },
-  handle: {
-    alignSelf: "center",
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    marginBottom: 4,
   },
   sheet: {
     backgroundColor: colors.background,
@@ -794,6 +773,10 @@ type ShopProfileDetail = ShopCard & {
   hoursStart?: string | null;
   hoursEnd?: string | null;
   categories?: { id: string; count: number }[];
+  tiktokUrl?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  xUrl?: string | null;
 };
 
 const PRODUCT_PREVIEW = 6;
@@ -828,7 +811,12 @@ const shopProfileStyles = StyleSheet.create({
     textAlign: "center",
   },
   hours: { color: colors.muted, fontSize: 12, textAlign: "center" },
-  cats: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 },
+  cats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 6,
+  },
   catChip: {
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -850,8 +838,18 @@ const shopProfileStyles = StyleSheet.create({
     justifyContent: "center",
   },
   wa: { backgroundColor: "#25D366" },
-  tt: { backgroundColor: "#111111", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
+  tt: {
+    backgroundColor: "#111111",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  ig: { backgroundColor: "#E1306C" },
   fb: { backgroundColor: "#1877F2" },
+  x: {
+    backgroundColor: "#000000",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
   linkCard: {
     width: "100%",
     flexDirection: "row",
@@ -918,9 +916,24 @@ const shopProfileStyles = StyleSheet.create({
     backgroundColor: "#222",
   },
   currentProduct: { borderWidth: 1, borderColor: colors.buyEnd },
-  productTag: { color: colors.buyEnd, fontSize: 10, fontWeight: "800", marginTop: 5 },
-  productTitle: { color: "#fff", fontWeight: "700", fontSize: 12, marginTop: 4 },
-  productPrice: { color: colors.emerald, fontWeight: "800", fontSize: 12, marginTop: 4 },
+  productTag: {
+    color: colors.buyEnd,
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+  productTitle: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  productPrice: {
+    color: colors.emerald,
+    fontWeight: "800",
+    fontSize: 12,
+    marginTop: 4,
+  },
   emptyProducts: { color: colors.muted, fontSize: 13 },
   moreProducts: {
     minHeight: 40,
@@ -939,8 +952,13 @@ const shopProfileStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  followOff: { backgroundColor: "rgba(255,255,255,0.12)" },
-  followText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  followOff: { backgroundColor: "#DC2626" },
+  followText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
+    flexShrink: 0,
+  },
   error: { color: "#ff9c9c", fontSize: 12, textAlign: "center" },
 });
 
@@ -1042,33 +1060,22 @@ function ShopProfileBody({
   }
 
   async function openWhatsApp() {
+    if (!phone) {
+      showToast("Aucun numéro WhatsApp pour cette boutique.", "info");
+      return;
+    }
     const message = `Bonjour, je vous contacte depuis ShipShop à propos de ${shop.name}.\n${shopUrl}`;
     const suffix = `?text=${encodeURIComponent(message)}`;
-    await openUrl(
-      phone
-        ? `https://wa.me/${phoneDigits(phone)}${suffix}`
-        : `https://wa.me/${suffix}`,
-    );
+    await openUrl(`https://wa.me/${phoneDigits(phone)}${suffix}`);
   }
 
-  async function shareToTikTok() {
-    try {
-      await Share.share({
-        message: `Découvre ${shop.name} sur ShipShop\n${shopUrl}`,
-        url: shopUrl,
-      });
-    } catch (cause) {
-      showToast(
-        cause instanceof Error ? cause.message : "Partage impossible.",
-        "error",
-      );
+  async function openSocial(url: string | null | undefined, label: string) {
+    const href = url?.trim();
+    if (!href) {
+      showToast(`Le vendeur n’a pas encore indiqué son ${label}.`, "info");
+      return;
     }
-  }
-
-  async function openFacebook() {
-    await openUrl(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shopUrl)}`,
-    );
+    await openUrl(href);
   }
 
   async function shareShop() {
@@ -1148,6 +1155,13 @@ function ShopProfileBody({
       ? `https://www.google.com/maps/search/?api=1&query=${detail.lat},${detail.lng}`
       : null;
   const followed = Boolean(shop.followedByMe ?? detail?.followedByMe);
+  const tiktokUrl = detail?.tiktokUrl?.trim() || null;
+  const facebookUrl = detail?.facebookUrl?.trim() || null;
+  const instagramUrl = detail?.instagramUrl?.trim() || null;
+  const xUrl = detail?.xUrl?.trim() || null;
+  const hasSocials = Boolean(
+    phone || tiktokUrl || facebookUrl || instagramUrl || xUrl,
+  );
 
   return (
     <View style={styles.frame}>
@@ -1158,7 +1172,7 @@ function ShopProfileBody({
           { paddingBottom: Math.max(12, insets.bottom + 6) },
         ]}
       >
-        <View style={styles.handle} />
+        <SheetReduce onPress={onClose} />
         <ScrollView
           contentContainerStyle={shopProfileStyles.scroll}
           showsVerticalScrollIndicator={false}
@@ -1202,32 +1216,60 @@ function ShopProfileBody({
             </View>
           ) : null}
 
-          <View style={shopProfileStyles.socialRow}>
-            <Pressable
-              style={[shopProfileStyles.socialBtn, shopProfileStyles.wa]}
-              onPress={() => void openWhatsApp()}
-              accessibilityRole="button"
-              accessibilityLabel="Contacter sur WhatsApp"
-            >
-              <Ionicons name="logo-whatsapp" size={26} color="#fff" />
-            </Pressable>
-            <Pressable
-              style={[shopProfileStyles.socialBtn, shopProfileStyles.tt]}
-              onPress={() => void shareToTikTok()}
-              accessibilityRole="button"
-              accessibilityLabel="Partager sur TikTok"
-            >
-              <Ionicons name="logo-tiktok" size={24} color="#fff" />
-            </Pressable>
-            <Pressable
-              style={[shopProfileStyles.socialBtn, shopProfileStyles.fb]}
-              onPress={() => void openFacebook()}
-              accessibilityRole="button"
-              accessibilityLabel="Partager sur Facebook"
-            >
-              <Ionicons name="logo-facebook" size={26} color="#fff" />
-            </Pressable>
-          </View>
+          {hasSocials ? (
+            <View style={shopProfileStyles.socialRow}>
+              {phone ? (
+                <Pressable
+                  style={[shopProfileStyles.socialBtn, shopProfileStyles.wa]}
+                  onPress={() => void openWhatsApp()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Contacter sur WhatsApp"
+                >
+                  <Ionicons name="logo-whatsapp" size={26} color="#fff" />
+                </Pressable>
+              ) : null}
+              {tiktokUrl ? (
+                <Pressable
+                  style={[shopProfileStyles.socialBtn, shopProfileStyles.tt]}
+                  onPress={() => void openSocial(tiktokUrl, "TikTok")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Voir le TikTok du vendeur"
+                >
+                  <Ionicons name="logo-tiktok" size={24} color="#fff" />
+                </Pressable>
+              ) : null}
+              {instagramUrl ? (
+                <Pressable
+                  style={[shopProfileStyles.socialBtn, shopProfileStyles.ig]}
+                  onPress={() => void openSocial(instagramUrl, "Instagram")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Voir l’Instagram du vendeur"
+                >
+                  <Ionicons name="logo-instagram" size={26} color="#fff" />
+                </Pressable>
+              ) : null}
+              {facebookUrl ? (
+                <Pressable
+                  style={[shopProfileStyles.socialBtn, shopProfileStyles.fb]}
+                  onPress={() => void openSocial(facebookUrl, "Facebook")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Voir le Facebook du vendeur"
+                >
+                  <Ionicons name="logo-facebook" size={26} color="#fff" />
+                </Pressable>
+              ) : null}
+              {xUrl ? (
+                <Pressable
+                  style={[shopProfileStyles.socialBtn, shopProfileStyles.x]}
+                  onPress={() => void openSocial(xUrl, "X")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Voir le compte X du vendeur"
+                >
+                  <Ionicons name="logo-twitter" size={24} color="#fff" />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           <Pressable
             style={shopProfileStyles.linkCard}
@@ -1386,13 +1428,12 @@ function ShopProfileBody({
             ]}
             onPress={onFollow}
             accessibilityRole="button"
+            accessibilityLabel={followed ? "Ne plus suivre" : "Suivre"}
           >
             <Text style={shopProfileStyles.followText}>
               {followed ? "Ne plus suivre" : "Suivre"}
+              {"\u00A0"}
             </Text>
-          </Pressable>
-          <Pressable onPress={onClose} accessibilityRole="button">
-            <Text style={styles.empty}>Fermer</Text>
           </Pressable>
         </ScrollView>
       </View>

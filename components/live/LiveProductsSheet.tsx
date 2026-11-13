@@ -119,7 +119,7 @@ export function LiveProductsSheet({
   const detail = open
     ? presentedProductId
       ? remoteDetail
-      : selectedDetail?.product ?? null
+      : (selectedDetail?.product ?? null)
     : null;
 
   useEffect(() => {
@@ -193,11 +193,7 @@ export function LiveProductsSheet({
           <View style={styles.backdrop} />
         )}
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
-          {isHost ? (
-            <SheetReduce onPress={detail ? closeDetail : closeSheet} />
-          ) : (
-            <View style={styles.handle} />
-          )}
+          <SheetReduce onPress={detail ? closeDetail : closeSheet} />
           {detail ? (
             <ProductExplain
               product={detail}
@@ -429,13 +425,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     gap: 10,
-  },
-  handle: {
-    alignSelf: "center",
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.22)",
   },
   head: {
     flexDirection: "row",

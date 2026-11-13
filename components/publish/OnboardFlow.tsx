@@ -19,6 +19,7 @@ import {
     type AppCurrency,
 } from "@/src/product-options";
 import { useSession } from "@/src/session";
+import { shopSocialPayload } from "@/src/shop-social";
 import { colors, HAIRLINE, type ThemeColors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
@@ -44,6 +45,10 @@ export function OnboardFlow({
   const [mediaBusy, setMediaBusy] = useState(false);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
+  const [tiktok, setTiktok] = useState("");
+  const [facebook, setFacebook] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [x, setX] = useState("");
 
   useEffect(() => {
     void getDeviceCoords()
@@ -90,6 +95,7 @@ export function OnboardFlow({
           fxConfirmed: true,
           lat: lat ?? undefined,
           lng: lng ?? undefined,
+          ...shopSocialPayload({ tiktok, facebook, instagram, x }),
         }),
       });
       await queryClient.invalidateQueries({
@@ -200,6 +206,48 @@ export function OnboardFlow({
         multiline
       />
 
+      <Text style={styles.label}>Réseaux sociaux (optionnel)</Text>
+      <Text style={styles.socialHint}>
+        Comme WhatsApp (téléphone du compte) : ces liens s’affichent sur ta
+        fiche et ouvrent directement ton profil.
+      </Text>
+      <TextInput
+        value={tiktok}
+        onChangeText={setTiktok}
+        placeholder="TikTok — @compte ou lien"
+        placeholderTextColor={c.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.input}
+      />
+      <TextInput
+        value={instagram}
+        onChangeText={setInstagram}
+        placeholder="Instagram — @compte ou lien"
+        placeholderTextColor={c.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.input}
+      />
+      <TextInput
+        value={facebook}
+        onChangeText={setFacebook}
+        placeholder="Facebook — page ou lien"
+        placeholderTextColor={c.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.input}
+      />
+      <TextInput
+        value={x}
+        onChangeText={setX}
+        placeholder="X — @compte ou lien"
+        placeholderTextColor={c.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.input}
+      />
+
       <Pressable
         style={[styles.ctaPress, busy && { opacity: 0.7 }]}
         disabled={busy}
@@ -236,6 +284,12 @@ function makeOnboardStyles(c: ThemeColors = colors) {
     title: { color: c.text, fontSize: 26, fontWeight: "800" },
     lead: { color: c.textMuted, lineHeight: 20, marginBottom: 6 },
     label: { color: c.textMuted, fontWeight: "700", fontSize: 12 },
+    socialHint: {
+      color: c.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: -4,
+    },
     input: {
       backgroundColor: c.card,
       borderRadius: 14,

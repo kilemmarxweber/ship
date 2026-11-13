@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "skills": {
+    "deepeval": {
+      "source": "confident-ai/deepeval",
+      "sourceType": "github",
+      "skillPath": "skills/deepeval/SKILL.md",
+      "computedHash": "55c8d336b5cfed32a4ea055ae3480291f52debd696db54f9df4b54db9f5d3b26"
+    },
+    "deepeval-otel": {
+      "source": "confident-ai/deepeval",
+      "sourceType": "github",
+      "skillPath": "skills/deepeval-otel/SKILL.md",
+      "computedHash": "355e76409c67550ba787be0b4e5093048add2e5df8a1bccfeb1d070fe6f7fb44"
+    },
+    "deepeval-tracing": {
+      "source": "confident-ai/deepeval",
+      "sourceType": "github",
+      "skillPath": "skills/deepeval-tracing/SKILL.md",
+      "computedHash": "d9e8e141c42ed20bd6951d22cf5ff96738eafa3dea0e5edb4edbaf2db6ca4b97"
+    },
+    "langfuse": {
+      "source": "langfuse/skills",
+      "sourceType": "github",
+      "skillPath": "skills/langfuse/SKILL.md",
+      "computedHash": "a35653229c8f110a1c950bce100edaf84870b8037dd59c940031e8434b9e15f0"
+    },
+    "migrate-to-langfuse": {
+      "source": "langfuse/skills",
+      "sourceType": "github",
+      "skillPath": "skills/migrate-to-langfuse/SKILL.md",
+      "computedHash": "d31e2a3d3dbc98b6bda08ff139c1d107f14295a866f185ffc06b3eb6b2ee7cf1"
+    },
+    "security-audit": {
+      "source": "cloudflare/security-audit-skill",
+      "sourceType": "github",
+      "skillPath": "skills/security-audit/SKILL.md",
+      "computedHash": "8513eb3b2c39b8d05ef4f47b32ef4d18280b93a5efb91d8df6272f7435034af5"
+    }
+  }
+}

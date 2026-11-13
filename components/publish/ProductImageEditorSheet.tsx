@@ -15,6 +15,7 @@ import {
 import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
@@ -157,7 +158,7 @@ export function ProductImageEditorSheet({
             },
           ]}
         >
-          <View style={styles.handle} />
+          <SheetReduce onPress={onClose} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.text }]}>Retoucher</Text>
             <Pressable
@@ -423,13 +424,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingHorizontal: 16,
     gap: 12,
-  },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.25)",
   },
   header: {
     minHeight: 34,

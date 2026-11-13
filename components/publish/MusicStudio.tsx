@@ -26,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SheetReduce } from "@/components/ui/SheetReduce";
 import {
     api,
     apiDownloadFile,
@@ -693,7 +694,7 @@ export function MusicStudio({
         <View style={styles.frame}>
           <Pressable style={styles.backdrop} onPress={closeStudio} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.handle} />
+            <SheetReduce onPress={closeStudio} />
             <View style={styles.head}>
               <View style={styles.entryIcon}>
                 <Ionicons name="disc" size={18} color={c.primary} />
@@ -991,14 +992,6 @@ function makeStyles(c: ThemeColors = colors) {
       backgroundColor: c.sheet,
       paddingHorizontal: 16,
       paddingTop: 8,
-    },
-    handle: {
-      alignSelf: "center",
-      width: 36,
-      height: 4,
-      borderRadius: 999,
-      backgroundColor: HAIRLINE,
-      marginBottom: 10,
     },
     head: {
       flexDirection: "row",

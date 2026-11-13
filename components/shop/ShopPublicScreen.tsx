@@ -1,8 +1,8 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -42,6 +42,10 @@ type ShopDetail = ShopCard & {
   lat?: number | null;
   lng?: number | null;
   categories?: { id: string; count: number }[];
+  tiktokUrl?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  xUrl?: string | null;
 };
 
 function hoursLabel(shop: ShopDetail) {
@@ -248,6 +252,19 @@ export function ShopPublicScreen() {
     }
   }
 
+  async function openWhatsApp(phone: string) {
+    const digits = phone.replace(/\D/g, "");
+    if (!digits) {
+      showToast("Numéro WhatsApp invalide.", "info");
+      return;
+    }
+    await openUrl(
+      `https://wa.me/${digits}?text=${encodeURIComponent(
+        `Bonjour, je vous contacte depuis ShipShop à propos de ${shop?.name ?? "votre boutique"}.`,
+      )}`,
+    );
+  }
+
   async function shareShop() {
     if (!shop) return;
     try {
@@ -333,7 +350,9 @@ export function ShopPublicScreen() {
               Connexion indisponible
             </Text>
             <Pressable onPress={() => void shopQ.refetch()} style={ui.retryBtn}>
-              <Text style={[ui.retryText, { color: c.primary }]}>Réessayer</Text>
+              <Text style={[ui.retryText, { color: c.primary }]}>
+                Réessayer
+              </Text>
             </Pressable>
           </View>
         )
@@ -348,7 +367,9 @@ export function ShopPublicScreen() {
           </Text>
           {shopQ.isError || !online ? (
             <Pressable onPress={() => void shopQ.refetch()} style={ui.retryBtn}>
-              <Text style={[ui.retryText, { color: c.primary }]}>Réessayer</Text>
+              <Text style={[ui.retryText, { color: c.primary }]}>
+                Réessayer
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -390,10 +411,7 @@ export function ShopPublicScreen() {
                   style={ui.cover}
                   contentFit="cover"
                 />
-                <Text
-                  style={[ui.title, { color: c.text }]}
-                  numberOfLines={2}
-                >
+                <Text style={[ui.title, { color: c.text }]} numberOfLines={2}>
                   {product.title}
                 </Text>
                 <Text style={[ui.price, { color: c.emerald }]}>
@@ -460,232 +478,312 @@ export function ShopPublicScreen() {
           }
           ListHeaderComponent={
             <>
-          <View style={[ui.headerBlock, { borderBottomColor: HAIRLINE }]}>
-            <View style={ui.brandRow}>
-              <ShopLiveAvatar
-                live={liveOn}
-                logoUrl={shop.logoUrl}
-                name={shop.name}
-                size={56}
-                onPress={openAvatar}
-              />
-              <View style={ui.brandCopy}>
-                <Text style={[ui.name, { color: c.text }]} numberOfLines={1}>
-                  {shop.name}
-                </Text>
-                <Text
-                  style={[ui.meta, { color: c.textMuted }]}
-                  numberOfLines={2}
-                >
-                  @{shop.slug} · réf. {refCode} · {compactCount(productsCount)}{" "}
-                  {productsCount > 1 ? "produits" : "produit"} ·{" "}
-                  {compactCount(followers)}{" "}
-                  {followers > 1 ? "abonnés" : "abonné"}
-                </Text>
-                {shop.description ? (
-                  <Text
-                    style={[ui.desc, { color: c.textMuted }]}
-                    numberOfLines={2}
-                  >
-                    {shop.description}
-                  </Text>
-                ) : null}
-                {hours ? (
-                  <Text style={[ui.hours, { color: c.emerald }]}>{hours}</Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={ui.actions}>
-              <Pressable
-                style={[
-                  ui.followBtn,
-                  {
-                    backgroundColor: followed ? c.card : c.primary,
-                    borderColor: followed ? HAIRLINE : c.primary,
-                  },
-                ]}
-                onPress={() => void toggleFollow()}
-                disabled={followBusy}
-              >
-                <Text
-                  style={[
-                    ui.followText,
-                    { color: followed ? c.text : c.primaryForeground },
-                  ]}
-                >
-                  {followed ? "Abonné" : "S'abonner"}
-                </Text>
-              </Pressable>
-
-              {shop.contactPhone ? (
-                <Pressable
-                  style={[
-                    ui.phoneBtn,
-                    { borderColor: HAIRLINE, backgroundColor: c.card },
-                  ]}
-                  onPress={() => void openUrl(`tel:${shop.contactPhone}`)}
-                >
-                  <Ionicons name="call" size={14} color={c.emerald} />
-                  <Text
-                    style={[ui.phoneText, { color: c.text }]}
-                    numberOfLines={1}
-                  >
-                    {shop.contactPhone}
-                  </Text>
-                </Pressable>
-              ) : null}
-
-              <Pressable
-                style={[
-                  ui.iconBtn,
-                  { borderColor: HAIRLINE, backgroundColor: c.card },
-                ]}
-                onPress={() => setShowAddress((v) => !v)}
-                accessibilityLabel="Voir l'adresse"
-              >
-                <Ionicons name="location-outline" size={18} color={c.text} />
-              </Pressable>
-              <Pressable
-                style={[
-                  ui.iconBtn,
-                  { borderColor: HAIRLINE, backgroundColor: c.card },
-                ]}
-                onPress={() => void copyShopLink()}
-                accessibilityLabel="Copier le lien"
-              >
-                <Ionicons name="link-outline" size={18} color={c.text} />
-              </Pressable>
-              <Pressable
-                style={[
-                  ui.iconBtn,
-                  { borderColor: HAIRLINE, backgroundColor: c.card },
-                ]}
-                onPress={() => void shareShop()}
-                accessibilityLabel="Partager"
-              >
-                <Ionicons name="share-outline" size={18} color={c.text} />
-              </Pressable>
-              <Pressable
-                style={[
-                  ui.iconBtn,
-                  { backgroundColor: c.primary, borderColor: c.primary },
-                ]}
-                onPress={() => void messageSeller()}
-                accessibilityLabel="Message"
-              >
-                <Ionicons
-                  name="chatbubble"
-                  size={16}
-                  color={c.primaryForeground}
-                />
-              </Pressable>
-            </View>
-
-            {showAddress ? (
-              <View
-                style={[
-                  ui.addressCard,
-                  { backgroundColor: c.card, borderColor: HAIRLINE },
-                ]}
-              >
-                <View style={ui.addressRow}>
-                  <Ionicons name="location" size={16} color={c.primary} />
-                  <Text style={[ui.addressText, { color: c.text }]}>
-                    {shop.addressHint?.trim() || "Adresse non publiée"}
-                  </Text>
+              <View style={[ui.headerBlock, { borderBottomColor: HAIRLINE }]}>
+                <View style={ui.brandRow}>
+                  <ShopLiveAvatar
+                    live={liveOn}
+                    logoUrl={shop.logoUrl}
+                    name={shop.name}
+                    size={56}
+                    onPress={openAvatar}
+                  />
+                  <View style={ui.brandCopy}>
+                    <Text
+                      style={[ui.name, { color: c.text }]}
+                      numberOfLines={1}
+                    >
+                      {shop.name}
+                    </Text>
+                    <Text
+                      style={[ui.meta, { color: c.textMuted }]}
+                      numberOfLines={2}
+                    >
+                      @{shop.slug} · réf. {refCode} ·{" "}
+                      {compactCount(productsCount)}{" "}
+                      {productsCount > 1 ? "produits" : "produit"} ·{" "}
+                      {compactCount(followers)}{" "}
+                      {followers > 1 ? "abonnés" : "abonné"}
+                    </Text>
+                    {shop.description ? (
+                      <Text
+                        style={[ui.desc, { color: c.textMuted }]}
+                        numberOfLines={2}
+                      >
+                        {shop.description}
+                      </Text>
+                    ) : null}
+                    {hours ? (
+                      <Text style={[ui.hours, { color: c.emerald }]}>
+                        {hours}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-                {mapsUrl ? (
-                  <Pressable onPress={() => void openUrl(mapsUrl)}>
-                    <Text style={[ui.mapsLink, { color: c.primary }]}>
-                      Ouvrir dans Maps
+
+                <View style={ui.actions}>
+                  <Pressable
+                    style={[
+                      ui.followBtn,
+                      {
+                        backgroundColor: followed ? c.card : c.primary,
+                        borderColor: followed ? HAIRLINE : c.primary,
+                      },
+                    ]}
+                    onPress={() => void toggleFollow()}
+                    disabled={followBusy}
+                  >
+                    <Text
+                      style={[
+                        ui.followText,
+                        { color: followed ? c.text : c.primaryForeground },
+                      ]}
+                    >
+                      {followed ? "Abonné" : "S'abonner"}
                     </Text>
                   </Pressable>
+
+                  {shop.contactPhone ? (
+                    <Pressable
+                      style={[
+                        ui.phoneBtn,
+                        { borderColor: HAIRLINE, backgroundColor: c.card },
+                      ]}
+                      onPress={() => void openUrl(`tel:${shop.contactPhone}`)}
+                    >
+                      <Ionicons name="call" size={14} color={c.emerald} />
+                      <Text
+                        style={[ui.phoneText, { color: c.text }]}
+                        numberOfLines={1}
+                      >
+                        {shop.contactPhone}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  <Pressable
+                    style={[
+                      ui.iconBtn,
+                      { borderColor: HAIRLINE, backgroundColor: c.card },
+                    ]}
+                    onPress={() => setShowAddress((v) => !v)}
+                    accessibilityLabel="Voir l'adresse"
+                  >
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color={c.text}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      ui.iconBtn,
+                      { borderColor: HAIRLINE, backgroundColor: c.card },
+                    ]}
+                    onPress={() => void copyShopLink()}
+                    accessibilityLabel="Copier le lien"
+                  >
+                    <Ionicons name="link-outline" size={18} color={c.text} />
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      ui.iconBtn,
+                      { borderColor: HAIRLINE, backgroundColor: c.card },
+                    ]}
+                    onPress={() => void shareShop()}
+                    accessibilityLabel="Partager"
+                  >
+                    <Ionicons name="share-outline" size={18} color={c.text} />
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      ui.iconBtn,
+                      { backgroundColor: c.primary, borderColor: c.primary },
+                    ]}
+                    onPress={() => void messageSeller()}
+                    accessibilityLabel="Message"
+                  >
+                    <Ionicons
+                      name="chatbubble"
+                      size={16}
+                      color={c.primaryForeground}
+                    />
+                  </Pressable>
+                </View>
+
+                {shop.contactPhone ||
+                shop.tiktokUrl ||
+                shop.instagramUrl ||
+                shop.facebookUrl ||
+                shop.xUrl ? (
+                  <View style={ui.socialRow}>
+                    {shop.contactPhone ? (
+                      <Pressable
+                        style={[ui.socialBtn, { backgroundColor: "#25D366" }]}
+                        onPress={() => void openWhatsApp(shop.contactPhone!)}
+                        accessibilityLabel="WhatsApp"
+                      >
+                        <Ionicons name="logo-whatsapp" size={22} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                    {shop.tiktokUrl ? (
+                      <Pressable
+                        style={[ui.socialBtn, { backgroundColor: "#111" }]}
+                        onPress={() => void openUrl(shop.tiktokUrl!)}
+                        accessibilityLabel="TikTok"
+                      >
+                        <Ionicons name="logo-tiktok" size={20} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                    {shop.instagramUrl ? (
+                      <Pressable
+                        style={[ui.socialBtn, { backgroundColor: "#E1306C" }]}
+                        onPress={() => void openUrl(shop.instagramUrl!)}
+                        accessibilityLabel="Instagram"
+                      >
+                        <Ionicons
+                          name="logo-instagram"
+                          size={22}
+                          color="#fff"
+                        />
+                      </Pressable>
+                    ) : null}
+                    {shop.facebookUrl ? (
+                      <Pressable
+                        style={[ui.socialBtn, { backgroundColor: "#1877F2" }]}
+                        onPress={() => void openUrl(shop.facebookUrl!)}
+                        accessibilityLabel="Facebook"
+                      >
+                        <Ionicons name="logo-facebook" size={22} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                    {shop.xUrl ? (
+                      <Pressable
+                        style={[ui.socialBtn, { backgroundColor: "#000" }]}
+                        onPress={() => void openUrl(shop.xUrl!)}
+                        accessibilityLabel="X"
+                      >
+                        <Ionicons name="logo-twitter" size={20} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : null}
-              </View>
-            ) : null}
 
-            <View
-              style={[
-                ui.searchBox,
-                { backgroundColor: c.card, borderColor: HAIRLINE },
-              ]}
-            >
-              <Ionicons name="search" size={18} color={c.textMuted} />
-              <TextInput
-                value={q}
-                onChangeText={setQ}
-                placeholder="Rechercher un produit..."
-                placeholderTextColor={c.textMuted}
-                style={[ui.searchInput, { color: c.text }]}
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
-              {q ? (
-                <Pressable onPress={() => setQ("")} hitSlop={8}>
-                  <Ionicons name="close-circle" size={18} color={c.textMuted} />
-                </Pressable>
-              ) : null}
-            </View>
+                {showAddress ? (
+                  <View
+                    style={[
+                      ui.addressCard,
+                      { backgroundColor: c.card, borderColor: HAIRLINE },
+                    ]}
+                  >
+                    <View style={ui.addressRow}>
+                      <Ionicons name="location" size={16} color={c.primary} />
+                      <Text style={[ui.addressText, { color: c.text }]}>
+                        {shop.addressHint?.trim() || "Adresse non publiée"}
+                      </Text>
+                    </View>
+                    {mapsUrl ? (
+                      <Pressable onPress={() => void openUrl(mapsUrl)}>
+                        <Text style={[ui.mapsLink, { color: c.primary }]}>
+                          Ouvrir dans Maps
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={ui.chips}
-            >
-              <Pressable
-                style={[
-                  ui.chip,
-                  !category
-                    ? { backgroundColor: c.primary, borderColor: c.primary }
-                    : { backgroundColor: c.card, borderColor: HAIRLINE },
-                ]}
-                onPress={() => setCategory(null)}
-              >
-                <Text
+                <View
                   style={[
-                    ui.chipText,
-                    { color: !category ? c.primaryForeground : c.text },
+                    ui.searchBox,
+                    { backgroundColor: c.card, borderColor: HAIRLINE },
                   ]}
                 >
-                  Tout ({productsCount})
-                </Text>
-              </Pressable>
-              {categoryChips.map((chip) => {
-                const on = category === chip.id;
-                return (
+                  <Ionicons name="search" size={18} color={c.textMuted} />
+                  <TextInput
+                    value={q}
+                    onChangeText={setQ}
+                    placeholder="Rechercher un produit..."
+                    placeholderTextColor={c.textMuted}
+                    style={[ui.searchInput, { color: c.text }]}
+                    returnKeyType="search"
+                    clearButtonMode="while-editing"
+                  />
+                  {q ? (
+                    <Pressable onPress={() => setQ("")} hitSlop={8}>
+                      <Ionicons
+                        name="close-circle"
+                        size={18}
+                        color={c.textMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={ui.chips}
+                >
                   <Pressable
-                    key={chip.id}
                     style={[
                       ui.chip,
-                      on
+                      !category
                         ? { backgroundColor: c.primary, borderColor: c.primary }
                         : { backgroundColor: c.card, borderColor: HAIRLINE },
                     ]}
-                    onPress={() =>
-                      setCategory((prev) => (prev === chip.id ? null : chip.id))
-                    }
+                    onPress={() => setCategory(null)}
                   >
                     <Text
                       style={[
                         ui.chipText,
-                        { color: on ? c.primaryForeground : c.text },
+                        { color: !category ? c.primaryForeground : c.text },
                       ]}
                     >
-                      {chip.label} ({chip.count})
+                      Tout ({productsCount})
                     </Text>
                   </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
+                  {categoryChips.map((chip) => {
+                    const on = category === chip.id;
+                    return (
+                      <Pressable
+                        key={chip.id}
+                        style={[
+                          ui.chip,
+                          on
+                            ? {
+                                backgroundColor: c.primary,
+                                borderColor: c.primary,
+                              }
+                            : {
+                                backgroundColor: c.card,
+                                borderColor: HAIRLINE,
+                              },
+                        ]}
+                        onPress={() =>
+                          setCategory((prev) =>
+                            prev === chip.id ? null : chip.id,
+                          )
+                        }
+                      >
+                        <Text
+                          style={[
+                            ui.chipText,
+                            { color: on ? c.primaryForeground : c.text },
+                          ]}
+                        >
+                          {chip.label} ({chip.count})
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-          <View
-            onLayout={(event) => {
-              productsY.current = event.nativeEvent.layout.y;
-            }}
-            style={ui.productsBlock}
-          />
+              <View
+                onLayout={(event) => {
+                  productsY.current = event.nativeEvent.layout.y;
+                }}
+                style={ui.productsBlock}
+              />
             </>
           }
         />
@@ -747,6 +845,19 @@ const ui = StyleSheet.create({
     gap: 6,
   },
   phoneText: { fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  socialRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+  },
+  socialBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   iconBtn: {
     width: 36,
     height: 36,

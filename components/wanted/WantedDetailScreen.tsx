@@ -16,6 +16,7 @@ import {
     Switch,
     Text,
     TextInput,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -52,6 +53,7 @@ import {
 
 type Intent = "PICKUP" | "DELIVERY" | "SELLER_DROP";
 type Rail = "SHIPSHOP" | "OFF_PLATFORM";
+type OfferSort = "PRICE" | "RECENT" | "CONDITION";
 
 function composeAddress(parts: {
   city: string;
@@ -81,6 +83,7 @@ function offerStatusLabel(status: string) {
 export function WantedDetailScreen({ requestId }: { requestId: string }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const me = useMe();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -92,6 +95,7 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
   );
 
   const [offer, setOffer] = useState<WantedOffer | null>(null);
+  const [offerSort, setOfferSort] = useState<OfferSort>("PRICE");
   const [intent, setIntent] = useState<Intent>("PICKUP");
   const [rail, setRail] = useState<Rail>("SHIPSHOP");
   const [waiver, setWaiver] = useState(false);
@@ -289,10 +293,57 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
     }
   }
 
+  async function messageSeller(row: WantedOffer) {
+    if (!token) {
+      openAuth();
+      return;
+    }
+    if (!row.shop?.id) {
+      showToast("Cette boutique n’est pas disponible", "error");
+      return;
+    }
+    try {
+      const data = await api<{ conversation?: { id: string } }>(
+        "/api/conversations",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            shopId: row.shop.id,
+            wantedRequestId: requestId,
+          }),
+        },
+      );
+      if (data.conversation?.id) {
+        router.push(`/messages/${data.conversation.id}` as Href);
+      }
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Conversation indisponible",
+        "error",
+      );
+    }
+  }
+
   if (detail.isLoading) {
     return (
       <View style={[styles.center, { backgroundColor: c.background }]}>
         <ActivityIndicator color={c.emerald} />
+      </View>
+    );
+  }
+  if (detail.isError) {
+    return (
+      <View style={[styles.center, { backgroundColor: c.background }]}>
+        <Ionicons name="cloud-offline-outline" size={34} color={c.textMuted} />
+        <Text style={{ color: c.text, fontWeight: "800" }}>
+          Demande indisponible
+        </Text>
+        <Pressable
+          style={styles.retryBtn}
+          onPress={() => void detail.refetch()}
+        >
+          <Text style={styles.retryText}>Réessayer</Text>
+        </Pressable>
       </View>
     );
   }
@@ -305,7 +356,16 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
   }
 
   const offers = request.offers ?? [];
-  const cover = request.images[0];
+  const sortedOffers = [...offers].sort((a, b) => {
+    if (offerSort === "PRICE") return a.priceCents - b.priceCents;
+    if (offerSort === "CONDITION") {
+      return (
+        Number(b.condition === request.condition) -
+        Number(a.condition === request.condition)
+      );
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
   const shipping =
     rail === "SHIPSHOP" && intent === "DELIVERY" ? shippingCents : 0;
 
@@ -323,13 +383,30 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
           <Ionicons name="chevron-back" size={22} color={c.text} />
           <Text style={[styles.backText, { color: c.text }]}>Retour</Text>
         </Pressable>
-        {cover ? (
-          <Image
-            source={{ uri: mediaUrl(cover) ?? cover }}
-            style={styles.hero}
-            contentFit="cover"
-          />
-        ) : null}
+        {request.images.length ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.gallery}
+          >
+            {request.images.map((image, index) => (
+              <Image
+                key={`${image}-${index}`}
+                source={{ uri: mediaUrl(image) ?? image }}
+                style={[styles.hero, { width: width - 32 }]}
+                contentFit="cover"
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <LinearGradient
+            colors={["#162B32", "#151A22", "#2A1711"]}
+            style={styles.heroFallback}
+          >
+            <Ionicons name="search" size={42} color="rgba(255,255,255,0.5)" />
+          </LinearGradient>
+        )}
         <Text style={[styles.title, { color: c.text }]}>{request.title}</Text>
         <Text style={{ color: c.emerald, fontWeight: "800" }}>
           Budget {formatMoney(request.budgetCents, request.currency)}
@@ -344,11 +421,49 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
             {request.description}
           </Text>
         ) : null}
-        <Text style={[styles.section, { color: c.text }]}>Proposants</Text>
+        <View style={styles.sectionHead}>
+          <Text style={[styles.section, { color: c.text }]}>
+            {offers.length} offre{offers.length > 1 ? "s" : ""}
+          </Text>
+          {offers.length > 1 ? (
+            <Text style={{ color: c.textMuted, fontSize: 12 }}>
+              Compare avant de choisir
+            </Text>
+          ) : null}
+        </View>
+        {offers.length > 1 ? (
+          <View style={styles.sortRow}>
+            {(
+              [
+                ["PRICE", "Prix"],
+                ["RECENT", "Récentes"],
+                ["CONDITION", "État"],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() => setOfferSort(value)}
+                style={[
+                  styles.sortChip,
+                  offerSort === value && styles.sortChipOn,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sortText,
+                    offerSort === value && styles.sortTextOn,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         {offers.length === 0 ? (
           <Text style={{ color: c.textMuted }}>Pas encore d’offre.</Text>
         ) : (
-          offers.map((row) => (
+          sortedOffers.map((row) => (
             <View
               key={row.id}
               style={[
@@ -409,6 +524,21 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
                 {offerStatusLabel(row.status)}
                 {row.sellerCommune ? ` · ${row.sellerCommune}` : ""}
               </Text>
+              {isOwner && row.status === "PENDING" ? (
+                <Pressable
+                  onPress={() => void messageSeller(row)}
+                  style={styles.messageBtn}
+                >
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={15}
+                    color={c.text}
+                  />
+                  <Text style={[styles.messageText, { color: c.text }]}>
+                    Discuter avec le vendeur
+                  </Text>
+                </Pressable>
+              ) : null}
               {isOwner &&
               row.status === "PENDING" &&
               request.status === "OPEN" ? (
@@ -640,7 +770,20 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
+  },
+  retryBtn: {
+    borderRadius: 999,
+    backgroundColor: "#FF5A1F",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryText: { color: "#fff", fontWeight: "800" },
   back: {
     flexDirection: "row",
     alignItems: "center",
@@ -648,9 +791,38 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   backText: { fontWeight: "700" },
-  hero: { width: "100%", height: 180, borderRadius: 18 },
+  gallery: { width: "100%", borderRadius: 20, overflow: "hidden" },
+  hero: { height: 210 },
+  heroFallback: {
+    width: "100%",
+    height: 210,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: { fontSize: 22, fontWeight: "800" },
   section: { fontSize: 16, fontWeight: "800", marginTop: 8 },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sortRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sortChip: {
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    backgroundColor: "#151A22",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  sortChipOn: {
+    backgroundColor: "rgba(0,214,165,0.15)",
+    borderColor: "rgba(0,214,165,0.4)",
+  },
+  sortText: { color: "#9AA3B5", fontSize: 12, fontWeight: "700" },
+  sortTextOn: { color: "#00D6A5" },
   card: {
     borderWidth: 1,
     borderRadius: 18,
@@ -660,6 +832,18 @@ const styles = StyleSheet.create({
   offerPhoto: { width: "100%", height: 120, borderRadius: 12 },
   offerHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   offerName: { fontWeight: "800", fontSize: 15 },
+  messageBtn: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  messageText: { fontSize: 12, fontWeight: "800" },
   acceptBtn: {
     marginTop: 8,
     borderRadius: 999,

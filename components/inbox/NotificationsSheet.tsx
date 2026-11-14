@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CommentsSheet } from "@/components/feed/Sheets";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
@@ -32,6 +33,28 @@ import { useMe } from "@/src/me";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
+import type { Product } from "@/src/types";
+
+function productFromInboxComment(row: InboxComment): Product {
+  return {
+    id: row.product.id,
+    title: row.product.title,
+    description: null,
+    priceCents: 0,
+    images: Array.isArray(row.product.images) ? row.product.images : [],
+    colors: [],
+    sizes: [],
+    likesCount: 0,
+    commentsCount: 0,
+    likedByMe: false,
+    shop: {
+      id: row.product.shop?.id ?? "shop",
+      name: row.product.shop?.name ?? "Boutique",
+      slug: "",
+      logoUrl: row.product.shop?.logoUrl ?? null,
+    },
+  };
+}
 
 export function NotificationsSheet({
   open,
@@ -48,6 +71,7 @@ export function NotificationsSheet({
   const [tab, setTab] = useState<"messages" | "comments">("messages");
   const [commentTarget, setCommentTarget] = useState<InboxComment | null>(null);
   const [deletingComment, setDeletingComment] = useState(false);
+  const [commentProduct, setCommentProduct] = useState<Product | null>(null);
   const myId = me.data?.id;
   const conversations = inbox.data?.conversations ?? [];
   const comments = inbox.data?.comments ?? [];
@@ -103,137 +127,160 @@ export function NotificationsSheet({
     router.push(`/messages/${id}` as Href);
   }
 
+  function openCommentDetail(row: InboxComment) {
+    setCommentProduct(productFromInboxComment(row));
+  }
+
   const badge = unreadMessages + unreadComments;
 
   return (
-    <Modal
-      visible={open}
-      animationType="slide"
-      transparent
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <View style={styles.frame}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View
-          style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }]}
-        >
-          <SheetReduce onPress={onClose} />
-          <View style={styles.header}>
-            <Text style={styles.title}>Notifications</Text>
-            {badge > 0 ? (
-              <View style={styles.countPill}>
-                <Text style={styles.countText}>
-                  {badge > 9 ? "9+" : compactCount(badge)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.hint}>
-            Messages et commentaires — le compteur baisse dès qu’ils sont lus.
-          </Text>
-          <View style={styles.modeRow}>
-            <Pressable
-              onPress={() => setTab("messages")}
-              style={[styles.mode, tab === "messages" && styles.modeOn]}
-            >
-              <Ionicons
-                name="chatbubbles"
-                size={18}
-                color={tab === "messages" ? "#fff" : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  tab === "messages" && styles.modeTextOn,
-                ]}
-              >
-                Messages
-                {unreadMessages > 0 ? ` · ${compactCount(unreadMessages)}` : ""}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void openComments()}
-              style={[styles.mode, tab === "comments" && styles.modeOn]}
-            >
-              <Ionicons
-                name="chatbubble-ellipses"
-                size={18}
-                color={tab === "comments" ? "#fff" : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  tab === "comments" && styles.modeTextOn,
-                ]}
-              >
-                Commentaires
-                {unreadComments > 0 ? ` · ${compactCount(unreadComments)}` : ""}
-              </Text>
-            </Pressable>
-          </View>
-          <ScrollView
-            style={{ maxHeight: 420 }}
-            contentContainerStyle={styles.list}
-            keyboardShouldPersistTaps="handled"
+    <>
+      <Modal
+        visible={open && !commentProduct}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={onClose}
+      >
+        <View style={styles.frame}>
+          <Pressable style={styles.backdrop} onPress={onClose} />
+          <View
+            style={[
+              styles.sheet,
+              { paddingBottom: Math.max(16, insets.bottom) },
+            ]}
           >
-            {tab === "messages" ? (
-              conversations.length === 0 ? (
-                <Text style={styles.empty}>Aucun message</Text>
-              ) : (
-                conversations
-                  .slice(0, 12)
-                  .map((row) => (
-                    <MessageRow
-                      key={row.id}
-                      row={row}
-                      myId={myId}
-                      onPress={() => openThread(row.id)}
-                    />
-                  ))
-              )
-            ) : comments.length === 0 ? (
-              <Text style={styles.empty}>Aucun commentaire</Text>
-            ) : (
-              comments.map((row) => (
-                <CommentRow
-                  key={row.id}
-                  row={row}
-                  canDelete={canDeleteComment(row)}
-                  onDelete={() => setCommentTarget(row)}
+            <SheetReduce onPress={onClose} />
+            <View style={styles.header}>
+              <Text style={styles.title}>Notifications</Text>
+              {badge > 0 ? (
+                <View style={styles.countPill}>
+                  <Text style={styles.countText}>
+                    {badge > 9 ? "9+" : compactCount(badge)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.hint}>
+              Messages et commentaires — le compteur baisse dès qu’ils sont lus.
+            </Text>
+            <View style={styles.modeRow}>
+              <Pressable
+                onPress={() => setTab("messages")}
+                style={[styles.mode, tab === "messages" && styles.modeOn]}
+              >
+                <Ionicons
+                  name="chatbubbles"
+                  size={18}
+                  color={tab === "messages" ? "#fff" : colors.muted}
                 />
-              ))
-            )}
-          </ScrollView>
-          <Pressable
-            onPress={() => {
-              onClose();
-              router.push("/messages");
-            }}
-          >
-            <LinearGradient
-              colors={[colors.buyStart, colors.buyEnd]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.pay}
+                <Text
+                  style={[
+                    styles.modeText,
+                    tab === "messages" && styles.modeTextOn,
+                  ]}
+                >
+                  Messages
+                  {unreadMessages > 0
+                    ? ` · ${compactCount(unreadMessages)}`
+                    : ""}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void openComments()}
+                style={[styles.mode, tab === "comments" && styles.modeOn]}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses"
+                  size={18}
+                  color={tab === "comments" ? "#fff" : colors.muted}
+                />
+                <Text
+                  style={[
+                    styles.modeText,
+                    tab === "comments" && styles.modeTextOn,
+                  ]}
+                >
+                  Commentaires
+                  {unreadComments > 0
+                    ? ` · ${compactCount(unreadComments)}`
+                    : ""}
+                </Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={{ maxHeight: 420 }}
+              contentContainerStyle={styles.list}
+              keyboardShouldPersistTaps="handled"
             >
-              <Ionicons name="chatbubbles" size={18} color="#fff" />
-              <Text style={styles.payText}>Voir tous les messages</Text>
-            </LinearGradient>
-          </Pressable>
+              {tab === "messages" ? (
+                conversations.length === 0 ? (
+                  <Text style={styles.empty}>Aucun message</Text>
+                ) : (
+                  conversations
+                    .slice(0, 12)
+                    .map((row) => (
+                      <MessageRow
+                        key={row.id}
+                        row={row}
+                        myId={myId}
+                        onPress={() => openThread(row.id)}
+                      />
+                    ))
+                )
+              ) : comments.length === 0 ? (
+                <Text style={styles.empty}>Aucun commentaire</Text>
+              ) : (
+                comments.map((row) => (
+                  <CommentRow
+                    key={row.id}
+                    row={row}
+                    canDelete={canDeleteComment(row)}
+                    onPress={() => openCommentDetail(row)}
+                    onDelete={() => setCommentTarget(row)}
+                  />
+                ))
+              )}
+            </ScrollView>
+            <Pressable
+              onPress={() => {
+                onClose();
+                router.push("/messages");
+              }}
+            >
+              <LinearGradient
+                colors={[colors.buyStart, colors.buyEnd]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.pay}
+              >
+                <Ionicons name="chatbubbles" size={18} color="#fff" />
+                <Text style={styles.payText}>Voir tous les messages</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
-        <ConfirmDialog
-          open={Boolean(commentTarget)}
-          title="Retirer ce commentaire ?"
-          message="Cette action est définitive."
-          busy={deletingComment}
-          onCancel={() => setCommentTarget(null)}
-          onConfirm={() => {
-            if (commentTarget) void removeComment(commentTarget);
-          }}
-        />
-      </View>
-    </Modal>
+      </Modal>
+      <ConfirmDialog
+        open={Boolean(commentTarget)}
+        title="Retirer ce commentaire ?"
+        message="Cette action est définitive."
+        busy={deletingComment}
+        onCancel={() => setCommentTarget(null)}
+        onConfirm={() => {
+          if (commentTarget) void removeComment(commentTarget);
+        }}
+      />
+      <CommentsSheet
+        product={commentProduct}
+        onClose={() => setCommentProduct(null)}
+        onDeleted={() => {
+          void queryClient.invalidateQueries({
+            queryKey: inboxQueryKey(token),
+          });
+        }}
+      />
+    </>
   );
 }
 
@@ -299,28 +346,43 @@ function MessageRow({
 function CommentRow({
   row,
   canDelete,
+  onPress,
   onDelete,
 }: {
   row: InboxComment;
   canDelete: boolean;
+  onPress: () => void;
   onDelete: () => void;
 }) {
   return (
-    <View style={styles.item}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.item, row.unread && styles.itemUnread]}
+      accessibilityLabel={`Voir les commentaires de ${row.product.title}`}
+    >
       <View style={styles.avatarFallback}>
         <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.name} numberOfLines={1}>
+        <Text
+          style={[styles.name, row.unread && styles.nameUnread]}
+          numberOfLines={1}
+        >
           {row.user.name} · {row.product.title}
         </Text>
-        <Text style={styles.preview} numberOfLines={2}>
+        <Text
+          style={[styles.preview, row.unread && styles.previewUnread]}
+          numberOfLines={2}
+        >
           {row.body}
         </Text>
       </View>
       {canDelete ? (
         <Pressable
-          onPress={onDelete}
+          onPress={(event) => {
+            event.stopPropagation?.();
+            onDelete();
+          }}
           hitSlop={8}
           style={styles.deleteBtn}
           accessibilityLabel="Retirer le commentaire"
@@ -331,8 +393,15 @@ function CommentRow({
             color="rgba(255,255,255,0.45)"
           />
         </Pressable>
-      ) : null}
-    </View>
+      ) : (
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color="rgba(255,255,255,0.35)"
+          style={{ alignSelf: "center" }}
+        />
+      )}
+    </Pressable>
   );
 }
 

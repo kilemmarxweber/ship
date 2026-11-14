@@ -4,6 +4,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import { api } from "@/src/api";
 import { kvSet } from "@/src/offline/db";
 import { isOnline, watchNetwork } from "@/src/offline/network";
+import { drainCisOutbox } from "@/src/cis/sync";
 import { drainOutbox } from "@/src/offline/outbox";
 import { persistDiscover, persistFeed } from "@/src/offline/persist";
 import { normalizeFeedPage, normalizeProduct } from "@/src/product-normalize";
@@ -192,7 +193,12 @@ async function runSync(
   if (!(await isOnline())) return;
   syncing = true;
   try {
-    if (reason === "reconnect") await drainOutbox(queryClient);
+    if (reason === "reconnect") {
+      await drainOutbox(queryClient);
+      await drainCisOutbox();
+    } else if (reason === "boot" || reason === "focus") {
+      await drainCisOutbox();
+    }
 
     if (reason === "reconnect") {
       await softRefreshFeeds(queryClient);

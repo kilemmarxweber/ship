@@ -1,7 +1,7 @@
 # Plan de réalisation — ShipShop Android et iOS
 
 Version 1.1 — 13 novembre 2026  
-(Annexe CIS fusionnée depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1)
+(Annexe CIS fusionnée depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1 — **approuvée MOA** le 13 nov. 2026)
 
 Ce document fixe l’interface, les parcours et les contrats d’API. Les maquettes sont dans `docs/design/`. Les marques, prix et prénoms dessinés sur les images sont des exemples. La disposition reste celle des images. Les produits, comptes et montants viennent des API.
 
@@ -159,7 +159,9 @@ Objectifs de lecture, dans l’ordre : une vidéo active, préchargement de la s
 
 ## 11. Annexe CIS — Customer Intelligence (UI / parcours)
 
-Référence complète : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` (v2.1). Cette annexe ne modifie pas les maquettes `docs/design/` sauf validation métier explicite.
+Référence complète : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` (v2.1).  
+**Statut :** approuvée métier / technique et **MOA** le 13 novembre 2026.  
+Cette annexe ne modifie pas les maquettes `docs/design/` sauf validation métier explicite.
 
 ### 11.1 Objectif dans le fil
 

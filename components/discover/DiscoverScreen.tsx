@@ -20,11 +20,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DiscoverCard } from "@/components/discover/DiscoverCard";
-import { EventPoster } from "@/components/events/EventPoster";
+import { DiscoverEventCard } from "@/components/discover/DiscoverEventCard";
 import { BuySheet } from "@/components/feed/Sheets";
-import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { api, mediaUrl } from "@/src/api";
-import { templateFor } from "@/src/challenge-place";
 import { compactCount, formatMoney } from "@/src/format";
 import { convertCents, eventFxRates } from "@/src/fx";
 import { coverOf, mediaList, productHasAudio } from "@/src/media";
@@ -52,6 +50,106 @@ const GRID_VIEWABILITY = {
   itemVisiblePercentThreshold: 55,
   waitForInteraction: false,
 } as const;
+
+function challengeCoverUris(challenge: GrowthChallenge) {
+  const raw = [
+    challenge.event?.imageUrl,
+    challenge.coverUrl,
+    challenge.spotlight?.kind === "image" ? challenge.spotlight.url : null,
+    challenge.spotlight?.posterUrl,
+    challenge.product?.image,
+    ...(challenge.coverCandidates ?? []),
+  ];
+  return raw
+    .filter((value): value is string => Boolean(value))
+    .map((value) => mediaUrl(value) ?? value);
+}
+
+function DiscoverChallengeBanner({
+  challenge,
+  onJoin,
+}: {
+  challenge: GrowthChallenge;
+  onJoin: () => void;
+}) {
+  const [coverIndex, setCoverIndex] = useState(0);
+  const covers = useMemo(() => challengeCoverUris(challenge), [challenge]);
+  const cover = covers[coverIndex];
+
+  return (
+    <View style={styles.challengeBanner}>
+      <LinearGradient
+        colors={["#102A33", "#101621", "#28150F"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {cover ? (
+        <Image
+          source={{ uri: cover }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          onError={() => setCoverIndex((value) => value + 1)}
+        />
+      ) : (
+        <View style={styles.challengeFallback}>
+          <Ionicons
+            name="ticket-outline"
+            size={70}
+            color="rgba(255,255,255,0.12)"
+          />
+        </View>
+      )}
+      <LinearGradient
+        colors={["rgba(4,7,12,0.08)", "rgba(4,7,12,0.35)", "rgba(4,7,12,0.96)"]}
+        locations={[0, 0.48, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.challengeBadge}>
+        <Text style={styles.challengeBadgeText}>CHALLENGE DU JOUR</Text>
+      </View>
+
+      <View style={styles.challengeBannerCopy}>
+        <Text style={styles.challengeBannerTitle} numberOfLines={2}>
+          {challenge.title}
+        </Text>
+        <Text style={styles.challengeBannerBody} numberOfLines={1}>
+          {challenge.event?.organizerName
+            ? `${challenge.event.organizerName} · ${challenge.body}`
+            : challenge.body}
+        </Text>
+        <View style={styles.challengeBannerFooter}>
+          <View style={styles.challengePeople}>
+            <Ionicons name="people" size={15} color="#00D6A5" />
+            <Text style={styles.challengePeopleText}>
+              {challenge.completions
+                ? `${compactCount(challenge.completions)} participants`
+                : "Sois le premier"}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={challenge.done}
+            onPress={onJoin}
+            style={[
+              styles.challengeJoin,
+              challenge.done && styles.challengeJoinDone,
+            ]}
+          >
+            <Text style={styles.challengeJoinText}>
+              {challenge.done ? "Relevé" : "Participer"}
+            </Text>
+            {!challenge.done ? (
+              <Ionicons name="arrow-forward" size={15} color="#fff" />
+            ) : null}
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 function CategoryChip({
   name,
@@ -240,6 +338,9 @@ export function DiscoverScreen() {
   const stripW = Math.min(270, Math.round(width * 0.67));
   const stripH = 330;
   const stripGap = 12;
+  /** Cards concert/billet — même esprit que Challenge du jour (maquette). */
+  const eventCardW = Math.min(440, Math.round(width - 32));
+  const eventCardH = Math.round(eventCardW * (9 / 16));
   const colW = width / 2 - 12;
   const colH = colW * 1.42;
   const playing = Boolean(focused);
@@ -389,6 +490,16 @@ export function DiscoverScreen() {
         </View>
       </View>
 
+      {!searching && challenge ? (
+        <View style={styles.challengeCard}>
+          <DiscoverChallengeBanner
+            key={challenge.id}
+            challenge={challenge}
+            onJoin={() => void joinChallenge(challenge)}
+          />
+        </View>
+      ) : null}
+
       {!searching && (surface.data?.lives?.length ?? 0) > 0 ? (
         <View style={styles.section}>
           <Text style={styles.kicker}>Lives shopping</Text>
@@ -459,47 +570,31 @@ export function DiscoverScreen() {
 
       {!searching && (liveEvents.data?.events?.length ?? 0) > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.kicker}>Événements</Text>
+          <Text style={styles.kicker}>Concerts & billets</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.strip}
+            decelerationRate="fast"
+            snapToInterval={eventCardW + 12}
+            snapToAlignment="start"
+            disableIntervalMomentum
           >
             {(liveEvents.data?.events ?? []).map((event) => (
-              <Pressable
+              <DiscoverEventCard
                 key={event.id}
-                style={styles.eventCard}
+                event={event}
+                width={eventCardW}
+                height={eventCardH}
+                priceLabel={eventPriceLabel(event)}
                 onPress={() => router.push(`/events/${event.id}` as Href)}
-              >
-                <EventPoster
-                  eventId={event.id}
-                  imageUrl={event.imageUrl}
-                  title={event.title}
-                  organizerName={event.organizerName}
-                  kind={event.organizerKind}
-                  priceLabel={eventPriceLabel(event)}
-                  buyLabel="Acheter billet"
-                  style={styles.eventCover}
-                />
-              </Pressable>
+              />
             ))}
           </ScrollView>
         </View>
       ) : null}
 
       {searching ? <Text style={styles.sectionHead}>Résultats</Text> : null}
-
-      {!searching && challenge ? (
-        <View style={styles.challengeCard}>
-          <ChallengeCard
-            challenge={challenge}
-            template={templateFor(challenge.id, 0)}
-            playing={playing}
-            compact
-            onJoin={() => void joinChallenge(challenge)}
-          />
-        </View>
-      ) : null}
 
       {!searching && highlights.length ? (
         <View style={styles.section}>
@@ -775,12 +870,92 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 16 },
   challengeCard: {
-    height: 420,
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: "hidden",
   },
+  challengeBanner: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    minHeight: 190,
+    overflow: "hidden",
+    backgroundColor: "#111722",
+  },
+  challengeFallback: {
+    position: "absolute",
+    inset: 0,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    padding: 18,
+  },
+  challengeBadge: {
+    position: "absolute",
+    left: 14,
+    top: 14,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    backgroundColor: "rgba(0,214,165,0.94)",
+  },
+  challengeBadgeText: {
+    color: "#03140F",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  challengeBannerCopy: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+  },
+  challengeBannerTitle: {
+    color: "#fff",
+    fontSize: 21,
+    lineHeight: 25,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  challengeBannerBody: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  challengeBannerFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 10,
+  },
+  challengePeople: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  challengePeopleText: {
+    flex: 1,
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  challengeJoin: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 15,
+    backgroundColor: "#FF5A1F",
+  },
+  challengeJoinDone: { backgroundColor: "rgba(255,255,255,0.18)" },
+  challengeJoinText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   challenge: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -837,6 +1012,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#16161F",
     overflow: "hidden",
   },
+  /* eventCardW/H utilisés via DiscoverEventCard */
   liveShopBadge: {
     position: "absolute",
     left: 10,

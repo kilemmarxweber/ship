@@ -22,7 +22,7 @@ import { useInbox } from "@/src/inbox";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 
-const LOGO_ORANGE = "#FF7A00";
+const LOGO_ORANGE = colors.primary;
 const FAB_SIZE = 56;
 const GAP = 9;
 const HOLE_R = FAB_SIZE / 2 + GAP;
@@ -133,7 +133,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.emerald,
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: "rgba(255,255,255,0.48)",
         tabBarShowLabel: true,
         tabBarBackground: () => <TabBarShape />,
@@ -223,7 +223,8 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: "Messages",
-          tabBarBadge: messageBadge > 0 ? compactCount(messageBadge) : undefined,
+          tabBarBadge:
+            messageBadge > 0 ? compactCount(messageBadge) : undefined,
           tabBarBadgeStyle: {
             backgroundColor: colors.buyStart,
             color: "#fff",

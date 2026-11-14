@@ -59,6 +59,16 @@ export type WantedListItem = {
   offers?: WantedOffer[];
 };
 
+export function wantedIsOpen(request: Pick<WantedListItem, "status">) {
+  return !request.status || request.status === "OPEN";
+}
+
+export function wantedOfferCount(
+  request: Pick<WantedListItem, "offers" | "_count">,
+) {
+  return request._count?.offers ?? request.offers?.length ?? 0;
+}
+
 export type WantedCheckoutResult = {
   ok?: boolean;
   paymentRail?: "SHIPSHOP" | "OFF_PLATFORM";
@@ -105,9 +115,7 @@ function mergeWantedLists(
   mine: WantedListItem[] | undefined,
   published: WantedListItem[] | undefined,
 ) {
-  const own = (mine ?? []).filter(
-    (row) => !row.status || row.status === "OPEN",
-  );
+  const own = (mine ?? []).filter((row) => wantedIsOpen(row));
   const seen = new Set(own.map((row) => row.id));
   return [...own, ...(published ?? []).filter((row) => !seen.has(row.id))];
 }
@@ -171,14 +179,18 @@ export async function reloadWantedRequest(
 async function pullWantedOfferChanges(
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
-  const since = kvGet(WANTED_SINCE_KEY) || new Date(0).toISOString();
+  const since = kvGet(WANTED_SINCE_KEY) || new Date().toISOString();
   const payload = await api<WantedChangesPayload>(
     `/api/wanted/changes?since=${encodeURIComponent(since)}`,
   );
-  const changes = payload.changes ?? [];
-  for (const change of changes) {
-    await reloadWantedRequest(queryClient, change.requestId);
-  }
+  const requestIds = Array.from(
+    new Set((payload.changes ?? []).map((change) => change.requestId)),
+  );
+  await Promise.all(
+    requestIds.map((requestId) =>
+      reloadWantedRequest(queryClient, requestId).catch(() => undefined),
+    ),
+  );
   if (payload.now) kvSet(WANTED_SINCE_KEY, payload.now);
   return payload;
 }

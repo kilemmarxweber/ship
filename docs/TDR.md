@@ -1,7 +1,7 @@
 # Termes de référence — ShipShop Android et iOS
 
 Version 1.1 — 13 novembre 2026  
-(Module CIS fusionné depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1)
+(Module CIS fusionné depuis `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1 — **approuvé MOA** le 13 nov. 2026)
 
 ## 1. Objet
 
@@ -115,7 +115,8 @@ Stack imposée : React Native, TypeScript, Expo Router, expo-video, Reanimated, 
 
 ## 12. Annexe CIS — critères et contraintes
 
-Référence normative : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1.
+Référence normative : `docs/Plan_Mise_a_jour_PDR_TDR_CIS.md` v2.1.  
+**Statut :** approuvée métier / technique et **MOA** le 13 novembre 2026.
 
 ### 12.1 Stack imposée (rappel)
 
@@ -131,7 +132,8 @@ Expo (Android + iOS), Next.js `shop` (`/api/*`), PostgreSQL/Prisma, Better Auth 
 6. Feature flag CIS on : recommandations mesurables et explicables ; pas de « probabilité d’achat » non évaluée.
 7. Dashboard admin n’expose que les profils autorisés ; contrôles d’accès côté serveur.
 8. Pas de collecte hors app (SMS, WA, navigation tierce).
-9. Tests documentés : sync offline, dédup, authz, non-régression commerce et live.
+9. **TLS 1.3** sur l’exposition HTTPS de `shop` (staging/prod) ; app Expo CIS en `https://` sans HTTP cleartext en release (terminaison edge / reverse proxy — pas de serveur TLS custom dans Next).
+10. Tests documentés : sync offline, dédup, authz, non-régression commerce et live.
 
 ### 12.3 Livrables CIS (quand le chantier est ouvert)
 

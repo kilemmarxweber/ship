@@ -23,6 +23,7 @@ import {
 import Animated, {
     Easing,
     FadeOut,
+    interpolate,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -41,12 +42,14 @@ import {
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
 import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
+import { WantedHomePane } from "@/components/wanted/WantedHomePane";
 import { api, ApiError, apiOrigin, isVideoUrl, mediaUrl } from "@/src/api";
 import {
     emptyWeaveMemory,
     weaveChallenges,
     type MixedRow,
 } from "@/src/challenge-place";
+import { trackCisEvent } from "@/src/cis/events";
 import { colorHex } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
 import { useInbox } from "@/src/inbox";
@@ -104,6 +107,38 @@ function OfflineConnLoader() {
         <Ionicons name="sync-outline" size={14} color="#FBBF24" />
       </Animated.View>
     </View>
+  );
+}
+
+function AiChatRailButton({ onPress }: { onPress: () => void }) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, [pulse]);
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [0.55, 0]),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.55]) }],
+  }));
+  const btnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.08]) }],
+  }));
+  return (
+    <Pressable
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel="IA Chat"
+      onPress={onPress}
+      style={styles.aiRailHit}
+    >
+      <Animated.View style={[styles.aiRailRing, ringStyle]} />
+      <Animated.View style={[styles.aiRailBtn, btnStyle]}>
+        <Ionicons name="sparkles" size={18} color="#fff" />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -256,6 +291,19 @@ export function FeedScreen() {
     const row = feedRows[active];
     if (row?.kind === "item") kvSet("lastProductId", row.item.id);
   }, [active, feedRows]);
+
+  useEffect(() => {
+    const row = feedRows[active];
+    if (row?.kind !== "item") return;
+    const item = row.item;
+    trackCisEvent({
+      type: "product_view",
+      productId: item.id,
+      shopId: item.shop?.id,
+      category: item.category,
+      payload: { source: "feed", tab },
+    });
+  }, [active, feedRows, tab]);
 
   // Prefetch local SQLite media for the visible reel (video + soundtrack).
   useEffect(() => {
@@ -461,6 +509,15 @@ export function FeedScreen() {
         `/api/products/${current.id}/like`,
         { method: liked ? "DELETE" : "POST" },
       );
+      if (!liked) {
+        trackCisEvent({
+          type: "product_like",
+          productId: current.id,
+          shopId: current.shop?.id,
+          category: current.category,
+          payload: { source: "feed" },
+        });
+      }
       patchFeed((item) =>
         item.id === current.id
           ? {
@@ -579,6 +636,13 @@ export function FeedScreen() {
       }>(`/api/shops/${current.shop.slug}/follow`, {
         method: followed ? "DELETE" : "POST",
       });
+      if (!followed) {
+        trackCisEvent({
+          type: "shop_follow",
+          shopId,
+          payload: { source: "feed", slug: current.shop.slug },
+        });
+      }
       patchFeed((item) => {
         if (item.shop.id !== shopId) return item;
         return {
@@ -693,154 +757,13 @@ export function FeedScreen() {
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       {tab === "search" ? (
-        <View style={[styles.wantedPane, { paddingTop: wantedHeaderPad }]}>
-          {wanted.isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator color={c.emerald} />
-            </View>
-          ) : wanted.isError ? (
-            <View style={styles.center}>
-              <Text style={[styles.emptyTitle, { color: c.text }]}>
-                Demandes indisponibles
-              </Text>
-              <Pressable
-                style={styles.retry}
-                onPress={() => void wanted.refetch()}
-              >
-                <Text style={styles.retryText}>Réessayer</Text>
-              </Pressable>
-            </View>
-          ) : wantedItems.length === 0 ? (
-            <View style={styles.center}>
-              <Text style={[styles.emptyTitle, { color: c.text }]}>Vide</Text>
-              <Text style={[styles.emptyText, { color: c.textMuted }]}>
-                Aucune demande en attente.
-              </Text>
-            </View>
-          ) : (
-            <FlashList
-              data={wantedItems}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{
-                paddingHorizontal: 16,
-                paddingBottom: 100,
-              }}
-              renderItem={({ item }) => {
-                const cover = item.images[0];
-                const offerRows = item.offers ?? [];
-                const offers = item._count?.offers ?? offerRows.length;
-                const lastOffer = offerRows[0];
-                const mine = Boolean(
-                  me.data?.id && item.buyer?.id === me.data.id,
-                );
-                const followed = offers > 0;
-                return (
-                  <Pressable
-                    onPress={() => router.push(`/wanted/${item.id}` as Href)}
-                    style={[
-                      styles.wantedCard,
-                      {
-                        backgroundColor: c.card,
-                        borderColor: mine
-                          ? "rgba(0,214,143,0.45)"
-                          : "rgba(127,127,140,0.22)",
-                      },
-                    ]}
-                  >
-                    {cover ? (
-                      <Image
-                        source={{ uri: mediaUrl(cover) ?? cover }}
-                        style={styles.wantedCover}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View
-                        style={[styles.wantedCover, styles.wantedCoverEmpty]}
-                      >
-                        <Text style={{ color: c.textMuted }}>?</Text>
-                      </View>
-                    )}
-                    <View style={styles.wantedBody}>
-                      <View style={styles.wantedTitleRow}>
-                        <Text
-                          style={[styles.wantedTitle, { color: c.text }]}
-                          numberOfLines={1}
-                        >
-                          {item.title}
-                        </Text>
-                        {mine ? (
-                          <View style={styles.wantedMine}>
-                            <Text
-                              style={styles.wantedMineText}
-                              numberOfLines={1}
-                            >
-                              {"Ma\u00A0demande"}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text style={[styles.wantedBudget, { color: c.emerald }]}>
-                        Budget {formatMoney(item.budgetCents, item.currency)}
-                      </Text>
-                      <Text style={[styles.wantedMeta, { color: c.textMuted }]}>
-                        {item.condition === "USED"
-                          ? "Occasion"
-                          : "Neuf / magasin"}
-                        {item.commune ? ` · ${item.commune}` : ""}
-                      </Text>
-                      <View style={styles.wantedStats}>
-                        <View style={styles.wantedStat}>
-                          <Ionicons
-                            name="chatbubbles-outline"
-                            size={14}
-                            color={followed ? c.emerald : c.textMuted}
-                          />
-                          <Text
-                            style={[
-                              styles.wantedStatText,
-                              { color: followed ? c.emerald : c.textMuted },
-                            ]}
-                          >
-                            {offers} offre{offers > 1 ? "s" : ""}
-                          </Text>
-                        </View>
-                        <View style={styles.wantedStat}>
-                          <Ionicons
-                            name={followed ? "pulse" : "pulse-outline"}
-                            size={14}
-                            color={followed ? c.emerald : c.textMuted}
-                          />
-                          <Text
-                            style={[
-                              styles.wantedStatText,
-                              { color: followed ? c.emerald : c.textMuted },
-                            ]}
-                          >
-                            {followed ? "Suivie" : "Pas encore suivie"}
-                          </Text>
-                        </View>
-                      </View>
-                      {mine && lastOffer ? (
-                        <Text
-                          style={[styles.wantedMeta, { color: c.emerald }]}
-                          numberOfLines={1}
-                        >
-                          Dernière offre{" "}
-                          {formatMoney(lastOffer.priceCents, item.currency)}
-                          {lastOffer.status === "ACCEPTED"
-                            ? " · acceptée"
-                            : lastOffer.status === "DECLINED"
-                              ? " · refusée"
-                              : " · mise à jour"}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              }}
-            />
-          )}
-        </View>
+        <WantedHomePane
+          items={wantedItems}
+          loading={wanted.isLoading}
+          error={wanted.isError}
+          onRetry={() => void wanted.refetch()}
+          paddingTop={wantedHeaderPad}
+        />
       ) : tab === "following" && !token ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>Abonnements</Text>
@@ -1057,6 +980,11 @@ export function FeedScreen() {
                     </Pressable>
                   ) : null}
                   <View style={[styles.rail, { bottom: bottom + 118 }]}>
+                    <AiChatRailButton
+                      onPress={() =>
+                        token ? router.push("/ai-chat" as Href) : openAuth()
+                      }
+                    />
                     <View style={styles.avatarWrap}>
                       <ShopLiveAvatar
                         live={liveOn}
@@ -1115,21 +1043,20 @@ export function FeedScreen() {
                       label={compactCount(item.sharesCount ?? 0)}
                       onPress={() => void shareProduct(item)}
                     />
-                    <Pressable
-                      style={styles.railBtn}
-                      onPress={() =>
-                        showToast(
-                          "Les cadeaux s'envoient pendant le live.",
-                          "info",
-                        )
-                      }
-                    >
-                      <MaterialCommunityIcons
-                        name="gift"
-                        size={26}
-                        color="#ff8a3d"
-                      />
-                    </Pressable>
+                    {liveOn && live ? (
+                      <Pressable
+                        style={styles.railBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Envoyer un cadeau en live"
+                        onPress={() => void onLivePress(item, live)}
+                      >
+                        <MaterialCommunityIcons
+                          name="gift"
+                          size={26}
+                          color="#ff8a3d"
+                        />
+                      </Pressable>
+                    ) : null}
                   </View>
                   <View style={[styles.meta, { bottom: bottom + 100 }]}>
                     <View style={styles.shopCopy}>
@@ -1297,118 +1224,145 @@ export function FeedScreen() {
           styles.header,
           {
             paddingTop: insets.top + 6,
-            backgroundColor: tab === "search" ? c.background : "transparent",
+            backgroundColor: tab === "search" ? "#05080D" : "transparent",
           },
         ]}
         pointerEvents="box-none"
       >
         <View style={styles.headerRow}>
           <View style={styles.headerSide}>
-            <Image
-              source={require("@/assets/images/shipshop-logo.png")}
-              style={styles.logo}
-              contentFit="contain"
-            />
-            {!online ? <OfflineConnLoader /> : null}
+            {tab === "search" ? (
+              <Pressable
+                onPress={() => selectTab("foryou")}
+                hitSlop={8}
+                style={styles.iconHit}
+              >
+                <Ionicons name="chevron-back" size={22} color="#F5F7FA" />
+              </Pressable>
+            ) : (
+              <>
+                <Image
+                  source={require("@/assets/images/shipshop-logo.png")}
+                  style={styles.logo}
+                  contentFit="contain"
+                />
+                {!online ? <OfflineConnLoader /> : null}
+              </>
+            )}
           </View>
           <View style={styles.headerTabs}>
-            <Pressable
-              style={styles.tabSlot}
-              onPress={() => {
-                if (!token) {
-                  openAuth();
-                  return;
-                }
-                selectTab("following");
-              }}
-            >
-              <Text
-                style={[
-                  styles.tab,
-                  tab === "search" && { color: c.textMuted },
-                  tab === "following" && styles.tabOn,
-                ]}
-                numberOfLines={1}
-              >
-                Abonnements
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.tabSlot}
-              onPress={() => selectTab("foryou")}
-            >
-              <Text
-                style={[
-                  styles.tab,
-                  styles.tabCenter,
-                  tab === "search" && { color: c.textMuted },
-                  tab === "foryou" && styles.tabOn,
-                ]}
-                numberOfLines={1}
-              >
-                Pour toi
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.tabSlot}
-              onPress={() => selectTab("search")}
-            >
-              <Text
-                style={[
-                  styles.tab,
-                  tab === "search" && { color: c.textMuted },
-                  tab === "search" && styles.tabOn,
-                ]}
-                numberOfLines={1}
-              >
-                Je cherche
-              </Text>
-            </Pressable>
+            {tab === "search" ? (
+              <Text style={styles.wantedHeaderTitle}>Je cherche</Text>
+            ) : (
+              <>
+                <Pressable
+                  style={styles.tabSlot}
+                  onPress={() => {
+                    if (!token) {
+                      openAuth();
+                      return;
+                    }
+                    selectTab("following");
+                  }}
+                >
+                  <Text
+                    style={[styles.tab, tab === "following" && styles.tabOn]}
+                    numberOfLines={1}
+                  >
+                    Abonnements
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.tabSlot}
+                  onPress={() => selectTab("foryou")}
+                >
+                  <Text
+                    style={[
+                      styles.tab,
+                      styles.tabCenter,
+                      tab === "foryou" && styles.tabOn,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Pour toi
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.tabSlot}
+                  onPress={() => selectTab("search")}
+                >
+                  <Text style={styles.tab} numberOfLines={1}>
+                    Je cherche
+                  </Text>
+                </Pressable>
+              </>
+            )}
           </View>
           <View style={styles.headerActions}>
-            <Pressable
-              hitSlop={8}
-              onPress={() => (token ? setInboxOpen(true) : openAuth())}
-              style={styles.iconHit}
-            >
-              <Ionicons
-                name={token ? "notifications-outline" : "person-circle-outline"}
-                size={24}
-                color={tab === "search" ? c.text : "#fff"}
-              />
-              {token && inboxBadge > 0 ? (
-                <View
-                  style={[
-                    styles.bellBadge,
-                    inboxUrgent && styles.bellBadgeUrgent,
-                  ]}
+            {tab === "search" ? (
+              <Pressable
+                hitSlop={8}
+                onPress={() => {
+                  if (!token) {
+                    openAuth();
+                    return;
+                  }
+                  router.push({
+                    pathname: "/(tabs)/publish",
+                    params: { mode: "wanted" },
+                  });
+                }}
+                style={styles.wantedPlus}
+                accessibilityLabel="Créer une demande"
+              >
+                <Ionicons name="add" size={22} color="#fff" />
+              </Pressable>
+            ) : (
+              <>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => (token ? setInboxOpen(true) : openAuth())}
+                  style={styles.iconHit}
                 >
-                  <Text style={styles.bellBadgeText}>
-                    {inboxUrgent
-                      ? "!"
-                      : inboxBadge > 9
-                        ? "9+"
-                        : compactCount(inboxBadge)}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-            <Pressable
-              hitSlop={8}
-              onPress={() =>
-                token ? router.push("/profile" as Href) : openAuth()
-              }
-              style={styles.iconHit}
-            >
-              <Ionicons
-                name="settings-outline"
-                size={22}
-                color={tab === "search" ? c.text : "#fff"}
-              />
-            </Pressable>
+                  <Ionicons
+                    name={
+                      token ? "notifications-outline" : "person-circle-outline"
+                    }
+                    size={22}
+                    color="#fff"
+                  />
+                  {token && inboxBadge > 0 ? (
+                    <View
+                      style={[
+                        styles.bellBadge,
+                        inboxUrgent && styles.bellBadgeUrgent,
+                      ]}
+                    >
+                      <Text style={styles.bellBadgeText}>
+                        {inboxUrgent
+                          ? "!"
+                          : inboxBadge > 9
+                            ? "9+"
+                            : compactCount(inboxBadge)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() =>
+                    token ? router.push("/profile" as Href) : openAuth()
+                  }
+                  style={styles.iconHit}
+                >
+                  <Ionicons name="settings-outline" size={20} color="#fff" />
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </View>
+
       <NotificationsSheet
         open={inboxOpen}
         onClose={() => setInboxOpen(false)}
@@ -1587,17 +1541,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   headerSide: {
-    width: 84,
+    width: 44,
     alignItems: "flex-start",
     justifyContent: "center",
-    paddingLeft: 4,
+    paddingLeft: 2,
   },
   headerActions: {
-    width: 84,
+    width: 78,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: 2,
+    gap: 0,
+    flexShrink: 0,
+  },
+  wantedHeaderTitle: {
+    color: "#F5F7FA",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+    textAlign: "center",
+  },
+  wantedPlus: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#111722",
+    borderWidth: 1.5,
+    borderColor: "#FF5A1F",
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconHit: {
     width: 34,
@@ -1643,9 +1615,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   tabOn: {
-    color: colors.emerald,
+    color: colors.primary,
     borderBottomWidth: 2,
-    borderBottomColor: colors.emerald,
+    borderBottomColor: colors.primary,
   },
   trend: {
     position: "absolute",
@@ -1713,6 +1685,37 @@ const styles = StyleSheet.create({
   },
   railBtn: { alignItems: "center", width: 52 },
   railLabel: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  aiRailHit: {
+    width: 52,
+    height: 52,
+    marginBottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiRailRing: {
+    position: "absolute",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}33`,
+  },
+  aiRailBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: "#fff",
+    shadowColor: colors.primary,
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
   avatarWrap: {
     marginBottom: 2,
     alignItems: "center",

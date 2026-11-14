@@ -1,7 +1,7 @@
 import {
-  onlineManager,
-  QueryClient,
-  QueryClientProvider,
+    onlineManager,
+    QueryClient,
+    QueryClientProvider,
 } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -129,6 +129,7 @@ export default function RootLayout() {
           <Stack.Screen name="wallet" />
           <Stack.Screen name="orders" />
           <Stack.Screen name="wanted/[id]" />
+          <Stack.Screen name="ai-chat" />
           <Stack.Screen name="product/[id]" />
           <Stack.Screen name="courier" />
           <Stack.Screen name="seller/products" />

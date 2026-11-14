@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppearanceSettings } from "@/components/profile/AppearanceSettings";
+import { CisConsentSettings } from "@/components/profile/CisConsentSettings";
 import { EventTicketSettings } from "@/components/profile/EventTicketSettings";
 import { FlashPubSettings } from "@/components/profile/FlashPubSettings";
 import { ShopHoursSettings } from "@/components/profile/ShopHoursSettings";
@@ -571,17 +572,31 @@ export function ProfileScreen() {
                 ).map(([href, label, icon]) => (
                   <Pressable
                     key={`${href}-${label}`}
-                    style={[styles.legalRow, { backgroundColor: c.card }]}
+                    android_ripple={{ color: `${c.primary}33` }}
+                    style={({ pressed }) => [
+                      styles.legalRow,
+                      {
+                        backgroundColor: pressed
+                          ? `${c.primary}18`
+                          : c.card,
+                        borderColor: pressed ? `${c.primary}66` : "transparent",
+                        borderWidth: 1,
+                      },
+                    ]}
                     onPress={() => router.push(href as Href)}
                   >
-                    <Ionicons name={icon} size={18} color={c.textMuted} />
+                    <Ionicons
+                      name={icon}
+                      size={18}
+                      color={c.primary}
+                    />
                     <Text style={[styles.legalLabel, { color: c.text }]}>
                       {label}
                     </Text>
                     <Ionicons
                       name="chevron-forward"
                       size={16}
-                      color={c.textMuted}
+                      color={c.primary}
                     />
                   </Pressable>
                 ))}
@@ -600,6 +615,7 @@ export function ProfileScreen() {
           </>
         )}
 
+        <CisConsentSettings />
         <AppearanceSettings />
 
         <Text style={[styles.section, { color: c.text }]}>{t("settings")}</Text>
@@ -613,12 +629,20 @@ export function ProfileScreen() {
         ).map(([href, label, icon]) => (
           <Pressable
             key={href}
-            style={[styles.legalRow, { backgroundColor: c.card }]}
+            android_ripple={{ color: `${c.primary}33` }}
+            style={({ pressed }) => [
+              styles.legalRow,
+              {
+                backgroundColor: pressed ? `${c.primary}18` : c.card,
+                borderColor: pressed ? `${c.primary}66` : "transparent",
+                borderWidth: 1,
+              },
+            ]}
             onPress={() => router.push(href as Href)}
           >
-            <Ionicons name={icon} size={18} color={c.textMuted} />
+            <Ionicons name={icon} size={18} color={c.primary} />
             <Text style={[styles.legalLabel, { color: c.text }]}>{label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={c.textMuted} />
+            <Ionicons name="chevron-forward" size={16} color={c.primary} />
           </Pressable>
         ))}
       </ScrollView>

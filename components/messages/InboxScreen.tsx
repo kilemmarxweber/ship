@@ -97,14 +97,24 @@ export function InboxScreen() {
       ]}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Messages</Text>
-        {unread > 0 ? (
-          <View style={styles.countPill}>
-            <Text style={styles.countText}>
-              {unread > 9 ? "9+" : compactCount(unread)}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Messages</Text>
+          {unread > 0 ? (
+            <View style={styles.countPill}>
+              <Text style={styles.countText}>
+                {unread > 9 ? "9+" : compactCount(unread)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <Pressable
+          hitSlop={8}
+          onPress={() => (token ? router.push("/ai-chat" as Href) : openAuth())}
+          style={styles.aiBtn}
+        >
+          <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+          <Text style={styles.aiBtnText}>IA Chat</Text>
+        </Pressable>
       </View>
       <Text style={styles.lead}>
         Conversations protégées — les urgences restent non lues jusqu’à réponse.
@@ -262,9 +272,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
     marginBottom: 8,
   },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  aiBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,87,34,0.45)",
+    backgroundColor: "rgba(255,87,34,0.12)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  aiBtnText: { color: colors.primary, fontWeight: "700", fontSize: 12 },
   title: { color: "#fff", fontSize: 28, fontWeight: "800" },
   countPill: {
     minWidth: 24,

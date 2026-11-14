@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { api, apiOrigin } from "@/src/api";
+import { trackCisEvent } from "@/src/cis/events";
 import { compactCount, formatMoney } from "@/src/format";
 import { matchOpenLive } from "@/src/live";
 import { coverOf } from "@/src/media";
@@ -202,6 +203,13 @@ export function ShopPublicScreen() {
       }>(`/api/shops/${shop.slug}/follow`, {
         method: was ? "DELETE" : "POST",
       });
+      if (!was) {
+        trackCisEvent({
+          type: "shop_follow",
+          shopId: shop.id,
+          payload: { source: "shop_public", slug: shop.slug },
+        });
+      }
       queryClient.setQueryData(
         ["shop", slug],
         (prev: { shop: ShopDetail } | undefined) =>

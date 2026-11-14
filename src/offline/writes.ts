@@ -3,8 +3,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { parseCart, type CartItem, type CartPayload } from "@/src/cart";
 import { useCart } from "@/src/cart-store";
-import { enqueueOutbox } from "@/src/offline/outbox";
+import { trackCisEvent } from "@/src/cis/events";
 import { isOnline } from "@/src/offline/network";
+import { enqueueOutbox } from "@/src/offline/outbox";
 import { persistCart, writeCartCache } from "@/src/offline/persist";
 import type { Product } from "@/src/types";
 
@@ -19,7 +20,11 @@ export async function requestOrQueue<T>(input: {
   body?: unknown;
 }): Promise<{ queued: false; data: T } | { queued: true; data: null }> {
   const init: RequestInit = { method: input.method };
-  if (input.body != null && input.method !== "GET" && input.method !== "DELETE") {
+  if (
+    input.body != null &&
+    input.method !== "GET" &&
+    input.method !== "DELETE"
+  ) {
     init.body = JSON.stringify(input.body);
   }
   if (!(await isOnline())) {
@@ -46,7 +51,10 @@ export async function requestOrQueue<T>(input: {
   }
 }
 
-function cartFromQuery(queryClient: QueryClient, token: string | null | undefined) {
+function cartFromQuery(
+  queryClient: QueryClient,
+  token: string | null | undefined,
+) {
   return parseCart(queryClient.getQueryData(["cart", token ?? "guest"]) ?? {});
 }
 
@@ -70,7 +78,8 @@ export function patchCartQuantity(
   let items = current.items.filter((item) => item.productId !== productId);
   if (quantity >= 1) {
     const existing = current.items.find((item) => item.productId === productId);
-    const rowProduct = existing?.product ??
+    const rowProduct =
+      existing?.product ??
       (product
         ? {
             id: product.id,
@@ -119,11 +128,9 @@ export async function saveCartLine(
 ) {
   const current = cartFromQuery(queryClient, token);
   const already =
-    current.items.find((item) => item.productId === input.productId)?.quantity ??
-    0;
-  const nextQty = input.increment
-    ? already + input.quantity
-    : input.quantity;
+    current.items.find((item) => item.productId === input.productId)
+      ?.quantity ?? 0;
+  const nextQty = input.increment ? already + input.quantity : input.quantity;
   patchCartQuantity(
     queryClient,
     token,
@@ -146,6 +153,20 @@ export async function saveCartLine(
     commitCart(queryClient, token, parsed);
     persistCart(token, parsed);
   }
+  trackCisEvent({
+    type: "add_to_cart",
+    productId: input.productId,
+    shopId:
+      input.product && "shop" in input.product ? input.product.shop?.id : null,
+    category:
+      input.product && "category" in input.product
+        ? (input.product.category as string | undefined)
+        : null,
+    payload: {
+      quantity: input.increment ? input.quantity : nextQty,
+      increment: Boolean(input.increment),
+    },
+  });
 }
 
 export async function removeCartLine(

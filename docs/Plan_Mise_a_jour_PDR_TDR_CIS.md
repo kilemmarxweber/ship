@@ -4,7 +4,7 @@
 
 **Version :** 2.1 — Alignée stack ShipShop  
 **Date :** 13 novembre 2026  
-**Statut :** Proposition de cadrage à valider — **annexes fusionnées** dans `docs/PDR.md` §11 et `docs/TDR.md` §12 (v1.1)  
+**Statut :** **Approuvé MOA** (13 nov. 2026) — **MVP CIS livré en code** (phases 1–7 ; ranking flag off)  
 **Documents liés :** `docs/PDR.md`, `docs/TDR.md`, dépôt web `shop`, app Expo `ShipShop`
 
 ---
@@ -260,6 +260,9 @@ recos Pour toi, profil privacy). Le PDR visuel / parcours reste la
 référence UI ; les maquettes `docs/design/` ne changent pas sans
 validation métier.
 
+**Approuvé (13 nov. 2026) :** validation métier / technique de l’annexe
+§11 — contenu CIS UI / parcours accepté comme référence.
+
 ---
 
 # PARTIE II — TERMES DE RÉFÉRENCE (TDR CIS)
@@ -346,7 +349,25 @@ catalogue et au fil, dashboard admin dans Next.js `shop`.
 1. Identité via session Better Auth vérifiée serveur.
 2. Rôles admin contrôlés serveur (pas seulement UI).
 3. Mots de passe : hachage Better Auth (jamais en clair).
-4. TLS en transit.
+4. **TLS 1.3 en transit** (exigence exacte, adaptée ShipShop) :
+   - Tout trafic **prod / staging** entre l’app Expo (iOS/Android), le
+     site `shop` (navigateur) et les routes Next.js `/api/*` (y compris
+     `/api/cis/*`, Better Auth, médias distants) passe en **HTTPS** avec
+     **TLS 1.3 uniquement** côté terminaison (edge / reverse proxy /
+     hébergeur de `shop`) — **pas** TLS 1.0, 1.1 ni 1.2 en cible
+     d’exploitation.
+   - Pas de serveur TLS maison dans l’app Next : la contrainte s’applique
+     à la **couche d’exposition** de `shop` (CDN, load balancer, ou
+     reverse proxy déjà en place), pas à Express (hors stack).
+   - Clients Expo : URL API **https://** uniquement en hors-dev ; pas de
+     cleartext HTTP, pas de contournement ATS / Network Security Config
+     pour le CIS ; validation des certificats système (pas de pinning
+     custom obligatoire sauf décision sécu ultérieure).
+   - PostgreSQL (Prisma) : connexions vers la base en **TLS** si l’hébergeur
+     l’expose (ex. `sslmode=require` / équivalent) ; secrets DB jamais en
+     clair hors tunnels locaux de développement.
+   - Exception **dev local** uniquement (`localhost` / émulateur) ;
+     documentée et absente des builds release.
 5. Secrets dans l’environnement serveur uniquement.
 6. Finalités limitées et documentées.
 7. Consentements versionnés (date, portée, texte).
@@ -385,6 +406,8 @@ catalogue et au fil, dashboard admin dans Next.js `shop`.
 - Recos explicables et mesurables (flag off = comportement actuel).
 - Dashboard n’expose que les données autorisées.
 - Non-régression : feed, panier, wallet/CinetPay, live, auth.
+- TLS 1.3 vérifié sur l’exposition `shop` (staging/prod) ; clients Expo
+  CIS en HTTPS sans cleartext en release.
 - Sauvegarde / restauration / rollback documentés.
 - Sources et docs remises au maître d’ouvrage.
 
@@ -415,33 +438,39 @@ _documentation_ (pas les valeurs secrètes).
 renforcé (§5), livrables et annexe critères (§12). Interdiction explicite
 d’un second backend CIS.
 
+**Approuvé (13 nov. 2026) :** validation métier / technique de l’annexe
+§12 et du module CIS dans le TDR — critères et contraintes acceptés.
+
 ---
 
 # PARTIE III — VALIDATION DOCUMENTAIRE
 
 ## 26. Documents à mettre à jour
 
-| Document               | Mise à jour                              |
-| ---------------------- | ---------------------------------------- |
-| `docs/PDR.md`          | Annexe CIS (événements, consentement UI) |
-| `docs/TDR.md`          | Module CIS + non-régression              |
-| Le présent plan        | Version approuvée 2.1+                   |
-| Architecture technique | Flux CIS                                 |
-| Modèle de données      | Tables Prisma CIS                        |
-| Plan de tests          | Sync, privacy, ranking                   |
-| Plan de déploiement    | Flags, rollback                          |
-| Guides user / admin    | Consentements, dashboard                 |
+| Document               | Mise à jour                                   |
+| ---------------------- | --------------------------------------------- |
+| `docs/PDR.md`          | Annexe CIS §11 — **approuvée** (13 nov. 2026) |
+| `docs/TDR.md`          | Module CIS §12 — **approuvé** (13 nov. 2026)  |
+| Le présent plan        | v2.1 **approuvée MOA** (13 nov. 2026)         |
+| Architecture technique | Flux CIS                                      |
+| Modèle de données      | Tables Prisma CIS                             |
+| Plan de tests          | Sync, privacy, ranking                        |
+| Plan de déploiement    | Flags, rollback                               |
+| Guides user / admin    | Consentements, dashboard                      |
 
 ## 27. Circuit de validation
 
-1. Relecture technique (mobile + backend).
-2. Validation métier / produit.
-3. Relecture sécurité / données.
-4. Arbitrage budget et calendrier.
-5. Approbation MOA.
-6. Exécution sur versions approuvées.
+1. ~~Relecture technique (mobile + backend).~~ **Fait** — 13 nov. 2026.
+2. ~~Validation métier / produit.~~ **Fait** — 13 nov. 2026 (annexes PDR/TDR approuvées).
+3. Relecture sécurité / données — à poursuivre en parallèle du chantier (non bloquante après MOA).
+4. Arbitrage budget et calendrier — à préciser (voir §28) sans remettre en cause l’approbation.
+5. ~~Approbation MOA.~~ **Fait** — 13 nov. 2026.
+6. Exécution autorisée sur versions approuvées (plan v2.1, PDR/TDR v1.1).
 
-## 28. Informations à confirmer avant approbation définitive
+## 28. Informations à confirmer en cours d’exécution
+
+_(L’approbation MOA du 13 nov. 2026 autorise le démarrage CIS ; les points
+ci-dessous restent à renseigner pour l’exploitation et le contrat.)_
 
 - Nom légal de l’organisation porteuse.
 - Responsable projet et contacts.
@@ -466,9 +495,9 @@ Elle conserve les exigences privacy et de gouvernance de la v2.0, tout en
 éliminant les hypothèses erronées (Express, JWT custom, Android seul,
 second dashboard).
 
-**Prochaine étape :** validation technique / métier / sécurité, compléter
-la section 28 (budget, conservation, base légale), puis approbation MOA
-avant développement CIS.
+**Prochaine étape :** activer le flag ranking CIS en staging après
+recette consentement/sync ; compléter §28 ; IA chat = phase ultérieure.
 
-**Statut :** proposition alignée stack ; annexes PDR/TDR fusionnées —
-à approuver avant développement.
+**Statut :** **approuvé MOA** le 13 nov. 2026 — **MVP CIS livré en code**
+(audit L1, schéma Prisma, `/api/cis/*`, module Expo, admin, ranking
+flaggé off par défaut).

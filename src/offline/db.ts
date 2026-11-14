@@ -1,4 +1,4 @@
-const SCHEMA = 2;
+const SCHEMA = 3;
 const SNAPSHOT_CAP = 400_000;
 
 export type OutboxRow = {
@@ -7,6 +7,14 @@ export type OutboxRow = {
   path: string;
   method: string;
   body: string | null;
+  createdAt: number;
+  tries: number;
+};
+
+export type CisOutboxRow = {
+  id: string;
+  type: string;
+  body: string;
   createdAt: number;
   tries: number;
 };
@@ -32,6 +40,7 @@ type SqliteHandle = {
 const memKv = new Map<string, string>();
 const memSnap = new Map<string, string>();
 const memOutbox: OutboxRow[] = [];
+const memCisOutbox: CisOutboxRow[] = [];
 const memMedia = new Map<string, MediaCacheRow>();
 
 let sqlite: SqliteHandle | null = null;
@@ -74,6 +83,15 @@ export async function openOfflineDb() {
       );
       CREATE INDEX IF NOT EXISTS media_cache_updated
         ON media_cache (updatedAt DESC);
+      CREATE TABLE IF NOT EXISTS cis_event_outbox (
+        id TEXT PRIMARY KEY NOT NULL,
+        type TEXT NOT NULL,
+        body TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        tries INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS cis_event_outbox_created
+        ON cis_event_outbox (createdAt ASC);
     `);
     sqlite = db as unknown as SqliteHandle;
     const row = sqlite.getAllSync<{ value: string }>(
@@ -229,6 +247,57 @@ export function outboxRemove(id: string) {
   }
 }
 
+export function cisOutboxEnqueue(
+  row: Omit<CisOutboxRow, "tries"> & { tries?: number },
+) {
+  const next: CisOutboxRow = { tries: 0, ...row };
+  memCisOutbox.push(next);
+  try {
+    sqlite?.runSync(
+      "INSERT OR REPLACE INTO cis_event_outbox (id, type, body, createdAt, tries) VALUES (?, ?, ?, ?, ?)",
+      [next.id, next.type, next.body, next.createdAt, next.tries],
+    );
+  } catch {
+    /* memory only */
+  }
+}
+
+export function cisOutboxList(): CisOutboxRow[] {
+  try {
+    if (sqlite) {
+      return sqlite.getAllSync<CisOutboxRow>(
+        "SELECT id, type, body, createdAt, tries FROM cis_event_outbox ORDER BY createdAt ASC",
+      );
+    }
+  } catch {
+    return [...memCisOutbox];
+  }
+  return [...memCisOutbox];
+}
+
+export function cisOutboxBump(id: string, tries: number) {
+  const row = memCisOutbox.find((item) => item.id === id);
+  if (row) row.tries = tries;
+  try {
+    sqlite?.runSync("UPDATE cis_event_outbox SET tries = ? WHERE id = ?", [
+      tries,
+      id,
+    ]);
+  } catch {
+    /* memory only */
+  }
+}
+
+export function cisOutboxRemove(id: string) {
+  const index = memCisOutbox.findIndex((item) => item.id === id);
+  if (index >= 0) memCisOutbox.splice(index, 1);
+  try {
+    sqlite?.runSync("DELETE FROM cis_event_outbox WHERE id = ?", [id]);
+  } catch {
+    /* memory only */
+  }
+}
+
 export function mediaCacheGet(remoteUrl: string): MediaCacheRow | null {
   try {
     if (sqlite) {
@@ -299,8 +368,11 @@ export function mediaCacheClear() {
 export function wipeUserCache() {
   memSnap.clear();
   memOutbox.length = 0;
+  memCisOutbox.length = 0;
   try {
-    sqlite?.execSync("DELETE FROM snapshot; DELETE FROM outbox;");
+    sqlite?.execSync(
+      "DELETE FROM snapshot; DELETE FROM outbox; DELETE FROM cis_event_outbox;",
+    );
   } catch {
     /* memory only */
   }

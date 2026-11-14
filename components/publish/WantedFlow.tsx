@@ -29,8 +29,6 @@ import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
 import { WANTED_FEED_KEY } from "@/src/wanted";
 
-const WANTED_BATCH_MAX = 8;
-
 type Condition = "NEW_SHOP" | "USED" | "";
 type Draft = {
   key: string;
@@ -67,6 +65,7 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
   const [avenue, setAvenue] = useState("");
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [step, setStep] = useState(0);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
@@ -157,6 +156,27 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
     );
   }
 
+  function nextStep() {
+    const item = products[0];
+    if (!item) return;
+    if (step === 0 && item.title.trim().length < 2) {
+      showToast("Indique ce que tu recherches", "error");
+      return;
+    }
+    if (step === 1) {
+      if (!item.condition) {
+        showToast("Choisis l’état souhaité", "error");
+        return;
+      }
+      if (priceToCents(item.budget) < 100) {
+        showToast("Indique un budget minimum de 1 $", "error");
+        return;
+      }
+    }
+    setStep((value) => Math.min(2, value + 1));
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
   async function submit() {
     if (loading) return;
     const items: {
@@ -222,6 +242,7 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
       setLat(null);
       setLng(null);
       setAccuracyM(null);
+      setStep(0);
       showToast(
         n > 1
           ? `${n} demandes publiées — touche pour voir`
@@ -244,6 +265,8 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const item = products[0] ?? emptyDraft();
+
   return (
     <ScrollView
       ref={scrollRef}
@@ -258,36 +281,34 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
         </Text>
       </Pressable>
       <Text style={styles.title}>Je cherche</Text>
-
-      {products.map((item, index) => (
-        <Animated.View
-          key={item.key}
-          entering={FadeInDown.delay(index * 60).springify()}
-          style={styles.card}
-        >
-          <View style={styles.cardHead}>
-            <Text style={styles.cardTitle}>Produit {index + 1}</Text>
-            {products.length > 1 ? (
-              <Pressable
-                onPress={() =>
-                  setProducts((current) =>
-                    current.filter((row) => row.key !== item.key),
-                  )
-                }
-                style={styles.remove}
-              >
-                <Ionicons name="trash-outline" size={16} color="#fb7185" />
-                <Text style={styles.removeText}>Retirer</Text>
-              </Pressable>
-            ) : null}
+      <View style={styles.steps}>
+        {["Besoin", "Budget", "Lieu"].map((label, index) => (
+          <View key={label} style={styles.stepItem}>
+            <View style={[styles.stepDot, index <= step && styles.stepDotOn]}>
+              <Text style={[styles.stepNumber, index <= step && styles.stepNumberOn]}>
+                {index + 1}
+              </Text>
+            </View>
+            <Text style={[styles.stepLabel, index <= step && styles.stepLabelOn]}>
+              {label}
+            </Text>
           </View>
+        ))}
+      </View>
+
+      {step === 0 ? (
+        <Animated.View entering={FadeInDown.springify()} style={styles.card}>
+          <Text style={styles.cardTitle}>Que recherches-tu ?</Text>
+          <Text style={styles.lead}>
+            Un titre précis et une photo aident les vendeurs à répondre vite.
+          </Text>
           <TextInput
             value={item.title}
             onChangeText={(title) => patch(item.key, { title })}
-            placeholder="ex: nom de produit"
+            placeholder="Ex. AirPods Pro 2"
             placeholderTextColor={c.textMuted}
             style={styles.input}
-            autoFocus={index === 0}
+            autoFocus
             autoCorrect={false}
             returnKeyType="next"
           />
@@ -300,6 +321,21 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
             busy={item.busy}
             setBusy={(busy) => patch(item.key, { busy })}
           />
+          <TextInput
+            value={item.description}
+            onChangeText={(description) => patch(item.key, { description })}
+            placeholder="Modèle, couleur, taille ou détails utiles…"
+            placeholderTextColor={c.textMuted}
+            style={[styles.input, styles.area]}
+            multiline
+          />
+        </Animated.View>
+      ) : null}
+
+      {step === 1 ? (
+        <Animated.View entering={FadeInDown.springify()} style={styles.card}>
+          <Text style={styles.cardTitle}>Budget et préférences</Text>
+          <Text style={styles.label}>Catégorie</Text>
           <View style={styles.rowWrap}>
             {categories.map((cat) => (
               <Pressable
@@ -370,109 +406,125 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
             keyboardType="decimal-pad"
             style={styles.input}
           />
-          <TextInput
-            value={item.description}
-            onChangeText={(description) => patch(item.key, { description })}
-            placeholder="Couleur, taille, modèle…"
-            placeholderTextColor={c.textMuted}
-            style={[styles.input, styles.area]}
-            multiline
-          />
         </Animated.View>
-      ))}
-
-      <View style={styles.actionRow}>
-        <Pressable
-          style={styles.gpsBtn}
-          onPress={() => void captureGps()}
-          disabled={locating}
-        >
-          {locating ? (
-            <ActivityIndicator color={c.primaryForeground} />
-          ) : (
-            <Ionicons name="locate" size={18} color={c.primaryForeground} />
-          )}
-          <Text style={styles.gpsText} numberOfLines={1}>
-            {locating ? "GPS…" : "Ma position"}
-          </Text>
-        </Pressable>
-        {products.length < WANTED_BATCH_MAX ? (
-          <Pressable
-            style={styles.add}
-            onPress={() => setProducts((current) => [...current, emptyDraft()])}
-          >
-            <Ionicons name="add" size={18} color={c.primary} />
-            <Text style={styles.addText} numberOfLines={1}>
-              Ajouter un autre
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {lat != null && lng != null ? (
-        <View style={styles.pointBox}>
-          <ParcelMap
-            mode="pin"
-            courier={null}
-            destination={{ lat, lng }}
-            label={
-              accuracyM != null
-                ? `Tu es ici · ~${Math.round(accuracyM)} m`
-                : "Tu es ici"
-            }
-          />
-          <Text style={styles.pointMeta}>
-            Point GPS {lat.toFixed(6)}, {lng.toFixed(6)}
-            {accuracyM != null
-              ? ` · précision ~${Math.round(accuracyM)} m`
-              : ""}
-          </Text>
-        </View>
       ) : null}
 
-      <Text style={styles.label}>Adresse (complément)</Text>
-      <TextInput
-        value={city}
-        onChangeText={setCity}
-        placeholder="Ville"
-        placeholderTextColor={c.textMuted}
-        style={styles.input}
-      />
-      <TextInput
-        value={commune}
-        onChangeText={setCommune}
-        placeholder="Commune"
-        placeholderTextColor={c.textMuted}
-        style={styles.input}
-      />
-      <TextInput
-        value={quartier}
-        onChangeText={setQuartier}
-        placeholder="Quartier"
-        placeholderTextColor={c.textMuted}
-        style={styles.input}
-      />
-      <TextInput
-        value={avenue}
-        onChangeText={setAvenue}
-        placeholder="Avenue"
-        placeholderTextColor={c.textMuted}
-        style={styles.input}
-      />
+      {step === 2 ? (
+        <Animated.View entering={FadeInDown.springify()} style={styles.card}>
+          <View style={styles.cardHead}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Où recevoir les offres ?</Text>
+              <Text style={styles.lead}>
+                La commune suffit. Le GPS reste facultatif.
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            style={styles.gpsBtn}
+            onPress={() => void captureGps()}
+            disabled={locating}
+          >
+            {locating ? (
+              <ActivityIndicator color={c.primaryForeground} />
+            ) : (
+              <Ionicons name="locate" size={18} color={c.primaryForeground} />
+            )}
+            <Text style={styles.gpsText} numberOfLines={1}>
+              {locating ? "Localisation…" : "Utiliser ma position"}
+            </Text>
+          </Pressable>
 
-      <Pressable
-        style={[styles.cta, loading && { opacity: 0.7 }]}
-        disabled={loading}
-        onPress={() => void submit()}
-      >
-        <Text style={styles.ctaText}>
-          {loading
-            ? "Publication…"
-            : products.length > 1
-              ? "Publier les demandes"
-              : "Publier la demande"}
-        </Text>
-      </Pressable>
+          {lat != null && lng != null ? (
+            <View style={styles.pointBox}>
+              <ParcelMap
+                mode="pin"
+                courier={null}
+                destination={{ lat, lng }}
+                label={
+                  accuracyM != null
+                    ? `Tu es ici · ~${Math.round(accuracyM)} m`
+                    : "Tu es ici"
+                }
+              />
+              <Text style={styles.pointMeta}>
+                Position enregistrée
+                {accuracyM != null
+                  ? ` · précision ~${Math.round(accuracyM)} m`
+                  : ""}
+              </Text>
+            </View>
+          ) : null}
+
+          <TextInput
+            value={city}
+            onChangeText={setCity}
+            placeholder="Ville"
+            placeholderTextColor={c.textMuted}
+            style={styles.input}
+          />
+          <TextInput
+            value={commune}
+            onChangeText={setCommune}
+            placeholder="Commune"
+            placeholderTextColor={c.textMuted}
+            style={styles.input}
+          />
+          <TextInput
+            value={quartier}
+            onChangeText={setQuartier}
+            placeholder="Quartier (facultatif)"
+            placeholderTextColor={c.textMuted}
+            style={styles.input}
+          />
+          <TextInput
+            value={avenue}
+            onChangeText={setAvenue}
+            placeholder="Avenue (facultatif)"
+            placeholderTextColor={c.textMuted}
+            style={styles.input}
+          />
+
+          <View style={styles.summary}>
+            <View style={styles.summaryIcon}>
+              <Ionicons name="search" size={20} color={c.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={styles.summaryMeta}>
+                {item.condition === "USED" ? "Occasion" : "Neuf / magasin"} ·
+                max {item.budget || "—"} USD
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+      ) : null}
+
+      <View style={styles.navRow}>
+        {step > 0 ? (
+          <Pressable style={styles.secondaryCta} onPress={() => setStep(step - 1)}>
+            <Text style={styles.secondaryCtaText}>Retour</Text>
+          </Pressable>
+        ) : null}
+        {step < 2 ? (
+          <Pressable style={styles.cta} onPress={nextStep}>
+            <Text style={styles.ctaText}>Continuer</Text>
+            <Ionicons name="arrow-forward" size={17} color={c.primaryForeground} />
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.cta, loading && { opacity: 0.7 }]}
+            disabled={loading}
+            onPress={() => void submit()}
+          >
+            {loading ? <ActivityIndicator color={c.primaryForeground} /> : null}
+            <Text style={styles.ctaText}>
+              {loading ? "Publication…" : "Publier la demande"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -497,6 +549,28 @@ function makeWantedStyles(c: ThemeColors = colors) {
     },
     title: { color: c.text, fontSize: 26, fontWeight: "800" },
     lead: { color: c.textMuted, lineHeight: 20 },
+    steps: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    stepItem: { flex: 1, alignItems: "center", gap: 5 },
+    stepDot: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: HAIRLINE,
+    },
+    stepDotOn: { backgroundColor: c.primary, borderColor: c.primary },
+    stepNumber: { color: c.textMuted, fontSize: 12, fontWeight: "800" },
+    stepNumberOn: { color: c.primaryForeground },
+    stepLabel: { color: c.textMuted, fontSize: 11, fontWeight: "700" },
+    stepLabelOn: { color: c.text },
     card: {
       backgroundColor: c.card,
       borderRadius: 20,
@@ -585,12 +659,47 @@ function makeWantedStyles(c: ThemeColors = colors) {
       lineHeight: 18,
     },
     label: { color: c.textMuted, fontWeight: "700", fontSize: 12 },
+    summary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: 16,
+      padding: 12,
+      backgroundColor: c.background,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: HAIRLINE,
+    },
+    summaryIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: `${c.primary}18`,
+    },
+    summaryTitle: { color: c.text, fontSize: 14, fontWeight: "800" },
+    summaryMeta: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    navRow: { flexDirection: "row", alignItems: "center", gap: 10 },
     cta: {
+      flex: 1,
+      minHeight: 50,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 8,
       backgroundColor: c.primary,
       borderRadius: 16,
-      paddingVertical: 14,
       alignItems: "center",
     },
     ctaText: { color: c.primaryForeground, fontWeight: "800" },
+    secondaryCta: {
+      minHeight: 50,
+      minWidth: 104,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: HAIRLINE,
+    },
+    secondaryCtaText: { color: c.text, fontWeight: "800" },
   });
 }

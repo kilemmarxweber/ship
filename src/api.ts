@@ -1,6 +1,11 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import {
+    isRateLimitedError,
+    retryAfterMs,
+    securityHeaders,
+} from "@/src/security/security-client";
 import { useSession } from "@/src/session";
 
 function devHost() {
@@ -125,11 +130,13 @@ function failFromResponse(
   throw new ApiError(status, cleanApiMessage(raw, fallback), data);
 }
 
-function requestHeaders(init?: RequestInit) {
+async function requestHeaders(init?: RequestInit) {
   const token = useSession.getState().token;
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   headers.set("Origin", "shipshop://app");
+  const sec = await securityHeaders();
+  for (const [key, value] of Object.entries(sec)) headers.set(key, value);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -137,10 +144,12 @@ function requestHeaders(init?: RequestInit) {
   return headers;
 }
 
-function authHeaderMap() {
+async function authHeaderMap() {
   const token = useSession.getState().token;
+  const sec = await securityHeaders();
   const headers: Record<string, string> = {
     Origin: "shipshop://app",
+    ...sec,
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -151,9 +160,10 @@ export async function apiDownloadFile(
   fileName: string,
 ): Promise<{ uri: string; mimeType: string }> {
   const url = `${apiOrigin()}${path}`;
+  const auth = await authHeaderMap();
   if (Platform.OS === "web") {
     const response = await fetch(url, {
-      headers: { ...authHeaderMap(), Accept: "*/*" },
+      headers: { ...auth, Accept: "*/*" },
     });
     const textOrBlobOk = response.ok;
     if (!textOrBlobOk) {
@@ -175,7 +185,7 @@ export async function apiDownloadFile(
   const safeName = fileName.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
   const dest = `${FileSystem.cacheDirectory ?? ""}${safeName}`;
   const result = await FileSystem.downloadAsync(url, dest, {
-    headers: authHeaderMap(),
+    headers: auth,
   });
   if (result.status < 200 || result.status >= 300) {
     throw new Error("Téléchargement du son impossible");
@@ -197,14 +207,24 @@ export async function apiDownloadFile(
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiOrigin()}${path}`, {
     ...init,
-    headers: requestHeaders(init),
+    headers: await requestHeaders(init),
   });
   const text = await response.text();
   if (!response.ok) {
+    if (response.status === 429) {
+      const wait = retryAfterMs(response);
+      const err = new ApiError(429, "Trop de requêtes — patiente un instant", {
+        ...readApiBody(text),
+        retryAfterMs: wait,
+      });
+      throw err;
+    }
     failFromResponse(response.status, text, "Requête impossible");
   }
   return readApiBody(text) as T;
 }
+
+export { isRateLimitedError, retryAfterMs };
 
 export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   const token = useSession.getState().token;
@@ -220,6 +240,8 @@ async function webUpload(url: string, form: FormData, token: string | null) {
   const headers = new Headers();
   headers.set("Accept", "application/json");
   headers.set("Origin", "shipshop://app");
+  const sec = await securityHeaders();
+  for (const [key, value] of Object.entries(sec)) headers.set(key, value);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(url, { method: "POST", headers, body: form });
   const text = await response.text();
@@ -229,12 +251,16 @@ async function webUpload(url: string, form: FormData, token: string | null) {
   return text;
 }
 
-function nativeUpload(url: string, form: FormData, token: string | null) {
+async function nativeUpload(url: string, form: FormData, token: string | null) {
+  const sec = await securityHeaders();
   return new Promise<string>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("Origin", "shipshop://app");
+    for (const [key, value] of Object.entries(sec)) {
+      xhr.setRequestHeader(key, value);
+    }
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.onload = () => {
       const text = xhr.responseText ?? "";
@@ -264,7 +290,7 @@ export async function apiPayment<T>(
   },
 ): Promise<T> {
   const { idempotencyKey, replayScope, ...rest } = init;
-  const headers = requestHeaders(rest);
+  const headers = await requestHeaders(rest);
   headers.set("Idempotency-Key", idempotencyKey);
   try {
     const response = await fetch(`${apiOrigin()}${path}`, {
@@ -281,7 +307,7 @@ export async function apiPayment<T>(
     const scope = replayScope ?? "CHECKOUT";
     const replay = await fetch(
       `${apiOrigin()}/api/payments/replay?scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(idempotencyKey)}`,
-      { headers: requestHeaders() },
+      { headers: await requestHeaders() },
     );
     const text = await replay.text();
     if (replay.ok) return readApiBody(text) as T;
@@ -290,12 +316,14 @@ export async function apiPayment<T>(
 }
 
 export async function authRequest(path: string, body: Record<string, unknown>) {
+  const sec = await securityHeaders();
   const response = await fetch(`${apiOrigin()}${path}`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
       Origin: "shipshop://app",
+      ...sec,
     },
     body: JSON.stringify(body),
   });

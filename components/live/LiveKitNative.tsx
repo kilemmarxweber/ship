@@ -15,10 +15,12 @@ import {
     VideoTrack,
 } from "@livekit/react-native";
 import {
+    ConnectionQuality,
     ConnectionState,
     Room,
     RoomEvent,
     Track,
+    VideoPresets,
     type LocalParticipant,
     type ScreenShareCaptureOptions,
 } from "livekit-client";
@@ -30,6 +32,7 @@ import {
     useMemo,
     useRef,
     useState,
+    useSyncExternalStore,
     type ErrorInfo,
     type ReactNode,
 } from "react";
@@ -52,6 +55,12 @@ import {
 } from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
 import { AR_FILTERS, isArFilterId } from "@/src/live-ar-filters";
+import {
+    decodeFacePose,
+    encodeFacePose,
+    parseFacePosePayload,
+    type FacePose,
+} from "@/src/live-face-tracking";
 import { isLiveLookId } from "@/src/live-look";
 import {
     demanderMicro,
@@ -69,6 +78,7 @@ import {
     type LiveStageLayoutId,
 } from "@/src/live-stage-layout";
 import { showToast } from "@/src/toast";
+import { useLiveFacePose } from "@/src/use-live-face-pose";
 
 if (isLiveRtcAvailable()) {
   registerGlobals();
@@ -76,7 +86,7 @@ if (isLiveRtcAvailable()) {
 
 const CAMERA = {
   facingMode: "user" as const,
-  // Portrait studio — netteté + fluidité pour le diffuseur / invités.
+  // Portrait HD — couches simulcast pour réseaux faibles.
   resolution: { width: 720, height: 1280, frameRate: 30 },
 };
 
@@ -88,24 +98,31 @@ const MIC_CAPTURE = {
 const MIC_PUBLISH = { stopMicTrackOnMute: true };
 
 const ROOM_OPTIONS = {
-  adaptiveStream: false,
-  dynacast: false,
+  adaptiveStream: true,
+  dynacast: true,
   stopLocalTrackOnUnpublish: true,
   videoCaptureDefaults: CAMERA,
   audioCaptureDefaults: MIC_CAPTURE,
   publishDefaults: {
-    simulcast: false,
+    simulcast: true,
     stopMicTrackOnMute: true,
-    videoEncoding: { maxBitrate: 1_200_000, maxFramerate: 30 },
-    screenShareEncoding: { maxBitrate: 1_800_000, maxFramerate: 15 },
+    degradationPreference: "maintain-framerate" as const,
+    videoEncoding: {
+      maxBitrate: 2_500_000,
+      maxFramerate: 30,
+    },
+    // Couches basses pour spectateurs en 3G / Wi‑Fi saturé.
+    videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h180],
+    screenShareEncoding: { maxBitrate: 2_000_000, maxFramerate: 15 },
+    screenShareSimulcastLayers: [VideoPresets.h360, VideoPresets.h720],
   },
 };
 
 const SCREEN_SHARE_RESOLUTION = {
-  // 720p @ 12 fps — plus stable Android (évite OOM / kill pendant « Tout l’écran »)
+  // 720p @ 15 fps — netteté écran sans OOM Android.
   width: 720,
   height: 1280,
-  frameRate: 12,
+  frameRate: 15,
 };
 
 function androidApiLevel() {
@@ -279,10 +296,12 @@ const LookCtx = createContext<{
   look: string;
   pick: (id: string) => void;
   isHost: boolean;
+  pose: FacePose | null;
 }>({
   look: "studio",
   pick: () => undefined,
   isHost: false,
+  pose: null,
 });
 
 const ScreenShareCtx = createContext<{
@@ -305,7 +324,9 @@ function LiveLookProvider({
   children: ReactNode;
 }) {
   const [localLook, setLocalLook] = useState("studio");
+  const { pose: localPose } = useLiveFacePose({ enabled: isHost, hz: 20 });
   const { send, message } = useDataChannel("ss-filter");
+  const faceChannel = useDataChannel("ss-face");
 
   const remoteLook = useMemo(() => {
     if (!message?.payload) return null;
@@ -314,15 +335,83 @@ function LiveLookProvider({
   }, [message]);
   const look = !isHost && remoteLook ? remoteLook : localLook;
 
+  const remotePose = useMemo(() => {
+    if (isHost || !faceChannel.message?.payload) return null;
+    const raw = new TextDecoder().decode(faceChannel.message.payload);
+    const packet = parseFacePosePayload(raw);
+    return packet ? decodeFacePose(packet) : null;
+  }, [faceChannel.message, isHost]);
+
+  const sendFace = faceChannel.send;
+  useEffect(() => {
+    if (!isHost) return;
+    const payload = JSON.stringify(encodeFacePose(localPose));
+    void sendFace(new TextEncoder().encode(payload), { reliable: false });
+  }, [isHost, localPose, sendFace]);
+
   const pick = (id: string) => {
     setLocalLook(id);
     if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
   };
 
+  const pose = isHost ? localPose : remotePose;
+
   return (
-    <LookCtx.Provider value={{ look, pick, isHost }}>
+    <LookCtx.Provider value={{ look, pick, isHost, pose }}>
       {children}
     </LookCtx.Provider>
+  );
+}
+
+function LiveConnectionQualityBadge({ isHost }: { isHost: boolean }) {
+  const room = useLiveRoomOrNull();
+  const quality = useSyncExternalStore(
+    (onStoreChange) => {
+      if (!room || !isHost) return () => undefined;
+      const onQuality = (
+        _next: ConnectionQuality,
+        participant: { isLocal: boolean },
+      ) => {
+        if (participant.isLocal) onStoreChange();
+      };
+      room.on(RoomEvent.ConnectionQualityChanged, onQuality);
+      return () => {
+        room.off(RoomEvent.ConnectionQualityChanged, onQuality);
+      };
+    },
+    () => room?.localParticipant.connectionQuality ?? ConnectionQuality.Unknown,
+    () => ConnectionQuality.Unknown,
+  );
+
+  if (!isHost || quality === ConnectionQuality.Unknown) return null;
+
+  const label =
+    quality === ConnectionQuality.Excellent
+      ? "HD"
+      : quality === ConnectionQuality.Good
+        ? "Bon"
+        : quality === ConnectionQuality.Poor
+          ? "Réseau faible"
+          : "Connexion perdue";
+  const tone =
+    quality === ConnectionQuality.Excellent ||
+    quality === ConnectionQuality.Good
+      ? styles.qualityOk
+      : styles.qualityWarn;
+
+  return (
+    <View style={[styles.qualityBadge, tone]} pointerEvents="none">
+      <View
+        style={[
+          styles.qualityDot,
+          quality === ConnectionQuality.Poor ||
+          quality === ConnectionQuality.Lost
+            ? styles.qualityDotWarn
+            : styles.qualityDotOk,
+        ]}
+      />
+      <Text style={styles.qualityText}>{label}</Text>
+    </View>
   );
 }
 
@@ -799,7 +888,7 @@ function LiveKitVideoInner({
       : hostCamera;
   const hasVideo =
     isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
-  const look = useContext(LookCtx).look;
+  const { look, pose } = useContext(LookCtx);
 
   // Invités sur scène (1…N) : cameras distants sauf le host.
   const guestRemotes = remotes.filter(
@@ -867,9 +956,10 @@ function LiveKitVideoInner({
         {/* Filtre plein cadre = même surface que la vidéo (peau + décor) */}
         {hasVideo && !sharing ? (
           <View style={styles.filterLayer} pointerEvents="none">
-            <LiveFilterOverlay look={look} />
+            <LiveFilterOverlay look={look} pose={pose} />
           </View>
         ) : null}
+        <LiveConnectionQualityBadge isHost={isHost} />
       </View>
 
       {stageSlots.length > 0 ? (
@@ -911,7 +1001,7 @@ function LiveKitVideoInner({
                   />
                 </TrackSafe>
                 {hasVideo ? (
-                  <LiveFilterOverlay look={look} intensity="pip" />
+                  <LiveFilterOverlay look={look} pose={pose} intensity="pip" />
                 ) : null}
               </View>
             );
@@ -1326,6 +1416,36 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 2,
     elevation: 2,
+  },
+  qualityBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  qualityOk: {
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  qualityWarn: {
+    backgroundColor: "rgba(120,40,10,0.72)",
+  },
+  qualityDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  qualityDotOk: { backgroundColor: "#00D68F" },
+  qualityDotWarn: { backgroundColor: "#FBBF24" },
+  qualityText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
   },
   guestRail: {
     ...StyleSheet.absoluteFill,

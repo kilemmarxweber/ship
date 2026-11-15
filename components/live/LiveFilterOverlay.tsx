@@ -7,6 +7,12 @@ import {
   colorLookFromArId,
   type ArFilter,
 } from "@/src/live-ar-filters";
+import {
+  anchorStyleFor,
+  defaultFacePose,
+  eyeDistance,
+  type FacePose,
+} from "@/src/live-face-tracking";
 import { isLiveLookId, type LiveLookId } from "@/src/live-look";
 
 function ColorGrade({
@@ -123,34 +129,90 @@ function ColorGrade({
   return null;
 }
 
-function BlushBeauty({ soft }: { soft: number }) {
+function BlushBeauty({ pose, soft }: { pose: FacePose; soft: number }) {
+  const left = anchorStyleFor(pose, "face", 1, soft);
+  const cheekY = `${pose.center.y * 100 + 4}%` as `${number}%`;
+  const cheekSpread = pose.width * 28;
   return (
     <>
       <View
         style={[
           styles.blush,
-          styles.blushLeft,
-          { backgroundColor: `rgba(255,120,140,${0.22 * soft})` },
+          {
+            left: `${pose.center.x * 100 - cheekSpread}%`,
+            top: cheekY,
+            opacity: left.opacity * 0.9,
+            transform: [{ scale: Math.max(0.8, pose.width / 0.42) }],
+          },
         ]}
       />
       <View
         style={[
           styles.blush,
-          styles.blushRight,
-          { backgroundColor: `rgba(255,120,140,${0.22 * soft})` },
+          {
+            left: `${pose.center.x * 100 + cheekSpread - 8}%`,
+            top: cheekY,
+            opacity: left.opacity * 0.9,
+            transform: [{ scale: Math.max(0.8, pose.width / 0.42) }],
+          },
         ]}
       />
       <View
         style={[
           styles.fill,
-          { backgroundColor: `rgba(255,236,228,${0.1 * soft})` },
+          { backgroundColor: `rgba(255,236,228,${0.1 * soft * pose.confidence})` },
         ]}
       />
     </>
   );
 }
 
-function StickerLayer({ filter, soft }: { filter: ArFilter; soft: number }) {
+function StickerAt({
+  emoji,
+  pose,
+  anchor,
+  scale,
+  soft,
+  pulse,
+  fontSize,
+}: {
+  emoji: string;
+  pose: FacePose;
+  anchor: "head" | "eyes" | "nose" | "face" | "earLeft" | "earRight";
+  scale: number;
+  soft: number;
+  pulse: Animated.Value;
+  fontSize: number;
+}) {
+  const style = anchorStyleFor(pose, anchor, scale, soft);
+  if (!style.visible && style.opacity <= 0.02) return null;
+  return (
+    <Animated.Text
+      style={[
+        styles.sticker,
+        {
+          left: style.left,
+          top: style.top,
+          fontSize,
+          opacity: style.opacity,
+          transform: [...style.transform, { scale: pulse }],
+        },
+      ]}
+    >
+      {emoji}
+    </Animated.Text>
+  );
+}
+
+function StickerLayer({
+  filter,
+  pose,
+  soft,
+}: {
+  filter: ArFilter;
+  pose: FacePose;
+  soft: number;
+}) {
   const [pulse] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
@@ -176,29 +238,30 @@ function StickerLayer({ filter, soft }: { filter: ArFilter; soft: number }) {
     return () => loop.stop();
   }, [filter.id, filter.type, pulse]);
 
-  const anchorStyle =
-    filter.anchor === "head"
-      ? styles.anchorHead
-      : filter.anchor === "eyes"
-        ? styles.anchorEyes
-        : styles.anchorFace;
-
-  const size = Math.round(42 * filter.scale * (soft < 1 ? 0.75 : 1));
+  const eyeScale = clamp(eyeDistance(pose) / 0.24, 0.8, 1.5);
+  const size = Math.round(42 * filter.scale * eyeScale * (soft < 1 ? 0.75 : 1));
 
   if (filter.type === "animation" && filter.id === "sparkle") {
+    const conf = pose.confidence * soft;
     return (
       <View style={styles.fill} pointerEvents="none">
-        {["12%", "28%", "70%", "78%", "50%"].map((left, index) => (
+        {[
+          { x: pose.headTop.x - 0.12, y: pose.headTop.y + 0.04 },
+          { x: pose.headTop.x + 0.1, y: pose.headTop.y + 0.02 },
+          { x: pose.leftEye.x - 0.08, y: pose.leftEye.y - 0.06 },
+          { x: pose.rightEye.x + 0.08, y: pose.rightEye.y - 0.06 },
+          { x: pose.nose.x, y: pose.nose.y + 0.12 },
+        ].map((pt, index) => (
           <Animated.Text
-            key={left}
+            key={`${pt.x}-${index}`}
             style={[
               styles.sparkle,
               {
-                left: left as `${number}%`,
-                top: `${18 + index * 12}%`,
+                left: `${pt.x * 100}%`,
+                top: `${pt.y * 100}%`,
                 fontSize: 18 + (index % 3) * 4,
-                opacity: soft,
-                transform: [{ scale: pulse }],
+                opacity: conf,
+                transform: [{ scale: pulse }, { translateX: -8 }, { translateY: -8 }],
               },
             ]}
           >
@@ -212,61 +275,101 @@ function StickerLayer({ filter, soft }: { filter: ArFilter; soft: number }) {
   if (filter.type === "animation" && (filter.id === "heart" || filter.id === "star")) {
     return (
       <View style={styles.fill} pointerEvents="none">
-        <Animated.Text
-          style={[
-            styles.sticker,
-            styles.anchorEyes,
-            { left: "18%", fontSize: size, opacity: soft, transform: [{ scale: pulse }] },
-          ]}
-        >
-          {filter.emoji}
-        </Animated.Text>
-        <Animated.Text
-          style={[
-            styles.sticker,
-            styles.anchorEyes,
-            { left: "68%", fontSize: size, opacity: soft, transform: [{ scale: pulse }] },
-          ]}
-        >
-          {filter.emoji}
-        </Animated.Text>
+        <StickerAt
+          emoji={filter.emoji}
+          pose={pose}
+          anchor="earLeft"
+          scale={filter.scale}
+          soft={soft}
+          pulse={pulse}
+          fontSize={size}
+        />
+        <StickerAt
+          emoji={filter.emoji}
+          pose={pose}
+          anchor="earRight"
+          scale={filter.scale}
+          soft={soft}
+          pulse={pulse}
+          fontSize={size}
+        />
+      </View>
+    );
+  }
+
+  if (filter.anchor === "ears" || filter.id === "earrings") {
+    return (
+      <View style={styles.fill} pointerEvents="none">
+        <StickerAt
+          emoji={filter.emoji}
+          pose={pose}
+          anchor="earLeft"
+          scale={filter.scale}
+          soft={soft}
+          pulse={pulse}
+          fontSize={size}
+        />
+        <StickerAt
+          emoji={filter.emoji}
+          pose={pose}
+          anchor="earRight"
+          scale={filter.scale}
+          soft={soft}
+          pulse={pulse}
+          fontSize={size}
+        />
       </View>
     );
   }
 
   if (filter.type !== "overlay" && filter.type !== "animation") return null;
 
+  const anchor =
+    filter.anchor === "head"
+      ? "head"
+      : filter.anchor === "eyes"
+        ? "eyes"
+        : filter.anchor === "nose"
+          ? "nose"
+          : "face";
+
   return (
-    <Animated.Text
-      style={[
-        styles.sticker,
-        anchorStyle,
-        {
-          fontSize: size,
-          opacity: soft,
-          transform: [{ scale: pulse }],
-        },
-      ]}
-    >
-      {filter.emoji}
-    </Animated.Text>
+    <View style={styles.fill} pointerEvents="none">
+      <StickerAt
+        emoji={filter.emoji}
+        pose={pose}
+        anchor={anchor}
+        scale={filter.scale}
+        soft={soft}
+        pulse={pulse}
+        fontSize={size}
+      />
+    </View>
   );
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
 /**
- * Filtres Live : grades couleur + stickers AR + beauté légère.
+ * Filtres Live : grades couleur + stickers ancrés au visage + beauté légère.
  * « none » / naturel sans overlay = désactivation réelle du rendu.
  */
 export function LiveFilterOverlay({
   look,
   intensity = "full",
+  pose,
 }: {
   look: LiveLookId | string;
   intensity?: "full" | "pip";
+  /** Pose faciale (host locale ou spectateur via data-channel). */
+  pose?: FacePose | null;
 }) {
   if (look === "none" || look === "naturel") return null;
 
   const soft = intensity === "pip" ? 0.58 : 1;
+  const face = pose ?? defaultFacePose();
   const filter = arFilterById(look);
   const colorId =
     (filter ? colorLookFromArId(filter.id) : null) ??
@@ -277,11 +380,11 @@ export function LiveFilterOverlay({
       {colorId && isLiveLookId(colorId) ? (
         <ColorGrade look={colorId} soft={soft} />
       ) : null}
-      {filter?.id === "blush" ? <BlushBeauty soft={soft} /> : null}
+      {filter?.id === "blush" ? <BlushBeauty pose={face} soft={soft} /> : null}
       {filter &&
       (filter.type === "overlay" || filter.type === "animation") &&
       filter.id !== "none" ? (
-        <StickerLayer filter={filter} soft={soft} />
+        <StickerLayer filter={filter} pose={face} soft={soft} />
       ) : null}
     </View>
   );
@@ -295,33 +398,15 @@ const styles = StyleSheet.create({
   },
   sticker: {
     position: "absolute",
-    alignSelf: "center",
     textAlign: "center",
-  },
-  anchorHead: {
-    top: "8%",
-    left: 0,
-    right: 0,
-  },
-  anchorEyes: {
-    top: "34%",
-    left: 0,
-    right: 0,
-  },
-  anchorFace: {
-    top: "42%",
-    left: 0,
-    right: 0,
   },
   blush: {
     position: "absolute",
     width: 56,
     height: 28,
     borderRadius: 20,
-    top: "46%",
+    backgroundColor: "rgba(255,120,140,0.22)",
   },
-  blushLeft: { left: "18%" },
-  blushRight: { right: "18%" },
   sparkle: {
     position: "absolute",
     color: "#FFE8A3",

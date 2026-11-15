@@ -10,7 +10,13 @@ export type ArFilterType =
   | "distortion"
   | "animation";
 
-export type ArFilterAnchor = "head" | "eyes" | "nose" | "face" | "background";
+export type ArFilterAnchor =
+  | "head"
+  | "eyes"
+  | "nose"
+  | "face"
+  | "ears"
+  | "background";
 
 export type ArFilter = {
   id: string;
@@ -130,6 +136,16 @@ export const AR_FILTERS: ArFilter[] = [
     type: "overlay",
     anchor: "eyes",
     scale: 1.05,
+    enabled: true,
+  },
+  {
+    id: "earrings",
+    name: "Boucles",
+    category: "bijoux",
+    emoji: "💎",
+    type: "overlay",
+    anchor: "ears",
+    scale: 0.85,
     enabled: true,
   },
   {

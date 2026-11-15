@@ -1,11 +1,11 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import {
-  getPermissionsAsync,
-  requestPermissionsAsync,
-  saveToLibraryAsync,
+    getPermissionsAsync,
+    requestPermissionsAsync,
+    saveToLibraryAsync,
 } from "expo-media-library";
-import { safeBack } from "@/src/nav";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -20,11 +20,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
 import { AR_FILTERS } from "@/src/live-ar-filters";
 import { showToast } from "@/src/toast";
+import { useLiveFacePose } from "@/src/use-live-face-pose";
 
 /**
  * Studio AR autonome (caméra frontale + galerie filtres + photo).
- * Landmarks MediaPipe / VisionCamera = vague native suivante ;
- * ici ancrage approximatif + même catalogue que le Live.
+ * Ancres tête / yeux / oreilles via tracking lissé.
+ * `ingestLandmarks(MediaPipe)` prêt pour le rebuild natif (sans double caméra Live).
  */
 export function ArStudioScreen() {
   const insets = useSafeAreaInsets();
@@ -34,6 +35,7 @@ export function ArStudioScreen() {
   const [facing, setFacing] = useState<"front" | "back">("front");
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  const { pose } = useLiveFacePose({ enabled: true, hz: 24 });
 
   useEffect(() => {
     if (permission && !permission.granted) {
@@ -144,7 +146,7 @@ export function ArStudioScreen() {
         facing={facing}
         mode="video"
       />
-      <LiveFilterOverlay look={filterId} />
+      <LiveFilterOverlay look={filterId} pose={pose} />
 
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <Pressable style={styles.iconBtn} onPress={() => safeBack()}>
@@ -212,8 +214,8 @@ export function ArStudioScreen() {
           </Pressable>
         </View>
         <Text style={styles.hint}>
-          Photo / vidéo : le filtre reste à l’écran. Bake pixel-perfect +
-          MediaPipe = prochain rebuild natif.
+          Ancres tête / yeux / oreilles actives. MediaPipe Face Landmarker =
+          prochaine vague native (sans double capture Live).
         </Text>
       </View>
     </View>

@@ -169,14 +169,14 @@ Migration : `prisma/migrations/20261115120000_api_security_anti_scraping`
 
 ## 6. Phases
 
-| Phase                 | Statut                                      |
-| --------------------- | ------------------------------------------- |
-| 1 Audit               | Fait                                        |
-| 2 Backend             | Fait (routes prioritaires)                  |
-| 3 Anubis web          | Snippet Nginx staging prêt (activation VPS) |
-| 4 Attestation native  | Stub + politique de repli                   |
-| 5 Dashboard admin     | Fait (`/shops/admin/security`)              |
-| 6 Tests / déploiement | Unit policies + migrate prod                |
+| Phase                 | Statut                                       |
+| --------------------- | -------------------------------------------- |
+| 1 Audit               | Fait                                         |
+| 2 Backend             | Fait (routes prioritaires)                   |
+| 3 Anubis web          | Install native + STAGING.md (activation VPS) |
+| 4 Attestation native  | Stub + politique de repli                    |
+| 5 Dashboard admin     | Fait (`/shops/admin/security`)               |
+| 6 Tests / déploiement | Unit policies + migrate prod                 |
 
 ## 7. Déploiement
 
@@ -201,7 +201,7 @@ Vérifier `TRUST_PROXY=1` derrière Nginx pour les IP réelles.
 - [x] Mobile n’est pas la frontière de sécurité
 - [x] Dashboard admin (Phase 5)
 - [x] Mail urgence SMTP `SECURITY_ALERT_EMAIL` (high/critical → kilem@klambocore.com)
-- [ ] Anubis staging activé sur VPS (Phase 3 — snippet prêt)
+- [ ] Anubis staging activé sur VPS (Phase 3 — suivre `shop/infrastructure/anubis/STAGING.md`)
 - [ ] Attestation native (Phase 4)
 
 ## 9. Ne jamais transmettre

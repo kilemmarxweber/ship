@@ -89,6 +89,9 @@ export class ApiError extends Error {
   }
 }
 
+const ACCESS_LIMITED_FR =
+  "Plusieurs tentatives erronées ont été détectées. L'accès est temporairement limité. Réessaie dans quelques minutes.";
+
 function cleanApiMessage(raw: string, fallback: string) {
   if (/<!DOCTYPE|<html|turbopack|__nextjs/i.test(raw)) return fallback;
   const text = raw
@@ -101,7 +104,10 @@ function cleanApiMessage(raw: string, fallback: string) {
   ) {
     return fallback;
   }
-  return text.slice(0, 180);
+  if (/too many requests|rate.?limit|trop de requ[eê]tes/i.test(text)) {
+    return ACCESS_LIMITED_FR;
+  }
+  return text.slice(0, 220);
 }
 
 function readApiBody(text: string): Record<string, unknown> {
@@ -213,11 +219,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     if (response.status === 429) {
       const wait = retryAfterMs(response);
-      const err = new ApiError(429, "Trop de requêtes — patiente un instant", {
-        ...readApiBody(text),
-        retryAfterMs: wait,
-      });
-      throw err;
+      const body = readApiBody(text);
+      const msg = cleanApiMessage(
+        String(body.error ?? body.message ?? text),
+        ACCESS_LIMITED_FR,
+      );
+      throw new ApiError(429, msg, { ...body, retryAfterMs: wait });
     }
     failFromResponse(response.status, text, "Requête impossible");
   }
@@ -329,6 +336,17 @@ export async function authRequest(path: string, body: Record<string, unknown>) {
   });
   const text = await response.text();
   if (!response.ok) {
+    if (response.status === 429) {
+      const body = readApiBody(text);
+      throw new ApiError(
+        429,
+        cleanApiMessage(
+          String(body.error ?? body.message ?? text),
+          ACCESS_LIMITED_FR,
+        ),
+        body,
+      );
+    }
     failFromResponse(response.status, text, "Connexion impossible");
   }
   const data = readApiBody(text);

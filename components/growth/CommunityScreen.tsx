@@ -1,6 +1,6 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { safeBack } from "@/src/nav";
 import {
     ActivityIndicator,
     Pressable,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PagedMore } from "@/components/ui/PagedMore";
 import { api } from "@/src/api";
 import {
     badgeKey,
@@ -23,6 +24,7 @@ import {
 import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { useColors } from "@/src/use-colors";
+import { usePaged } from "@/src/use-paged";
 
 export function CommunityScreen() {
   const insets = useSafeAreaInsets();
@@ -194,6 +196,7 @@ export function CommunityScreen() {
             text={c.text}
             muted={c.textMuted}
             card={c.card}
+            pageSize={3}
           />
           <Board
             title={t("globalBoard")}
@@ -202,6 +205,7 @@ export function CommunityScreen() {
             text={c.text}
             muted={c.textMuted}
             card={c.card}
+            pageSize={3}
           />
         </>
       )}
@@ -216,6 +220,7 @@ function Board({
   text,
   muted,
   card,
+  pageSize = 3,
 }: {
   title: string;
   rows: LeaderboardRow[];
@@ -223,23 +228,32 @@ function Board({
   text: string;
   muted: string;
   card: string;
+  pageSize?: number;
 }) {
+  const paged = usePaged(rows, `${title}-${rows.length}`, pageSize);
   return (
     <View style={[styles.card, { backgroundColor: card }]}>
       <Text style={[styles.section, { color: text }]}>{title}</Text>
       {rows.length === 0 ? (
         <Text style={[styles.empty, { color: muted }]}>{empty}</Text>
       ) : (
-        rows.map((row) => (
-          <View key={`${title}-${row.rank}`} style={styles.boardRow}>
-            <Text style={[styles.boardName, { color: text }]}>
-              {row.rank}. {row.name}
-            </Text>
-            <Text style={{ color: muted, fontSize: 12 }}>
-              {row.interactions} pts · {row.activeDays} j
-            </Text>
-          </View>
-        ))
+        <>
+          {paged.visible.map((row) => (
+            <View key={`${title}-${row.rank}`} style={styles.boardRow}>
+              <Text style={[styles.boardName, { color: text }]}>
+                {row.rank}. {row.name}
+              </Text>
+              <Text style={{ color: muted, fontSize: 12, fontWeight: "700" }}>
+                {row.interactions} pts · {row.activeDays} j
+              </Text>
+            </View>
+          ))}
+          <PagedMore
+            hasMore={paged.hasMore}
+            remaining={paged.remaining}
+            onMore={paged.more}
+          />
+        </>
       )}
     </View>
   );
@@ -260,15 +274,15 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     flexShrink: 0,
   },
-  title: { fontSize: 24, fontWeight: "800" },
-  lead: { lineHeight: 18, marginTop: 4 },
+  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.3 },
+  lead: { lineHeight: 20, marginTop: 4, fontSize: 14, fontWeight: "600" },
   primary: {
     backgroundColor: "#FF7A00",
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: "center",
   },
-  primaryText: { color: "#fff", fontWeight: "800" },
+  primaryText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   badge: {
     flexDirection: "row",
@@ -279,22 +293,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     includeFontPadding: false,
     paddingRight: 8,
     flexShrink: 0,
   },
-  badgeMeta: { fontSize: 11, fontWeight: "700" },
+  badgeMeta: { fontSize: 12, fontWeight: "700" },
   card: { borderRadius: 18, padding: 14, gap: 10 },
-  section: { fontWeight: "800" },
-  empty: { fontSize: 12 },
+  section: { fontSize: 17, fontWeight: "800", letterSpacing: -0.2 },
+  empty: { fontSize: 13, fontWeight: "600" },
   missionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 8,
   },
-  missionLabel: { flex: 1, fontSize: 13, fontWeight: "600" },
+  missionLabel: { flex: 1, fontSize: 14, fontWeight: "700" },
   bar: { height: 6, borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999 },
   boardRow: {
@@ -302,5 +316,5 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  boardName: { flex: 1, fontSize: 13, fontWeight: "600" },
+  boardName: { flex: 1, fontSize: 14, fontWeight: "700" },
 });

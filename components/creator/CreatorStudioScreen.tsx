@@ -35,6 +35,8 @@ type GrowthMe = {
   subscribers?: number;
   kycApproved?: boolean;
   isPlatformOwner?: boolean;
+  liveAccessGranted?: boolean;
+  canGoLive?: boolean;
 };
 
 type GiftRow = {
@@ -91,7 +93,12 @@ export function CreatorStudioScreen() {
   const influencer = badges.some(
     (badge) => badge.kind === "INFLUENCER" && badge.active,
   );
-  const canGoLive = Boolean(influencer || me.data?.isPlatformOwner);
+  const canGoLive = Boolean(
+    me.data?.canGoLive ??
+      (me.data?.liveAccessGranted ||
+        influencer ||
+        me.data?.isPlatformOwner),
+  );
   const subscribers = me.data?.subscribers ?? 0;
   const need = Math.max(0, INFLUENCER_FOLLOWERS - subscribers);
   const activeLive = (lives.data?.lives ?? []).find(

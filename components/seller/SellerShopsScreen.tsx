@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -67,6 +68,7 @@ type OrgMember = {
   shopCount: number;
   kind: "vendor" | "buyer";
   isMe?: boolean;
+  liveAccessGranted?: boolean;
   user: { id: string; name: string; email: string; phone?: string | null };
 };
 
@@ -91,6 +93,14 @@ export function SellerShopsScreen() {
     "all",
   );
   const [roleBusy, setRoleBusy] = useState<string | null>(null);
+  const [liveBusy, setLiveBusy] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<{
+    id: string;
+    name: string;
+    role: "member" | "admin";
+    currentRole: string;
+  } | null>(null);
+  const [nameBusy, setNameBusy] = useState(false);
 
   const shopsQ = useQuery({
     queryKey: ["seller-shops-page", token ?? "guest"],
@@ -268,6 +278,63 @@ export function SellerShopsScreen() {
     }
   }
 
+  async function saveMemberProfile() {
+    if (!editingMember) return;
+    const name = editingMember.name.trim();
+    if (name.length < 2) {
+      showToast("Nom trop court", "error");
+      return;
+    }
+    setNameBusy(true);
+    try {
+      await api("/api/org/members", {
+        method: "PATCH",
+        body: JSON.stringify({ memberId: editingMember.id, name }),
+      });
+      if (editingMember.role !== editingMember.currentRole) {
+        await api("/api/org/members", {
+          method: "PATCH",
+          body: JSON.stringify({
+            memberId: editingMember.id,
+            role: editingMember.role,
+          }),
+        });
+      }
+      showToast("Profil mis à jour", "success");
+      setEditingMember(null);
+      await refresh();
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Modification impossible",
+        "error",
+      );
+    } finally {
+      setNameBusy(false);
+    }
+  }
+
+  async function toggleLiveAccess(memberId: string, liveAccess: boolean) {
+    setLiveBusy(memberId);
+    try {
+      await api("/api/org/members", {
+        method: "PATCH",
+        body: JSON.stringify({ memberId, liveAccess }),
+      });
+      showToast(
+        liveAccess ? "Accès live accordé" : "Accès live retiré",
+        "success",
+      );
+      await refresh();
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Accès live non modifié",
+        "error",
+      );
+    } finally {
+      setLiveBusy(null);
+    }
+  }
+
   function resetPassword(user: { id: string; name: string; email: string }) {
     Alert.alert(
       "Réinitialiser le mot de passe ?",
@@ -324,194 +391,252 @@ export function SellerShopsScreen() {
   ] as const;
 
   return (
-    <ScrollView
-      style={[styles.wrap, { backgroundColor: c.background }]}
-      contentContainerStyle={{
-        paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + 32,
-        paddingHorizontal: 16,
-        gap: 12,
-      }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
-
-      <View>
-        <Text style={[styles.title, { color: c.text }]}>
-          {isOwner ? "Toutes les boutiques" : "Mes boutiques"}
-        </Text>
-        <Text style={[styles.lead, { color: c.textMuted }]}>
-          1 organisation → plusieurs shops
-        </Text>
-      </View>
-
-      {!token ? (
-        <Pressable
-          style={[styles.primary, { backgroundColor: c.primary }]}
-          onPress={openAuth}
-        >
-          <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
-            Se connecter
+    <View style={[styles.wrap, { backgroundColor: c.background }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 32,
+          paddingHorizontal: 16,
+          gap: 12,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable onPress={() => safeBack()} style={styles.back}>
+          <Ionicons name="chevron-back" size={20} color={c.text} />
+          <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
+            {t("back")}
+            {"\u00A0"}
           </Text>
         </Pressable>
-      ) : shopsQ.isLoading ? (
-        <ActivityIndicator color={c.primary} />
-      ) : (
-        <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6 }}
+
+        <View>
+          <Text style={[styles.title, { color: c.text }]}>
+            {isOwner ? "Toutes les boutiques" : "Mes boutiques"}
+          </Text>
+          <Text style={[styles.lead, { color: c.textMuted }]}>
+            1 organisation → plusieurs shops
+          </Text>
+        </View>
+
+        {!token ? (
+          <Pressable
+            style={[styles.primary, { backgroundColor: c.primary }]}
+            onPress={openAuth}
           >
-            {shortcuts.map((item) => (
+            <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
+              Se connecter
+            </Text>
+          </Pressable>
+        ) : shopsQ.isLoading ? (
+          <ActivityIndicator color={c.primary} />
+        ) : (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6 }}
+            >
+              {shortcuts.map((item) => (
+                <Pressable
+                  key={item.href}
+                  onPress={() => router.push(item.href as Href)}
+                  style={[
+                    styles.shortcut,
+                    item.label === "Produits"
+                      ? { backgroundColor: c.primary }
+                      : {
+                          backgroundColor: c.card,
+                          borderColor: HAIRLINE,
+                          borderWidth: 1,
+                        },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color:
+                        item.label === "Produits"
+                          ? c.primaryForeground
+                          : c.text,
+                      fontWeight: "700",
+                      fontSize: 12,
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.headRow}>
+              <Text style={[styles.section, { color: c.text }]}>Boutiques</Text>
               <Pressable
-                key={item.href}
-                onPress={() => router.push(item.href as Href)}
-                style={[
-                  styles.shortcut,
-                  item.label === "Produits"
-                    ? { backgroundColor: c.primary }
-                    : {
-                        backgroundColor: c.card,
-                        borderColor: HAIRLINE,
-                        borderWidth: 1,
-                      },
-                ]}
+                onPress={() => router.push("/publish?mode=onboard" as Href)}
+                style={[styles.addBtn, { backgroundColor: c.primary }]}
               >
+                <Ionicons name="add" size={14} color={c.primaryForeground} />
                 <Text
                   style={{
-                    color:
-                      item.label === "Produits" ? c.primaryForeground : c.text,
-                    fontWeight: "700",
+                    color: c.primaryForeground,
+                    fontWeight: "800",
                     fontSize: 12,
                   }}
                 >
-                  {item.label}
+                  Shop
                 </Text>
               </Pressable>
-            ))}
-          </ScrollView>
-
-          <View style={styles.headRow}>
-            <Text style={[styles.section, { color: c.text }]}>Boutiques</Text>
-            <Pressable
-              onPress={() => router.push("/publish?mode=onboard" as Href)}
-              style={[styles.addBtn, { backgroundColor: c.primary }]}
-            >
-              <Ionicons name="add" size={14} color={c.primaryForeground} />
-              <Text
-                style={{
-                  color: c.primaryForeground,
-                  fontWeight: "800",
-                  fontSize: 12,
-                }}
-              >
-                Shop
-              </Text>
-            </Pressable>
-          </View>
-
-          {shops.length > 1 ? (
-            <View
-              style={[
-                styles.search,
-                { backgroundColor: c.card, borderColor: HAIRLINE },
-              ]}
-            >
-              <Ionicons name="search" size={16} color={c.textMuted} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Rechercher une boutique"
-                placeholderTextColor={c.textMuted}
-                style={{ flex: 1, color: c.text, paddingVertical: 0 }}
-              />
             </View>
-          ) : null}
 
-          {pagedShops.visible.map((shop) => {
-            const fx =
-              fxDrafts[shop.id] ?? String(shop.fxCdfPerUsd ?? DEFAULT_FX_CDF);
-            const logo = mediaUrl(shop.logoUrl);
-            const proActive =
-              shop.proUntil != null && new Date(shop.proUntil) > new Date();
-            return (
+            {shops.length > 1 ? (
               <View
-                key={shop.id}
                 style={[
-                  styles.card,
+                  styles.search,
                   { backgroundColor: c.card, borderColor: HAIRLINE },
                 ]}
               >
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  {logo ? (
-                    <Image
-                      source={{ uri: logo }}
-                      style={styles.logo}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.logo,
-                        {
-                          backgroundColor: c.primary,
-                          alignItems: "center",
-                          justifyContent: "center",
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: "#fff", fontWeight: "800" }}>
-                        {shop.name.slice(0, 1).toUpperCase()}
+                <Ionicons name="search" size={16} color={c.textMuted} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Rechercher une boutique"
+                  placeholderTextColor={c.textMuted}
+                  style={{ flex: 1, color: c.text, paddingVertical: 0 }}
+                />
+              </View>
+            ) : null}
+
+            {pagedShops.visible.map((shop) => {
+              const fx =
+                fxDrafts[shop.id] ?? String(shop.fxCdfPerUsd ?? DEFAULT_FX_CDF);
+              const logo = mediaUrl(shop.logoUrl);
+              const proActive =
+                shop.proUntil != null && new Date(shop.proUntil) > new Date();
+              return (
+                <View
+                  key={shop.id}
+                  style={[
+                    styles.card,
+                    { backgroundColor: c.card, borderColor: HAIRLINE },
+                  ]}
+                >
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    {logo ? (
+                      <Image
+                        source={{ uri: logo }}
+                        style={styles.logo}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.logo,
+                          {
+                            backgroundColor: c.primary,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          },
+                        ]}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "800" }}>
+                          {shop.name.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: c.text, fontWeight: "800" }}>
+                        {shop.name}
+                      </Text>
+                      <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                        /{shop.slug} · {shop.currency ?? "USD"} ·{" "}
+                        {shop._count?.products ?? 0} produits
+                        {shop.owner?.name ? ` · ${shop.owner.name}` : ""}
+                        {shop.isActive === false ? " · off" : ""}
+                      </Text>
+                      <Text
+                        style={{ color: c.emerald, fontSize: 11, marginTop: 2 }}
+                      >
+                        1 $US = {Number(fx).toLocaleString("fr-CD")} CDF
                       </Text>
                     </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.text, fontWeight: "800" }}>
-                      {shop.name}
-                    </Text>
-                    <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                      /{shop.slug} · {shop.currency ?? "USD"} ·{" "}
-                      {shop._count?.products ?? 0} produits
-                      {shop.owner?.name ? ` · ${shop.owner.name}` : ""}
-                      {shop.isActive === false ? " · off" : ""}
-                    </Text>
-                    <Text
-                      style={{ color: c.emerald, fontSize: 11, marginTop: 2 }}
-                    >
-                      1 $US = {Number(fx).toLocaleString("fr-CD")} CDF
-                    </Text>
                   </View>
-                </View>
 
-                <Text style={[styles.label, { color: c.textMuted }]}>
-                  Taux du jour (config vendeur)
-                </Text>
-                <View style={styles.fxRow}>
-                  <TextInput
-                    keyboardType="number-pad"
-                    value={fx}
-                    onChangeText={(value) =>
-                      setFxDrafts((prev) => ({ ...prev, [shop.id]: value }))
-                    }
+                  <Text style={[styles.label, { color: c.textMuted }]}>
+                    Taux du jour (config vendeur)
+                  </Text>
+                  <View style={styles.fxRow}>
+                    <TextInput
+                      keyboardType="number-pad"
+                      value={fx}
+                      onChangeText={(value) =>
+                        setFxDrafts((prev) => ({ ...prev, [shop.id]: value }))
+                      }
+                      style={[
+                        styles.input,
+                        {
+                          color: c.text,
+                          backgroundColor: "rgba(127,127,140,0.12)",
+                        },
+                      ]}
+                    />
+                    <Pressable
+                      disabled={fxSavingId === shop.id}
+                      onPress={() => void saveFx(shop)}
+                      style={[styles.saveBtn, { backgroundColor: c.primary }]}
+                    >
+                      <Text
+                        style={{
+                          color: c.primaryForeground,
+                          fontWeight: "800",
+                          fontSize: 13,
+                        }}
+                      >
+                        {fxSavingId === shop.id ? "…" : "Sauver"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={[styles.label, { color: c.textMuted }]}>
+                    Réseaux sociaux (contact boutique)
+                  </Text>
+                  {(
+                    [
+                      ["tiktok", "TikTok — @compte ou lien"],
+                      ["instagram", "Instagram — @compte ou lien"],
+                      ["facebook", "Facebook — page ou lien"],
+                      ["x", "X — @compte ou lien"],
+                    ] as const
+                  ).map(([key, placeholder]) => (
+                    <TextInput
+                      key={key}
+                      value={
+                        (socialDrafts[shop.id] ?? socialDraftFromShop(shop))[
+                          key
+                        ]
+                      }
+                      onChangeText={(value) => patchSocial(shop.id, key, value)}
+                      placeholder={placeholder}
+                      placeholderTextColor={c.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={[
+                        styles.socialInput,
+                        {
+                          color: c.text,
+                          backgroundColor: "rgba(127,127,140,0.12)",
+                        },
+                      ]}
+                    />
+                  ))}
+                  <Pressable
+                    disabled={socialSavingId === shop.id}
+                    onPress={() => void saveSocials(shop)}
                     style={[
-                      styles.input,
+                      styles.saveBtn,
                       {
-                        color: c.text,
-                        backgroundColor: "rgba(127,127,140,0.12)",
+                        backgroundColor: c.primary,
+                        alignSelf: "stretch",
                       },
                     ]}
-                  />
-                  <Pressable
-                    disabled={fxSavingId === shop.id}
-                    onPress={() => void saveFx(shop)}
-                    style={[styles.saveBtn, { backgroundColor: c.primary }]}
                   >
                     <Text
                       style={{
@@ -520,306 +645,462 @@ export function SellerShopsScreen() {
                         fontSize: 13,
                       }}
                     >
-                      {fxSavingId === shop.id ? "…" : "Sauver"}
+                      {socialSavingId === shop.id
+                        ? "…"
+                        : "Enregistrer les réseaux"}
                     </Text>
                   </Pressable>
-                </View>
 
-                <Text style={[styles.label, { color: c.textMuted }]}>
-                  Réseaux sociaux (contact boutique)
+                  <Pressable
+                    onPress={() => void activatePro(shop)}
+                    style={[styles.proBtn, { borderColor: HAIRLINE }]}
+                  >
+                    <Text
+                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
+                    >
+                      {proActive ? "ShipPro actif" : "ShipPro 10 $/mois"}
+                    </Text>
+                  </Pressable>
+
+                  <View style={styles.actions}>
+                    <Pressable
+                      onPress={() =>
+                        router.push(`/boutique?shop=${shop.slug}` as Href)
+                      }
+                      style={[styles.action, { borderColor: HAIRLINE }]}
+                    >
+                      <Text
+                        style={{
+                          color: c.text,
+                          fontWeight: "700",
+                          fontSize: 12,
+                        }}
+                      >
+                        Entrer
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        router.push(
+                          `/seller/products?shopId=${shop.id}` as Href,
+                        )
+                      }
+                      style={[styles.action, { borderColor: HAIRLINE }]}
+                    >
+                      <Text
+                        style={{
+                          color: c.text,
+                          fontWeight: "700",
+                          fontSize: 12,
+                        }}
+                      >
+                        Produits
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        router.push(
+                          `/publish?mode=sell&shopId=${shop.id}` as Href,
+                        )
+                      }
+                      style={[
+                        styles.action,
+                        { backgroundColor: "rgba(127,127,140,0.14)" },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: c.text,
+                          fontWeight: "700",
+                          fontSize: 12,
+                        }}
+                      >
+                        Publier
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+            <PagedMore
+              hasMore={pagedShops.hasMore}
+              remaining={pagedShops.remaining}
+              onMore={pagedShops.more}
+            />
+            {visible.length === 0 ? (
+              <Text
+                style={{
+                  color: c.textMuted,
+                  textAlign: "center",
+                  paddingVertical: 24,
+                }}
+              >
+                {shops.length === 0
+                  ? "Aucune boutique — créez-en une pour publier."
+                  : "Aucune boutique ne correspond."}
+              </Text>
+            ) : null}
+
+            <View style={{ marginTop: 8, gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Ionicons name="people-outline" size={16} color={c.primary} />
+                <Text style={[styles.section, { color: c.text }]}>
+                  Utilisateurs
                 </Text>
+              </View>
+              <Text
+                style={{ color: c.textMuted, fontSize: 11, lineHeight: 16 }}
+              >
+                {isOwner
+                  ? "Owner : nom, rôle et accès live boutique. Sinon badge Influenceur requis pour le live."
+                  : "Vous voyez uniquement votre compte et les personnes que vous avez invitées. Acheteurs / abonnés → Contacts."}
+              </Text>
+              <View style={styles.tabs}>
                 {(
                   [
-                    ["tiktok", "TikTok — @compte ou lien"],
-                    ["instagram", "Instagram — @compte ou lien"],
-                    ["facebook", "Facebook — page ou lien"],
-                    ["x", "X — @compte ou lien"],
+                    ["all", "Tous", members.length],
+                    [
+                      "vendor",
+                      "Vendeurs",
+                      members.filter((m) => m.kind === "vendor").length,
+                    ],
+                    [
+                      "buyer",
+                      "Acheteurs",
+                      members.filter((m) => m.kind === "buyer").length,
+                    ],
                   ] as const
-                ).map(([key, placeholder]) => (
-                  <TextInput
-                    key={key}
-                    value={
-                      (socialDrafts[shop.id] ?? socialDraftFromShop(shop))[key]
-                    }
-                    onChangeText={(value) => patchSocial(shop.id, key, value)}
-                    placeholder={placeholder}
-                    placeholderTextColor={c.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[
-                      styles.socialInput,
-                      {
-                        color: c.text,
-                        backgroundColor: "rgba(127,127,140,0.12)",
-                      },
-                    ]}
-                  />
-                ))}
-                <Pressable
-                  disabled={socialSavingId === shop.id}
-                  onPress={() => void saveSocials(shop)}
+                ).map(([key, label, count]) => {
+                  const on = memberFilter === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => setMemberFilter(key)}
+                      style={[
+                        styles.chip,
+                        on
+                          ? { backgroundColor: c.primary }
+                          : { backgroundColor: "rgba(127,127,140,0.14)" },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: on ? c.primaryForeground : c.textMuted,
+                          fontWeight: "700",
+                          fontSize: 11,
+                        }}
+                      >
+                        {label} ({count})
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {pagedMembers.visible.map((m) => (
+                <View
+                  key={m.id}
                   style={[
-                    styles.saveBtn,
-                    {
-                      backgroundColor: c.primary,
-                      alignSelf: "stretch",
-                    },
+                    styles.member,
+                    { backgroundColor: c.card, borderColor: HAIRLINE },
                   ]}
                 >
-                  <Text
-                    style={{
-                      color: c.primaryForeground,
-                      fontWeight: "800",
-                      fontSize: 13,
-                    }}
-                  >
-                    {socialSavingId === shop.id
-                      ? "…"
-                      : "Enregistrer les réseaux"}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => void activatePro(shop)}
-                  style={[styles.proBtn, { borderColor: HAIRLINE }]}
-                >
-                  <Text
-                    style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
-                  >
-                    {proActive ? "ShipPro actif" : "ShipPro 10 $/mois"}
-                  </Text>
-                </Pressable>
-
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={() =>
-                      router.push(`/boutique?shop=${shop.slug}` as Href)
-                    }
-                    style={[styles.action, { borderColor: HAIRLINE }]}
-                  >
-                    <Text
-                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
-                    >
-                      Entrer
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ color: c.text, fontWeight: "700" }}>
+                      {m.user.name}
+                      {m.isMe ? (
+                        <Text style={{ color: c.primary }}> (vous)</Text>
+                      ) : null}
                     </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() =>
-                      router.push(`/seller/products?shopId=${shop.id}` as Href)
-                    }
-                    style={[styles.action, { borderColor: HAIRLINE }]}
-                  >
-                    <Text
-                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
-                    >
-                      Produits
+                    <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                      {m.user.email}
                     </Text>
-                  </Pressable>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: 4,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: m.kind === "vendor" ? c.primary : c.textMuted,
+                          backgroundColor:
+                            m.kind === "vendor"
+                              ? `${c.primary}22`
+                              : "rgba(127,127,140,0.14)",
+                          overflow: "hidden",
+                          borderRadius: 8,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          fontSize: 10,
+                          fontWeight: "800",
+                        }}
+                      >
+                        {m.kind === "vendor"
+                          ? `Vendeur · ${m.shopCount} boutique${m.shopCount > 1 ? "s" : ""}`
+                          : "Acheteur"}
+                      </Text>
+                      {m.liveAccessGranted ? (
+                        <Text
+                          style={{
+                            color: "#ff2d45",
+                            backgroundColor: "rgba(255,45,69,0.15)",
+                            overflow: "hidden",
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            fontSize: 10,
+                            fontWeight: "800",
+                          }}
+                        >
+                          Live
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <View style={{ gap: 6, alignItems: "flex-end" }}>
+                    {isOrgOwner && m.role !== "owner" ? (
+                      <Pressable
+                        onPress={() =>
+                          setEditingMember({
+                            id: m.id,
+                            name: m.user.name,
+                            role: m.role === "admin" ? "admin" : "member",
+                            currentRole: m.role,
+                          })
+                        }
+                        style={[styles.miniBtn, { borderColor: HAIRLINE }]}
+                      >
+                        <Text
+                          style={{
+                            color: c.text,
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Nom / rôle
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {isOrgOwner && m.role !== "owner" && m.kind === "vendor" ? (
+                      <Pressable
+                        disabled={liveBusy === m.id}
+                        onPress={() =>
+                          void toggleLiveAccess(m.id, !m.liveAccessGranted)
+                        }
+                        style={[
+                          styles.miniBtn,
+                          m.liveAccessGranted
+                            ? { backgroundColor: "#ff2d45" }
+                            : { borderColor: HAIRLINE, borderWidth: 1 },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: m.liveAccessGranted ? "#fff" : c.text,
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {m.liveAccessGranted ? "Live on" : "Accès live"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {isOwner ? (
+                      <Pressable
+                        onPress={() => resetPassword(m.user)}
+                        style={[styles.miniBtn, { borderColor: HAIRLINE }]}
+                      >
+                        <Text
+                          style={{
+                            color: c.text,
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Reset MDP
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {isOrgOwner && m.role !== "owner" ? (
+                      <View style={{ flexDirection: "row", gap: 4 }}>
+                        {(["member", "admin"] as const).map((role) => {
+                          const on = m.role === role;
+                          return (
+                            <Pressable
+                              key={role}
+                              disabled={roleBusy === m.id}
+                              onPress={() => void changeRole(m.id, role)}
+                              style={[
+                                styles.miniBtn,
+                                on
+                                  ? { backgroundColor: c.primary }
+                                  : { borderColor: HAIRLINE, borderWidth: 1 },
+                              ]}
+                            >
+                              <Text
+                                style={{
+                                  color: on ? c.primaryForeground : c.text,
+                                  fontSize: 11,
+                                  fontWeight: "700",
+                                  textTransform: "capitalize",
+                                }}
+                              >
+                                {role}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <Text
+                        style={{
+                          color: c.textMuted,
+                          fontSize: 11,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {m.role}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+              <PagedMore
+                hasMore={pagedMembers.hasMore}
+                remaining={pagedMembers.remaining}
+                onMore={pagedMembers.more}
+              />
+            </View>
+          </>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={Boolean(editingMember)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingMember(null)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            justifyContent: "flex-end",
+            padding: 16,
+            paddingBottom: insets.bottom + 16,
+          }}
+          onPress={() => setEditingMember(null)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: c.sheet ?? c.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: HAIRLINE,
+              padding: 16,
+              gap: 10,
+            }}
+          >
+            <Text style={{ color: c.text, fontSize: 17, fontWeight: "800" }}>
+              Modifier nom & rôle
+            </Text>
+            <Text
+              style={{ color: c.textMuted, fontSize: 11, fontWeight: "700" }}
+            >
+              Nom
+            </Text>
+            <TextInput
+              value={editingMember?.name ?? ""}
+              onChangeText={(name) =>
+                setEditingMember((prev) => (prev ? { ...prev, name } : prev))
+              }
+              autoFocus
+              style={{
+                borderWidth: 1,
+                borderColor: HAIRLINE,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 11,
+                color: c.text,
+                backgroundColor: c.card,
+                fontSize: 15,
+              }}
+            />
+            <Text
+              style={{ color: c.textMuted, fontSize: 11, fontWeight: "700" }}
+            >
+              Rôle
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["member", "admin"] as const).map((role) => {
+                const on = editingMember?.role === role;
+                return (
                   <Pressable
+                    key={role}
                     onPress={() =>
-                      router.push(
-                        `/publish?mode=sell&shopId=${shop.id}` as Href,
+                      setEditingMember((prev) =>
+                        prev ? { ...prev, role } : prev,
                       )
                     }
                     style={[
-                      styles.action,
-                      { backgroundColor: "rgba(127,127,140,0.14)" },
-                    ]}
-                  >
-                    <Text
-                      style={{ color: c.text, fontWeight: "700", fontSize: 12 }}
-                    >
-                      Publier
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-          <PagedMore
-            hasMore={pagedShops.hasMore}
-            remaining={pagedShops.remaining}
-            onMore={pagedShops.more}
-          />
-          {visible.length === 0 ? (
-            <Text
-              style={{
-                color: c.textMuted,
-                textAlign: "center",
-                paddingVertical: 24,
-              }}
-            >
-              {shops.length === 0
-                ? "Aucune boutique — créez-en une pour publier."
-                : "Aucune boutique ne correspond."}
-            </Text>
-          ) : null}
-
-          <View style={{ marginTop: 8, gap: 8 }}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
-              <Ionicons name="people-outline" size={16} color={c.primary} />
-              <Text style={[styles.section, { color: c.text }]}>
-                Utilisateurs
-              </Text>
-            </View>
-            <Text style={{ color: c.textMuted, fontSize: 11, lineHeight: 16 }}>
-              {isOwner
-                ? "Owner : tous les membres. Vendeurs = ont une boutique · acheteurs = sans boutique."
-                : "Vous voyez uniquement votre compte et les personnes que vous avez invitées. Acheteurs / abonnés → Contacts."}
-            </Text>
-            <View style={styles.tabs}>
-              {(
-                [
-                  ["all", "Tous", members.length],
-                  [
-                    "vendor",
-                    "Vendeurs",
-                    members.filter((m) => m.kind === "vendor").length,
-                  ],
-                  [
-                    "buyer",
-                    "Acheteurs",
-                    members.filter((m) => m.kind === "buyer").length,
-                  ],
-                ] as const
-              ).map(([key, label, count]) => {
-                const on = memberFilter === key;
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => setMemberFilter(key)}
-                    style={[
-                      styles.chip,
+                      styles.miniBtn,
                       on
-                        ? { backgroundColor: c.primary }
-                        : { backgroundColor: "rgba(127,127,140,0.14)" },
+                        ? { backgroundColor: c.primary, borderWidth: 0 }
+                        : { borderColor: HAIRLINE, borderWidth: 1 },
                     ]}
                   >
                     <Text
                       style={{
-                        color: on ? c.primaryForeground : c.textMuted,
+                        color: on ? c.primaryForeground : c.text,
                         fontWeight: "700",
-                        fontSize: 11,
+                        textTransform: "capitalize",
                       }}
                     >
-                      {label} ({count})
+                      {role}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
-            {pagedMembers.visible.map((m) => (
-              <View
-                key={m.id}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                onPress={() => setEditingMember(null)}
                 style={[
-                  styles.member,
-                  { backgroundColor: c.card, borderColor: HAIRLINE },
+                  styles.miniBtn,
+                  { flex: 1, borderColor: HAIRLINE, alignItems: "center" },
                 ]}
               >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ color: c.text, fontWeight: "700" }}>
-                    {m.user.name}
-                    {m.isMe ? (
-                      <Text style={{ color: c.primary }}> (vous)</Text>
-                    ) : null}
-                  </Text>
-                  <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                    {m.user.email}
-                  </Text>
-                  <Text
-                    style={{
-                      alignSelf: "flex-start",
-                      marginTop: 4,
-                      color: m.kind === "vendor" ? c.primary : c.textMuted,
-                      backgroundColor:
-                        m.kind === "vendor"
-                          ? `${c.primary}22`
-                          : "rgba(127,127,140,0.14)",
-                      overflow: "hidden",
-                      borderRadius: 8,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      fontSize: 10,
-                      fontWeight: "800",
-                    }}
-                  >
-                    {m.kind === "vendor"
-                      ? `Vendeur · ${m.shopCount} boutique${m.shopCount > 1 ? "s" : ""}`
-                      : "Acheteur"}
-                  </Text>
-                </View>
-                <View style={{ gap: 6, alignItems: "flex-end" }}>
-                  {isOwner ? (
-                    <Pressable
-                      onPress={() => resetPassword(m.user)}
-                      style={[styles.miniBtn, { borderColor: HAIRLINE }]}
-                    >
-                      <Text
-                        style={{
-                          color: c.text,
-                          fontSize: 11,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Reset MDP
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {isOrgOwner && m.role !== "owner" ? (
-                    <View style={{ flexDirection: "row", gap: 4 }}>
-                      {(["member", "admin"] as const).map((role) => {
-                        const on = m.role === role;
-                        return (
-                          <Pressable
-                            key={role}
-                            disabled={roleBusy === m.id}
-                            onPress={() => void changeRole(m.id, role)}
-                            style={[
-                              styles.miniBtn,
-                              on
-                                ? { backgroundColor: c.primary }
-                                : { borderColor: HAIRLINE, borderWidth: 1 },
-                            ]}
-                          >
-                            <Text
-                              style={{
-                                color: on ? c.primaryForeground : c.text,
-                                fontSize: 11,
-                                fontWeight: "700",
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              {role}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <Text
-                      style={{
-                        color: c.textMuted,
-                        fontSize: 11,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {m.role}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            ))}
-            <PagedMore
-              hasMore={pagedMembers.hasMore}
-              remaining={pagedMembers.remaining}
-              onMore={pagedMembers.more}
-            />
-          </View>
-        </>
-      )}
-    </ScrollView>
+                <Text style={{ color: c.text, fontWeight: "700" }}>
+                  Annuler
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={nameBusy}
+                onPress={() => void saveMemberProfile()}
+                style={[
+                  styles.miniBtn,
+                  {
+                    flex: 2,
+                    backgroundColor: c.primary,
+                    alignItems: "center",
+                    borderWidth: 0,
+                  },
+                ]}
+              >
+                <Text style={{ color: c.primaryForeground, fontWeight: "800" }}>
+                  {nameBusy ? "…" : "Enregistrer"}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 

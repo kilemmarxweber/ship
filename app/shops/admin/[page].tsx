@@ -6,6 +6,7 @@ import { ContentAdminScreen } from "@/components/seller/admin/ContentAdminScreen
 import { ExpansionAdminScreen } from "@/components/seller/admin/ExpansionAdminScreen";
 import { ModerationAdminScreen } from "@/components/seller/admin/ModerationAdminScreen";
 import { PartnerCampaignsScreen } from "@/components/seller/admin/PartnerCampaignsScreen";
+import { VendorsAdminScreen } from "@/components/seller/admin/VendorsAdminScreen";
 import { SellerAdminScreen } from "@/components/seller/SellerAdminScreen";
 
 export default function ShopAdminRoute() {
@@ -18,6 +19,7 @@ export default function ShopAdminRoute() {
   if (page === "attention") return <AttentionKpiScreen />;
   if (page === "expansion") return <ExpansionAdminScreen />;
   if (page === "moderation") return <ModerationAdminScreen />;
+  if (page === "vendors") return <VendorsAdminScreen />;
 
   return <SellerAdminScreen />;
 }

@@ -37,12 +37,12 @@ import {
     AppState,
     Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     useWindowDimensions,
     View,
 } from "react-native";
+import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
@@ -947,42 +947,53 @@ export function LiveFilterBar() {
   const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   if (!isHost) return null;
-  const menuMax = Math.max(220, Math.min(width - 96, 360));
+  const menuWidth = Math.max(200, Math.min(width - 100, 340));
 
   return (
-    <View style={styles.studioWrap}>
+    <View style={styles.studioWrap} collapsable={false}>
       {open ? (
-        <ScrollView
-          horizontal
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          showsHorizontalScrollIndicator
-          style={[styles.studioMenuScroll, { maxWidth: menuMax }]}
-          contentContainerStyle={styles.studioMenu}
+        <View
+          style={[styles.studioMenuShell, { width: menuWidth }]}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          collapsable={false}
         >
-          {AR_FILTERS.map((item) => {
-            const on = look === item.id;
-            const icon = FILTER_ICONS[item.id];
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityLabel={item.name}
-                onPress={() => pick(item.id)}
-                style={[styles.filterChip, on && styles.filterChipOn]}
-              >
-                {icon ? (
-                  <Ionicons
-                    name={icon}
-                    size={18}
-                    color={on ? "#05140F" : "#fff"}
-                  />
-                ) : (
-                  <Text style={styles.filterEmoji}>{item.emoji}</Text>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            directionalLockEnabled
+            disableIntervalMomentum
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator
+            bounces
+            overScrollMode="always"
+            style={styles.studioMenuScroll}
+            contentContainerStyle={styles.studioMenu}
+          >
+            {AR_FILTERS.map((item) => {
+              const on = look === item.id;
+              const icon = FILTER_ICONS[item.id];
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityLabel={item.name}
+                  onPress={() => pick(item.id)}
+                  style={[styles.filterChip, on && styles.filterChipOn]}
+                >
+                  {icon ? (
+                    <Ionicons
+                      name={icon}
+                      size={18}
+                      color={on ? "#05140F" : "#fff"}
+                    />
+                  ) : (
+                    <Text style={styles.filterEmoji}>{item.emoji}</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
       ) : null}
       <Pressable
         style={[styles.avBtn, open && styles.studioBtnOn]}
@@ -1463,24 +1474,37 @@ const styles = StyleSheet.create({
   },
   studioWrap: {
     alignItems: "center",
+    justifyContent: "center",
     overflow: "visible",
+    zIndex: 20,
   },
   studioBtnOn: {
     borderColor: "#00D68F",
     backgroundColor: "rgba(0,214,143,0.22)",
   },
-  studioMenuScroll: {
+  studioMenuShell: {
     position: "absolute",
     right: 52,
     bottom: 0,
-    maxWidth: 320,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+    zIndex: 30,
+  },
+  studioMenuScroll: {
+    flexGrow: 0,
+    height: 48,
   },
   studioMenu: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 4,
-    paddingRight: 8,
+    paddingHorizontal: 8,
+    paddingRight: 10,
+    minHeight: 48,
   },
   filterChip: {
     width: 40,

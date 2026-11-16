@@ -204,6 +204,14 @@ export function arFilterById(id: string): ArFilter | undefined {
   return AR_FILTERS.find((item) => item.id === id);
 }
 
+/** Stickers / blush suivent le visage. Les grades couleur n’en ont pas besoin. */
+export function filterNeedsFacePose(id: string) {
+  const filter = arFilterById(id);
+  if (!filter || filter.id === "none" || filter.type === "color") return false;
+  if (filter.id === "blush") return true;
+  return filter.type === "overlay" || filter.type === "animation";
+}
+
 export function isArFilterId(value: string): boolean {
   return AR_FILTERS.some((item) => item.id === value);
 }

@@ -3,25 +3,21 @@ import { useEffect, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 
 import {
-  arFilterById,
-  colorLookFromArId,
-  type ArFilter,
+    arFilterById,
+    colorLookFromArId,
+    filterNeedsFacePose,
+    type ArFilter,
 } from "@/src/live-ar-filters";
 import {
-  anchorStyleFor,
-  defaultFacePose,
-  eyeDistance,
-  type FacePose,
+    anchorStyleFor,
+    defaultFacePose,
+    eyeDistance,
+    type FacePose,
 } from "@/src/live-face-tracking";
 import { isLiveLookId, type LiveLookId } from "@/src/live-look";
+import { useFacePose } from "@/src/use-live-face-pose";
 
-function ColorGrade({
-  look,
-  soft,
-}: {
-  look: LiveLookId;
-  soft: number;
-}) {
+function ColorGrade({ look, soft }: { look: LiveLookId; soft: number }) {
   if (look === "naturel") return null;
 
   if (look === "studio") {
@@ -160,7 +156,9 @@ function BlushBeauty({ pose, soft }: { pose: FacePose; soft: number }) {
       <View
         style={[
           styles.fill,
-          { backgroundColor: `rgba(255,236,228,${0.1 * soft * pose.confidence})` },
+          {
+            backgroundColor: `rgba(255,236,228,${0.1 * soft * pose.confidence})`,
+          },
         ]}
       />
     </>
@@ -261,7 +259,11 @@ function StickerLayer({
                 top: `${pt.y * 100}%`,
                 fontSize: 18 + (index % 3) * 4,
                 opacity: conf,
-                transform: [{ scale: pulse }, { translateX: -8 }, { translateY: -8 }],
+                transform: [
+                  { scale: pulse },
+                  { translateX: -8 },
+                  { translateY: -8 },
+                ],
               },
             ]}
           >
@@ -272,7 +274,10 @@ function StickerLayer({
     );
   }
 
-  if (filter.type === "animation" && (filter.id === "heart" || filter.id === "star")) {
+  if (
+    filter.type === "animation" &&
+    (filter.id === "heart" || filter.id === "star")
+  ) {
     return (
       <View style={styles.fill} pointerEvents="none">
         <StickerAt
@@ -366,10 +371,12 @@ export function LiveFilterOverlay({
   /** Pose faciale (host locale ou spectateur via data-channel). */
   pose?: FacePose | null;
 }) {
+  const needsPose = filterNeedsFacePose(look);
+  const tracked = useFacePose(needsPose && !pose);
   if (look === "none" || look === "naturel") return null;
 
   const soft = intensity === "pip" ? 0.58 : 1;
-  const face = pose ?? defaultFacePose();
+  const face = pose ?? (needsPose ? tracked : defaultFacePose());
   const filter = arFilterById(look);
   const colorId =
     (filter ? colorLookFromArId(filter.id) : null) ??

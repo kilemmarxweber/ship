@@ -26,9 +26,13 @@ export function LaunchSplash({ onPaint }: { onPaint: () => void }) {
         contentFit="contain"
         accessibilityLabel="ShipShop"
       />
-      <Text style={[styles.name, { bottom: insets.bottom + 36 }]}>
-        Klambocore
-      </Text>
+      <View
+        style={[styles.brand, { bottom: Math.max(28, insets.bottom + 24) }]}
+        accessibilityLabel="from Klambocore"
+      >
+        <Text style={styles.from}>from</Text>
+        <Text style={styles.name}>Klambocore</Text>
+      </View>
     </View>
   );
 }
@@ -41,15 +45,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  name: {
+  brand: {
     position: "absolute",
     left: 0,
     right: 0,
-    textAlign: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  from: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: 0.2,
+    includeFontPadding: false,
+  },
+  name: {
     color: "#FFFFFF",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
     includeFontPadding: false,
   },
 });

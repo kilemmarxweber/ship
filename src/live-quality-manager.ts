@@ -1,18 +1,17 @@
 import {
-  ConnectionQuality,
-  Room,
-  RoomEvent,
-  Track,
-  type LocalParticipant,
-  type LocalVideoTrack,
+    ConnectionQuality,
+    Room,
+    RoomEvent,
+    Track,
+    type LocalParticipant,
+    type LocalVideoTrack,
 } from "livekit-client";
 
 import {
-  captureOptionsForProfile,
-  encodingForProfile,
-  LIVE_QUALITY_PROFILES,
-  type LiveQualityProfileId,
-  type LiveQualityStatsSnapshot,
+    encodingForProfile,
+    LIVE_QUALITY_PROFILES,
+    type LiveQualityProfileId,
+    type LiveQualityStatsSnapshot,
 } from "@/src/live-quality";
 
 const UPGRADE_STABLE_MS = 10_000;
@@ -28,7 +27,10 @@ function profileRank(id: LiveQualityProfileId) {
 function targetFromQuality(
   quality: ConnectionQuality,
 ): LiveQualityProfileId | null {
-  if (quality === ConnectionQuality.Lost || quality === ConnectionQuality.Poor) {
+  if (
+    quality === ConnectionQuality.Lost ||
+    quality === ConnectionQuality.Poor
+  ) {
     return "economy";
   }
   if (quality === ConnectionQuality.Good) return "standard";
@@ -40,43 +42,9 @@ async function applyCameraProfile(
   local: LocalParticipant,
   profileId: LiveQualityProfileId,
 ) {
-  const capture = captureOptionsForProfile(profileId);
   const encoding = encodingForProfile(profileId);
-  const pub = local.getTrackPublication(Track.Source.Camera);
-  const track = pub?.track as LocalVideoTrack | undefined;
-
-  if (track && typeof track.restartTrack === "function") {
-    try {
-      await track.restartTrack(capture);
-    } catch {
-      if (profileId === "high") {
-        await track.restartTrack(captureOptionsForProfile("standard"));
-      } else {
-        throw new Error("restartTrack failed");
-      }
-    }
-  } else {
-    try {
-      await local.setCameraEnabled(true, capture);
-    } catch {
-      if (profileId === "high") {
-        await local.setCameraEnabled(
-          true,
-          captureOptionsForProfile("standard"),
-        );
-      } else {
-        throw new Error("setCameraEnabled failed");
-      }
-    }
-  }
-
-  const media = local.getTrackPublication(Track.Source.Camera)?.track
-    ?.mediaStreamTrack;
-  if (media && "contentHint" in media) {
-    media.contentHint = "detail";
-  }
-
-  // Best-effort: re-assert publish encoding when API exists.
+  // Ne jamais relancer la caméra ici. restartTrack / setCameraEnabled
+  // en plein live ferme la session Android dès que le réseau vacille.
   const cameraPub = local.getTrackPublication(Track.Source.Camera);
   const sender = cameraPub?.track?.sender;
   if (sender && typeof sender.getParameters === "function") {
@@ -104,8 +72,8 @@ export type LiveQualityManager = {
 };
 
 /**
- * Ajuste la capture/encode host selon ConnectionQuality + stats.
- * Ne déconnecte jamais la room. Ne touche pas aux couches viewer (simulcast).
+ * Baisse seulement le débit si le réseau faiblit.
+ * Ne déconnecte jamais la room et ne relance jamais la caméra.
  */
 export function startLiveQualityManager(
   room: Room,
@@ -208,7 +176,9 @@ export function startLiveQualityManager(
   const pullStats = async () => {
     if (stopped || !opts.enabled) return;
     try {
-      const pub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const pub = room.localParticipant.getTrackPublication(
+        Track.Source.Camera,
+      );
       const track = pub?.track as LocalVideoTrack | undefined;
       const mediaSettings = track?.mediaStreamTrack?.getSettings?.();
       let captureWidth =

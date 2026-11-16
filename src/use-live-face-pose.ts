@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
     FacePoseSmoother,
@@ -7,6 +7,56 @@ import {
     type FaceLandmarkPoint,
     type FacePose,
 } from "@/src/live-face-tracking";
+
+const poseListeners = new Set<() => void>();
+let sharedPose = idleStudioPose(0, 0);
+let idlePump: ReturnType<typeof setInterval> | null = null;
+let idleUsers = 0;
+const sharedSmoother = new FacePoseSmoother();
+
+function emitPose(next: FacePose) {
+  sharedPose = next;
+  for (const listener of poseListeners) listener();
+}
+
+export function getFacePose() {
+  return sharedPose;
+}
+
+/** Démarre l’animation idle sans setState. Un seul timer pour tout le live. */
+export function retainIdleFacePose() {
+  idleUsers += 1;
+  if (!idlePump) {
+    idlePump = setInterval(() => {
+      emitPose(sharedSmoother.push(idleStudioPose(Date.now(), 0)));
+    }, 125);
+  }
+  return () => {
+    idleUsers -= 1;
+    if (idleUsers > 0) return;
+    idleUsers = 0;
+    if (idlePump) clearInterval(idlePump);
+    idlePump = null;
+  };
+}
+
+export function publishFacePose(next: FacePose) {
+  emitPose(next);
+}
+
+export function useFacePose(enabled: boolean) {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      if (!enabled) return () => undefined;
+      poseListeners.add(onStoreChange);
+      return () => {
+        poseListeners.delete(onStoreChange);
+      };
+    },
+    getFacePose,
+    getFacePose,
+  );
+}
 
 /**
  * Pose faciale pour overlays Live / Studio.

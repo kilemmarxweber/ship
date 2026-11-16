@@ -1,98 +1,107 @@
-import { Ionicons } from "@expo/vector-icons";
 import {
-  AndroidAudioTypePresets,
-  AudioDeviceModule,
-  AudioEngineMuteMode,
-  AudioSession,
-  isTrackReference,
-  registerGlobals,
-  RoomContext,
-  useConnectionState,
-  useDataChannel,
-  useLocalParticipant,
-  useRoomContext,
-  useTracks,
-  VideoTrack,
-} from "@livekit/react-native";
-import {
-  ConnectionQuality,
-  ConnectionState,
-  Room,
-  RoomEvent,
-  Track,
-  VideoQuality,
-  type LocalParticipant,
-  type RemoteTrackPublication,
-  type ScreenShareCaptureOptions,
-} from "livekit-client";
-import {
-  buildLiveRoomOptions,
-  captureOptionsForProfile,
-  DEFAULT_LIVE_QUALITY,
-  SCREEN_SHARE_QUALITY,
-  type LiveQualityProfileId,
+    buildLiveRoomOptions,
+    captureOptionsForProfile,
+    DEFAULT_LIVE_QUALITY,
+    SCREEN_SHARE_QUALITY,
+    type LiveQualityProfileId,
 } from "@/src/live-quality";
 import {
-  formatLiveQualityStats,
-  startLiveQualityManager,
-  type LiveQualityManager,
+    formatLiveQualityStats,
+    startLiveQualityManager,
+    type LiveQualityManager,
 } from "@/src/live-quality-manager";
 import { useMe } from "@/src/me";
+import { Ionicons } from "@expo/vector-icons";
 import {
-  Component,
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ErrorInfo,
-  type ReactNode,
+    AndroidAudioTypePresets,
+    AudioDeviceModule,
+    AudioEngineMuteMode,
+    AudioSession,
+    isTrackReference,
+    registerGlobals,
+    RoomContext,
+    useConnectionState,
+    useDataChannel,
+    useLocalParticipant,
+    useRoomContext,
+    useTracks,
+    VideoTrack,
+} from "@livekit/react-native";
+import {
+    ConnectionQuality,
+    ConnectionState,
+    Room,
+    RoomEvent,
+    Track,
+    VideoQuality,
+    type LocalParticipant,
+    type RemoteTrackPublication,
+    type ScreenShareCaptureOptions,
+} from "livekit-client";
+import {
+    Component,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    useSyncExternalStore,
+    type ErrorInfo,
+    type ReactNode,
 } from "react";
 import {
-  AppState,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
+    AppState,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
 import {
-  LiveScreenShareSheet,
-  type LiveScreenShareMode,
+    LiveScreenShareSheet,
+    type LiveScreenShareMode,
 } from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
-import { AR_FILTERS, isArFilterId } from "@/src/live-ar-filters";
 import {
-  decodeFacePose,
-  encodeFacePose,
-  parseFacePosePayload,
-  type FacePose,
+    AR_FILTERS,
+    filterNeedsFacePose,
+    isArFilterId,
+} from "@/src/live-ar-filters";
+import {
+    decodeFacePose,
+    encodeFacePose,
+    parseFacePosePayload,
+    type FacePose,
 } from "@/src/live-face-tracking";
 import { isLiveLookId } from "@/src/live-look";
 import {
-  demanderMicro,
-  ensureCameraPermission,
-  isLiveRtcAvailable,
-  requestLiveAvPermissions,
-  requestNotificationPermission,
+    demanderMicro,
+    ensureCameraPermission,
+    isLiveRtcAvailable,
+    requestLiveAvPermissions,
+    requestNotificationPermission,
 } from "@/src/live-rtc";
 import {
-  getActiveScreenShareLiveId,
-  setActiveScreenShareLiveId,
+    getActiveScreenShareLiveId,
+    setActiveScreenShareLiveId,
 } from "@/src/live-share-session";
 import {
-  normalizeStageLayout,
-  type LiveStageLayoutId,
+    normalizeStageLayout,
+    type LiveStageLayoutId,
 } from "@/src/live-stage-layout";
 import { showToast } from "@/src/toast";
-import { useLiveFacePose } from "@/src/use-live-face-pose";
+import {
+    getFacePose,
+    publishFacePose,
+    retainIdleFacePose,
+} from "@/src/use-live-face-pose";
 
 if (isLiveRtcAvailable()) {
   registerGlobals();
@@ -343,7 +352,6 @@ function LiveLookProvider({
   children: ReactNode;
 }) {
   const [localLook, setLocalLook] = useState("studio");
-  const { pose: localPose } = useLiveFacePose({ enabled: isHost, hz: 20 });
   const { send, message } = useDataChannel("ss-filter");
   const faceChannel = useDataChannel("ss-face");
 
@@ -354,32 +362,46 @@ function LiveLookProvider({
   }, [message]);
   const look = !isHost && remoteLook ? remoteLook : localLook;
 
-  const remotePose = useMemo(() => {
-    if (isHost || !faceChannel.message?.payload) return null;
-    const raw = new TextDecoder().decode(faceChannel.message.payload);
-    const packet = parseFacePosePayload(raw);
-    return packet ? decodeFacePose(packet) : null;
-  }, [faceChannel.message, isHost]);
-
   const sendFace = faceChannel.send;
   useEffect(() => {
-    if (!isHost) return;
-    const payload = JSON.stringify(encodeFacePose(localPose));
-    void sendFace(new TextEncoder().encode(payload), { reliable: false });
-  }, [isHost, localPose, sendFace]);
+    if (!isHost || !filterNeedsFacePose(look)) return;
+    let lastSent = 0;
+    const stop = retainIdleFacePose();
+    const pump = setInterval(() => {
+      const now = Date.now();
+      if (now - lastSent < 250) return;
+      lastSent = now;
+      const payload = JSON.stringify(encodeFacePose(getFacePose()));
+      void sendFace(new TextEncoder().encode(payload), { reliable: false });
+    }, 250);
+    return () => {
+      clearInterval(pump);
+      stop();
+    };
+  }, [isHost, look, sendFace]);
 
-  const pick = (id: string) => {
-    setLocalLook(id);
-    if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
-  };
+  useEffect(() => {
+    if (isHost || !faceChannel.message?.payload) return;
+    const raw = new TextDecoder().decode(faceChannel.message.payload);
+    const packet = parseFacePosePayload(raw);
+    if (!packet) return;
+    publishFacePose(decodeFacePose(packet));
+  }, [faceChannel.message, isHost]);
 
-  const pose = isHost ? localPose : remotePose;
-
-  return (
-    <LookCtx.Provider value={{ look, pick, isHost, pose }}>
-      {children}
-    </LookCtx.Provider>
+  const pick = useCallback(
+    (id: string) => {
+      setLocalLook(id);
+      if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
+    },
+    [isHost, send],
   );
+
+  const lookValue = useMemo(
+    () => ({ look, pick, isHost, pose: null as FacePose | null }),
+    [isHost, look, pick],
+  );
+
+  return <LookCtx.Provider value={lookValue}>{children}</LookCtx.Provider>;
 }
 
 function MainStageVideoQuality({
@@ -1036,7 +1058,7 @@ function LiveKitVideoInner({
       : hostCamera;
   const hasVideo =
     isTrackReference(shown) && (sharing || isHost || cameraOn !== false);
-  const { look, pose } = useContext(LookCtx);
+  const { look } = useContext(LookCtx);
 
   // Invités sur scène (1…N) : cameras distants sauf le host.
   const guestRemotes = remotes.filter(
@@ -1111,7 +1133,7 @@ function LiveKitVideoInner({
         {/* Filtre plein cadre = même surface que la vidéo (peau + décor) */}
         {hasVideo && !sharing ? (
           <View style={styles.filterLayer} pointerEvents="none">
-            <LiveFilterOverlay look={look} pose={pose} />
+            <LiveFilterOverlay look={look} />
           </View>
         ) : null}
         <LiveConnectionQualityBadge isHost={isHost} />
@@ -1166,7 +1188,7 @@ function LiveKitVideoInner({
                   />
                 </TrackSafe>
                 {hasVideo ? (
-                  <LiveFilterOverlay look={look} pose={pose} intensity="pip" />
+                  <LiveFilterOverlay look={look} intensity="pip" />
                 ) : null}
               </View>
             );

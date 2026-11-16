@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -1007,6 +1007,9 @@ function ShopProfileBody({
 }) {
   const insets = useSafeAreaInsets();
   const token = useSession((state) => state.token);
+  const scrollRef = useRef<ScrollView>(null);
+  /** Tant que true, on recolle le scroll en haut (ouverture + 1er layout). */
+  const pinTopRef = useRef(true);
   const [detail, setDetail] = useState<ShopProfileDetail | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1015,6 +1018,18 @@ function ShopProfileBody({
   const [showAddress, setShowAddress] = useState(false);
   const shopUrl = shopPublicUrl(shop.slug);
   const phone = detail?.contactPhone?.trim() || null;
+
+  function snapShopScrollTop() {
+    if (!pinTopRef.current) return;
+    scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+  }
+
+  useEffect(() => {
+    pinTopRef.current = true;
+    snapShopScrollTop();
+    const t = setTimeout(snapShopScrollTop, 0);
+    return () => clearTimeout(t);
+  }, [shop.id]);
 
   useEffect(() => {
     let active = true;
@@ -1045,6 +1060,19 @@ function ShopProfileBody({
       active = false;
     };
   }, [shop.id, shop.slug]);
+
+  useEffect(() => {
+    if (loading) return;
+    snapShopScrollTop();
+    const frame = requestAnimationFrame(snapShopScrollTop);
+    const release = setTimeout(() => {
+      pinTopRef.current = false;
+    }, 350);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(release);
+    };
+  }, [loading, detail?.id, products.length]);
 
   async function openUrl(url: string) {
     try {
@@ -1174,9 +1202,15 @@ function ShopProfileBody({
       >
         <SheetReduce onPress={onClose} />
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={shopProfileStyles.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          contentOffset={{ x: 0, y: 0 }}
+          onContentSizeChange={snapShopScrollTop}
+          onScrollBeginDrag={() => {
+            pinTopRef.current = false;
+          }}
         >
           <View style={shopProfileStyles.shopIdentity}>
             <ShopLiveAvatar

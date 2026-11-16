@@ -379,9 +379,9 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
           gap: 12,
         }}
       >
-        <Pressable onPress={() => safeBack()} style={styles.back}>
+        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
           <Ionicons name="chevron-back" size={22} color={c.text} />
-          <Text style={[styles.backText, { color: c.text }]}>Retour</Text>
+          
         </Pressable>
         {request.images.length ? (
           <ScrollView
@@ -789,8 +789,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingVertical: 8,
+    minWidth: 44,
+    minHeight: 44,
+
   },
-  backText: { fontWeight: "700" },
   gallery: { width: "100%", borderRadius: 20, overflow: "hidden" },
   hero: { height: 210 },
   heroFallback: {

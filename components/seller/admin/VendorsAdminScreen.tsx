@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { safeBack } from "@/src/nav";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
@@ -138,7 +137,6 @@ function MiniBtn({
 
 export function VendorsAdminScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((s) => s.token);
   const openAuth = useSession((s) => s.openAuth);
@@ -429,11 +427,9 @@ export function VendorsAdminScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={() => safeBack()} style={styles.back} hitSlop={8}>
+        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back} hitSlop={8}>
           <Ionicons name="chevron-back" size={20} color={c.text} />
-          <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-            {t("back")}
-          </Text>
+          
         </Pressable>
 
         <View>
@@ -1102,7 +1098,6 @@ const styles = StyleSheet.create({
     gap: 4,
     minHeight: 44,
   },
-  backText: { fontWeight: "700", includeFontPadding: false },
   title: { fontSize: 24, fontWeight: "800" },
   lead: { fontSize: 12, marginTop: 4 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

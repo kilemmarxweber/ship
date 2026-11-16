@@ -135,11 +135,9 @@ export function KycScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>Devenir Business pro</Text>
       <Text style={styles.lead}>
@@ -414,8 +412,13 @@ function KycForm({
             onUploaded={(url) => saveDoc("selfieUrl", url)}
           />
           <View style={styles.row}>
-            <Pressable style={styles.ghost} onPress={() => setStep(1)}>
-              <Text style={styles.ghostText}>Retour</Text>
+            <Pressable
+              style={[styles.ghost, { flex: 0, minWidth: 48, minHeight: 44 }]}
+              onPress={() => setStep(1)}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+            >
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable
               style={[
@@ -445,14 +448,10 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    color: "#fff",
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
-  },
+    minWidth: 44,
+    minHeight: 44,
+
+  },
   title: { color: "#fff", fontSize: 24, fontWeight: "800" },
   lead: { color: colors.muted, lineHeight: 18, fontSize: 13 },
   primary: {
@@ -516,7 +515,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
-  ghostText: { color: "#fff", fontWeight: "800" },
   doc: {
     flexDirection: "row",
     alignItems: "center",

@@ -59,8 +59,14 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
     return (
       <View style={[styles.center, { paddingTop: insets.top + 24 }]}>
         <Text style={styles.title}>QR introuvable</Text>
-        <Pressable onPress={() => safeBack()}>
-          <Text style={styles.link}>Retour</Text>
+        <Pressable
+          onPress={() => safeBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          hitSlop={8}
+          style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
       </View>
     );
@@ -76,11 +82,9 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         gap: 14,
       }}
     >
-      <Pressable style={styles.back} onPress={() => safeBack()}>
+      <Pressable accessibilityLabel="Retour" style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>QR boutique</Text>
       <Text style={styles.sub}>
@@ -166,18 +170,13 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    color: "#fff",
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800" },
   sub: { color: "rgba(255,255,255,0.72)", marginTop: -8 },
   done: { color: "#00D68F", fontWeight: "700" },
-  link: { color: "#00D68F", fontWeight: "700" },
   row: {
     flexDirection: "row",
     alignItems: "center",

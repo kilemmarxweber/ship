@@ -274,11 +274,9 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Pressable onPress={onBack} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={onBack} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>Je cherche</Text>
       <View style={styles.steps}>
@@ -503,8 +501,13 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
 
       <View style={styles.navRow}>
         {step > 0 ? (
-          <Pressable style={styles.secondaryCta} onPress={() => setStep(step - 1)}>
-            <Text style={styles.secondaryCtaText}>Retour</Text>
+          <Pressable
+            style={[styles.secondaryCta, { minWidth: 48 }]}
+            onPress={() => setStep(step - 1)}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+          >
+            <Ionicons name="chevron-back" size={22} color={c.text} />
           </Pressable>
         ) : null}
         {step < 2 ? (
@@ -539,13 +542,9 @@ function makeWantedStyles(c: ThemeColors = colors) {
       gap: 4,
       paddingRight: 16,
       overflow: "visible",
-    },
-    backText: {
-      color: c.text,
-      fontWeight: "700",
-      includeFontPadding: false,
-      paddingRight: 12,
-      flexShrink: 0,
+      minWidth: 44,
+      minHeight: 44,
+
     },
     title: { color: c.text, fontSize: 26, fontWeight: "800" },
     lead: { color: c.textMuted, lineHeight: 20 },
@@ -700,6 +699,5 @@ function makeWantedStyles(c: ThemeColors = colors) {
       borderWidth: 1,
       borderColor: HAIRLINE,
     },
-    secondaryCtaText: { color: c.text, fontWeight: "800" },
   });
 }

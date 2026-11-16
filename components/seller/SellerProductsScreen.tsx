@@ -34,7 +34,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { coverOf } from "@/src/media";
 import {
     APP_CURRENCIES,
@@ -77,7 +76,6 @@ function parseCurrency(value?: string): AppCurrency {
 
 export function SellerProductsScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -321,12 +319,9 @@ export function SellerProductsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => safeBack()} style={styles.back}>
+        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
           <Ionicons name="chevron-back" size={20} color={c.text} />
-          <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-            {t("back")}
-            {"\u00A0"}
-          </Text>
+          
         </Pressable>
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
@@ -988,12 +983,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   titleRow: { flexDirection: "row", alignItems: "flex-start" },
   title: { fontSize: 26, fontWeight: "800" },

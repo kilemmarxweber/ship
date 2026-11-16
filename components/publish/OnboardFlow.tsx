@@ -121,11 +121,9 @@ export function OnboardFlow({
       contentContainerStyle={styles.wrap}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={onBack} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={onBack} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>Devenir Business</Text>
       <Text style={styles.lead}>
@@ -273,13 +271,9 @@ function makeOnboardStyles(c: ThemeColors = colors) {
       gap: 4,
       paddingRight: 16,
       overflow: "visible",
-    },
-    backText: {
-      color: c.text,
-      fontWeight: "700",
-      includeFontPadding: false,
-      paddingRight: 12,
-      flexShrink: 0,
+      minWidth: 44,
+      minHeight: 44,
+
     },
     title: { color: c.text, fontSize: 26, fontWeight: "800" },
     lead: { color: c.textMuted, lineHeight: 20, marginBottom: 6 },

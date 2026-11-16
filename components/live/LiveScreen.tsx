@@ -602,8 +602,14 @@ export function LiveScreen({ liveId }: { liveId: string }) {
     return (
       <View style={styles.center}>
         <Text style={styles.endedTitle}>Live introuvable</Text>
-        <Pressable onPress={() => safeBack()}>
-          <Text style={styles.link}>Retour{"\u00A0"}</Text>
+        <Pressable
+          onPress={() => safeBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          hitSlop={8}
+          style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
       </View>
     );
@@ -1297,7 +1303,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   endedTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  link: { color: "#00D68F", fontWeight: "700" },
   resumeWrap: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

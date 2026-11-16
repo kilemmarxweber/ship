@@ -129,10 +129,14 @@ export function ArStudioScreen() {
         >
           <Text style={styles.permBtnText}>Autoriser</Text>
         </Pressable>
-        <Pressable onPress={() => safeBack()} style={{ marginTop: 16 }}>
-          <Text style={{ color: "rgba(255,255,255,0.6)", fontWeight: "700" }}>
-            Retour
-          </Text>
+        <Pressable
+          onPress={() => safeBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          hitSlop={8}
+          style={{ marginTop: 16, minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
       </View>
     );

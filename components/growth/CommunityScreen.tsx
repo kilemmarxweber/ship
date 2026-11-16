@@ -72,12 +72,9 @@ export function CommunityScreen() {
         gap: 14,
       }}
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
+        
       </Pressable>
 
       <View>
@@ -267,12 +264,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.3 },
   lead: { lineHeight: 20, marginTop: 4, fontSize: 14, fontWeight: "600" },

@@ -303,11 +303,9 @@ export function WalletScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>Portefeuille</Text>
       {!token ? (
@@ -473,13 +471,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    color: "#fff",
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800" },
   card: { borderRadius: 24, padding: 18, gap: 10 },

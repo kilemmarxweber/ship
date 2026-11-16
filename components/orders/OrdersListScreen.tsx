@@ -50,12 +50,9 @@ export function OrdersListScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
-      <Pressable style={styles.back} onPress={() => safeBack()}>
+      <Pressable accessibilityLabel="Retour" style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
+        
       </Pressable>
       <Text style={styles.title}>{t("orders")}</Text>
       <View style={styles.tabs}>
@@ -146,13 +143,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingRight: 16,
     overflow: "visible",
-  },
-  backText: {
-    color: "#fff",
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800", marginBottom: 12 },
   tabs: {

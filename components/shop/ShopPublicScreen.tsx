@@ -343,9 +343,9 @@ export function ShopPublicScreen() {
           },
         ]}
       >
-        <Pressable onPress={() => safeBack()} style={ui.back} hitSlop={8}>
+        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={ui.back} hitSlop={8}>
           <Ionicons name="chevron-back" size={22} color={c.text} />
-          <Text style={[ui.backText, { color: c.text }]}>Retour</Text>
+          
         </Pressable>
       </View>
 
@@ -808,7 +808,6 @@ const ui = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   back: { flexDirection: "row", alignItems: "center", minHeight: 44 },
-  backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   empty: { textAlign: "center", marginTop: 40 },
   offlineState: { alignItems: "center", padding: 24, gap: 8 },
   retryBtn: { paddingHorizontal: 12, paddingVertical: 8 },

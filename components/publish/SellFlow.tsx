@@ -219,12 +219,10 @@ export function SellFlow({
       <Pressable
         onPress={() => (step > 1 ? setStep((value) => value - 1) : onBack())}
         style={styles.back}
+        accessibilityRole="button"
+        accessibilityLabel="Retour"
       >
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={styles.backText} numberOfLines={1}>
-          {step > 1 ? "Étape précédente" : "Retour"}
-          {"\u00A0"}
-        </Text>
       </Pressable>
 
       <View style={styles.bars}>
@@ -500,10 +498,13 @@ export function SellFlow({
           ) : null}
 
           <View style={styles.navRow}>
-            <Pressable style={styles.ghostCta} onPress={() => setStep(1)}>
-              <Text style={styles.ghostCtaText} numberOfLines={1}>
-                Retour{"\u00A0"}
-              </Text>
+            <Pressable
+              style={[styles.ghostCta, { minWidth: 48, paddingHorizontal: 14 }]}
+              onPress={() => setStep(1)}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+            >
+              <Ionicons name="chevron-back" size={22} color={c.text} />
             </Pressable>
             <Pressable
               style={[
@@ -568,10 +569,13 @@ export function SellFlow({
             </Text>
           </View>
           <View style={styles.navRow}>
-            <Pressable style={styles.ghostCta} onPress={() => setStep(2)}>
-              <Text style={styles.ghostCtaText} numberOfLines={1}>
-                Retour{"\u00A0"}
-              </Text>
+            <Pressable
+              style={[styles.ghostCta, { minWidth: 48, paddingHorizontal: 14 }]}
+              onPress={() => setStep(2)}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+            >
+              <Ionicons name="chevron-back" size={22} color={c.text} />
             </Pressable>
             <Pressable
               style={[
@@ -614,13 +618,9 @@ function makeSellStyles(c: ThemeColors = colors) {
       gap: 4,
       paddingRight: 16,
       overflow: "visible",
-    },
-    backText: {
-      color: c.text,
-      fontWeight: "700",
-      includeFontPadding: false,
-      paddingRight: 12,
-      flexShrink: 0,
+      minWidth: 44,
+      minHeight: 44,
+
     },
     bars: { flexDirection: "row", gap: 6 },
     bar: {

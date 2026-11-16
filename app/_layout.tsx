@@ -6,18 +6,19 @@ import {
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
+import { LaunchSplash } from "@/components/LaunchSplash";
 import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
+import { initSentry, sentryWrap } from "@/src/monitoring/sentry";
 import { hydrateOffline } from "@/src/offline/hydrate";
 import { watchNetwork } from "@/src/offline/network";
 import { injectSnapshots } from "@/src/offline/persist";
 import { startSilentSync } from "@/src/offline/sync";
-import { initSentry, sentryWrap } from "@/src/monitoring/sentry";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
 import { paletteOf } from "@/src/theme";
@@ -66,6 +67,14 @@ function RootLayout() {
   const applyRemote = usePrefs((state) => state.applyRemote);
   const theme = usePrefs((state) => state.theme);
   const palette = paletteOf(theme);
+  const [bootDone, setBootDone] = useState(false);
+  const [holdSplash, setHoldSplash] = useState(true);
+  const showLaunch = !bootDone || holdSplash;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHoldSplash(false), 900);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     let stopSync: (() => void) | undefined;
@@ -73,7 +82,7 @@ function RootLayout() {
       .then(() => hydrateOffline(queryClient))
       .catch(() => undefined)
       .finally(() => {
-        void SplashScreen.hideAsync();
+        setBootDone(true);
         stopSync = startSilentSync(queryClient);
       });
     return () => stopSync?.();
@@ -113,7 +122,7 @@ function RootLayout() {
       style={{ flex: 1, backgroundColor: palette.background }}
     >
       <QueryClientProvider client={queryClient}>
-        <StatusBar style={theme === "light" ? "dark" : "light"} />
+        <StatusBar style={showLaunch || theme !== "light" ? "light" : "dark"} />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -153,6 +162,9 @@ function RootLayout() {
         </Stack>
         <AuthSheet />
         <ToastHost />
+        {showLaunch ? (
+          <LaunchSplash onPaint={() => void SplashScreen.hideAsync()} />
+        ) : null}
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

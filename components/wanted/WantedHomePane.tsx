@@ -233,7 +233,9 @@ export function WantedHomePane({
           accessibilityRole="button"
           accessibilityLabel="Créer une demande"
         >
-          <Text style={styles.heroCtaText}>Créer une demande</Text>
+          <Text style={styles.heroCtaText} numberOfLines={2}>
+            Créer une demande
+          </Text>
           <Ionicons name="arrow-forward" size={16} color="#111722" />
         </Pressable>
       </LinearGradient>
@@ -511,25 +513,38 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: "#fff",
     borderRadius: 999,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 14,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
-  heroCtaText: { color: "#111722", fontWeight: "800", fontSize: 15 },
+  heroCtaText: {
+    flexShrink: 1,
+    color: "#111722",
+    fontWeight: "800",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 6,
+    gap: 12,
   },
   section: {
+    flexShrink: 1,
     color: T.text,
     fontSize: 17,
     fontWeight: "800",
-    letterSpacing: 0.15,
+    lineHeight: 24,
+    paddingRight: 4,
+    includeFontPadding: false,
   },
   seeAll: { color: T.muted, fontSize: 13, fontWeight: "600" },
   meta: { color: T.muted, fontSize: 13, fontWeight: "500", lineHeight: 18 },

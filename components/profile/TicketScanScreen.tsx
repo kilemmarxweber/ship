@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { safeBack } from "@/src/nav";
 import { useRef, useState } from "react";
@@ -11,7 +12,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
-import { useT } from "@/src/i18n";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
 
@@ -61,7 +61,6 @@ function CameraScan({
 
 export function TicketScanScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const [last, setLast] = useState("");
   const lock = useRef(false);
@@ -93,8 +92,14 @@ export function TicketScanScreen() {
     <View
       style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}
     >
-      <Pressable onPress={() => safeBack()} style={{ padding: 16 }}>
-        <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
+      <Pressable
+        onPress={() => safeBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Retour"
+        hitSlop={8}
+        style={{ minWidth: 44, minHeight: 44, padding: 16, justifyContent: "center" }}
+      >
+        <Ionicons name="chevron-back" size={22} color={c.text} />
       </Pressable>
       <CameraScan onScan={(value) => void submit(value)} last={last} />
     </View>

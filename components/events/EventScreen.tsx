@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
 import { safeBack } from "@/src/nav";
@@ -105,8 +106,14 @@ export function EventScreen({ eventId }: { eventId: string }) {
         paddingBottom: insets.bottom + 28,
       }}
     >
-      <Pressable onPress={() => safeBack()}>
-        <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
+      <Pressable
+        onPress={() => safeBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Retour"
+        hitSlop={8}
+        style={{ minWidth: 44, minHeight: 44, justifyContent: "center" }}
+      >
+        <Ionicons name="chevron-back" size={22} color={c.text} />
       </Pressable>
       {row ? (
         <EventPoster

@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -190,7 +189,6 @@ function rowsFromPayload(page: PageKey, data: Record<string, unknown>) {
 
 export function SellerAdminScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -268,12 +266,9 @@ export function SellerAdminScreen() {
         gap: 12,
       }}
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
+      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
+        
       </Pressable>
       <View>
         <Text style={[styles.title, { color: c.text }]}>{meta.title}</Text>
@@ -368,12 +363,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingRight: 16,
-  },
-  backText: {
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 44,
+
   },
   title: { fontSize: 24, fontWeight: "800" },
   lead: { fontSize: 12, marginTop: 4 },

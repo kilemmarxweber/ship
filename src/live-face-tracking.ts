@@ -34,33 +34,46 @@ export type FacePose = {
   rightEarVisible: boolean;
 };
 
-export type FaceAnchorId = "head" | "eyes" | "nose" | "face" | "earLeft" | "earRight";
+export type FaceAnchorId =
+  | "head"
+  | "eyes"
+  | "nose"
+  | "face"
+  | "earLeft"
+  | "earRight";
 
 export type FaceAnchorStyle = {
   left: `${number}%`;
   top: `${number}%`;
-  transform: [{ translateX: number }, { translateY: number }, { rotate: string }, { scale: number }];
+  transform: Array<
+    | { translateX: number }
+    | { translateY: number }
+    | { rotate: string }
+    | { scaleX: number }
+    | { scaleY: number }
+    | { scale: number }
+  >;
   opacity: number;
   visible: boolean;
 };
 
-/** Pose selfie studio par défaut (cadrage vertical typique). */
+/** Pose selfie studio par défaut (cadrage vertical typique, visage assez grand). */
 export function defaultFacePose(now = Date.now()): FacePose {
   return {
-    confidence: 0.82,
+    confidence: 0.88,
     timestamp: now,
-    center: { x: 0.5, y: 0.42 },
-    width: 0.42,
-    height: 0.5,
+    center: { x: 0.5, y: 0.4 },
+    width: 0.52,
+    height: 0.58,
     roll: 0,
     yaw: 0,
     pitch: 0,
-    headTop: { x: 0.5, y: 0.14 },
-    leftEye: { x: 0.38, y: 0.36 },
-    rightEye: { x: 0.62, y: 0.36 },
-    nose: { x: 0.5, y: 0.46 },
-    leftEar: { x: 0.22, y: 0.42 },
-    rightEar: { x: 0.78, y: 0.42 },
+    headTop: { x: 0.5, y: 0.1 },
+    leftEye: { x: 0.36, y: 0.34 },
+    rightEye: { x: 0.64, y: 0.34 },
+    nose: { x: 0.5, y: 0.45 },
+    leftEar: { x: 0.18, y: 0.4 },
+    rightEar: { x: 0.82, y: 0.4 },
     leftEarVisible: true,
     rightEarVisible: true,
   };
@@ -194,23 +207,25 @@ function rebuildAnchors(pose: FacePose): FacePose {
   const yawShift = Math.sin(yaw) * halfW * 0.55;
   const pitchShift = Math.sin(pitch) * halfH * 0.35;
 
+  // Sommet du crâne (chapeaux) : un peu au-dessus du front.
   const headTop = rotateAround(
-    { x: center.x + yawShift * 0.2, y: center.y - halfH * 0.92 + pitchShift },
+    { x: center.x + yawShift * 0.15, y: center.y - halfH * 1.08 + pitchShift },
     center,
     roll,
   );
+  // Yeux : écart ~32% demi-largeur, ligne un peu sous le centre haut du visage.
   const leftEye = rotateAround(
     {
-      x: center.x - halfW * 0.32 + yawShift,
-      y: center.y - halfH * 0.18 + pitchShift,
+      x: center.x - halfW * 0.34 + yawShift,
+      y: center.y - halfH * 0.22 + pitchShift,
     },
     center,
     roll,
   );
   const rightEye = rotateAround(
     {
-      x: center.x + halfW * 0.32 + yawShift,
-      y: center.y - halfH * 0.18 + pitchShift,
+      x: center.x + halfW * 0.34 + yawShift,
+      y: center.y - halfH * 0.22 + pitchShift,
     },
     center,
     roll,
@@ -288,7 +303,15 @@ export function poseFromMediaPipeLandmarks(
   const rightEar = get(MP.rightEar);
   const forehead = get(MP.forehead);
   const chin = get(MP.chin);
-  if (!nose || !leftEye || !rightEye || !leftEar || !rightEar || !forehead || !chin) {
+  if (
+    !nose ||
+    !leftEye ||
+    !rightEye ||
+    !leftEar ||
+    !rightEar ||
+    !forehead ||
+    !chin
+  ) {
     return null;
   }
 
@@ -422,33 +445,88 @@ export function parseFacePosePayload(raw: string): FacePosePacket | null {
   }
 }
 
+/**
+ * Taille emoji en pt selon l’ancre + largeur layout (px).
+ * Lunettes ≈ 2.7× écart inter-pupillaire ; chapeau ≈ 1.35× largeur visage.
+ */
+export function propFontSizeFor(
+  pose: FacePose,
+  anchor: FaceAnchorId,
+  layoutWidth: number,
+  scale = 1,
+): number {
+  const w = Math.max(180, layoutWidth);
+  const eye = eyeDistance(pose);
+  if (anchor === "eyes") {
+    // Couvre les deux yeux + branches (pas trop petit sur selfie).
+    return Math.round(clamp(eye * w * 2.85 * scale, 64, w * 0.62));
+  }
+  if (anchor === "head") {
+    return Math.round(clamp(pose.width * w * 1.4 * scale, 72, w * 0.7));
+  }
+  if (anchor === "earLeft" || anchor === "earRight") {
+    return Math.round(clamp(pose.width * w * 0.55 * scale, 36, w * 0.28));
+  }
+  return Math.round(clamp(pose.width * w * 0.95 * scale, 52, w * 0.48));
+}
+
+export function midEyesPoint(pose: FacePose): Vec2 {
+  return {
+    x: (pose.leftEye.x + pose.rightEye.x) / 2,
+    y: (pose.leftEye.y + pose.rightEye.y) / 2,
+  };
+}
+
 export function anchorStyleFor(
   pose: FacePose,
   anchor: FaceAnchorId,
-  scale = 1,
+  _scale = 1,
   soft = 1,
+  fontSize = 42,
 ): FaceAnchorStyle {
   const conf = pose.confidence;
   const visible = conf >= 0.35;
   const opacity = visible ? clamp(conf * soft, 0, 1) : 0;
   const rot = `${(pose.roll * 180) / Math.PI}deg`;
-  const sizeScale = clamp(pose.width / 0.42, 0.75, 1.45) * scale;
+  const half = fontSize / 2;
 
   let point: Vec2 = pose.center;
+  let tx = -half;
+  let ty = -half;
   let earHide = false;
-  if (anchor === "head") point = pose.headTop;
-  else if (anchor === "eyes") {
-    point = {
-      x: (pose.leftEye.x + pose.rightEye.x) / 2,
-      y: (pose.leftEye.y + pose.rightEye.y) / 2,
-    };
-  } else if (anchor === "nose") point = pose.nose;
-  else if (anchor === "earLeft") {
+  /** Stretch : lunettes suivent l’écart des yeux ; chapeau un peu plus large. */
+  let scaleX = 1;
+  let scaleY = 1;
+
+  if (anchor === "head") {
+    point = pose.headTop;
+    tx = -half;
+    // Pose le bas de l’emoji sur le crâne.
+    ty = -fontSize * 0.92;
+    scaleX = 1.08;
+    scaleY = 1.02;
+  } else if (anchor === "eyes") {
+    point = midEyesPoint(pose);
+    tx = -half;
+    ty = -fontSize * 0.42;
+    // Élargit pour couvrir gauche + droite (yeux).
+    const eyeSpanPx = eyeDistance(pose) * Math.max(fontSize / 0.28, 1);
+    scaleX = clamp(eyeSpanPx / Math.max(fontSize * 0.72, 1), 1.05, 1.55);
+    scaleY = 0.92;
+  } else if (anchor === "nose") {
+    point = pose.nose;
+    tx = -half;
+    ty = -half * 0.7;
+  } else if (anchor === "earLeft") {
     point = pose.leftEar;
     earHide = !pose.leftEarVisible;
+    tx = -half * 0.7;
+    ty = -half * 0.7;
   } else if (anchor === "earRight") {
     point = pose.rightEar;
     earHide = !pose.rightEarVisible;
+    tx = -half * 0.7;
+    ty = -half * 0.7;
   } else {
     point = pose.center;
   }
@@ -457,10 +535,11 @@ export function anchorStyleFor(
     left: `${point.x * 100}%` as `${number}%`,
     top: `${point.y * 100}%` as `${number}%`,
     transform: [
-      { translateX: -21 },
-      { translateY: -21 },
+      { translateX: tx },
+      { translateY: ty },
       { rotate: rot },
-      { scale: sizeScale },
+      { scaleX },
+      { scaleY },
     ],
     opacity: earHide ? 0 : opacity,
     visible: visible && !earHide,

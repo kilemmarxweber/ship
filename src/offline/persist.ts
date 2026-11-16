@@ -52,14 +52,18 @@ function later(key: string, write: () => void) {
 
 function prefetchFeedAvMedia(products: CompactProduct[]) {
   try {
-    const posters = products
+    // Fenêtre courte : précharger tout le catalogue (milliers de vidéos)
+    // tue le process au scroll une fois la session owner/membre ouverte.
+    const recent = products.slice(-8);
+    const posters = recent
       .map((row) => remoteMediaUrl(row.poster))
-      .filter((url): url is string => Boolean(url));
-    if (posters.length) void Image.prefetch(posters);
+      .filter((url): url is string => Boolean(url))
+      .slice(0, 6);
+    if (posters.length) void Image.prefetch(posters, { cachePolicy: "memory-disk" });
 
-    // Absolute URLs only — media_cache keys must match playableMediaUrl lookups.
+    const av = recent.slice(-2);
     enqueueMediaCache(
-      products.flatMap((row) => {
+      av.flatMap((row) => {
         const video = remoteMediaUrl(row.videoUrl);
         const audio = remoteMediaUrl(row.audioUrl);
         return [

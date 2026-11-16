@@ -1,12 +1,17 @@
 import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+    useInfiniteQuery,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    FlatList,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -26,7 +31,6 @@ import {
 import { MediaStrip } from "@/components/publish/MediaStrip";
 import { ShipRewardsCard } from "@/components/seller/ShipRewardsCard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { PagedMore } from "@/components/ui/PagedMore";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
@@ -43,7 +47,6 @@ import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
-import { usePaged } from "@/src/use-paged";
 
 type Tab = "all" | "ACTIVE" | "DRAFT" | "HIDDEN" | "SOLD";
 
@@ -107,24 +110,25 @@ export function SellerProductsScreen() {
   const shops = shopsQ.data?.shops ?? [];
   const platform = Boolean(shopsQ.data?.isPlatformOwner);
 
-  const list = useQuery({
-    queryKey: ["seller-products", token ?? "guest", shopId],
+  const list = useInfiniteQuery({
+    queryKey: ["seller-products", token ?? "guest", shopId, tab],
     enabled: Boolean(token),
-    queryFn: () => {
-      const params = new URLSearchParams({ mine: "1" });
+    initialPageParam: "",
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ mine: "1", limit: "24" });
       if (shopId) params.set("shopId", shopId);
-      return api<{ products?: SellerProduct[] }>(`/api/products?${params}`);
+      if (tab !== "all") params.set("status", tab);
+      if (pageParam) params.set("cursor", String(pageParam));
+      return api<{ products?: SellerProduct[]; nextCursor?: string | null }>(
+        `/api/products?${params}`,
+      );
     },
+    getNextPageParam: (last) => last.nextCursor || undefined,
   });
   const products = useMemo(
-    () => list.data?.products ?? [],
-    [list.data?.products],
+    () => list.data?.pages.flatMap((page) => page.products ?? []) ?? [],
+    [list.data?.pages],
   );
-  const filtered = useMemo(() => {
-    if (tab === "all") return products;
-    return products.filter((p) => p.status === tab);
-  }, [products, tab]);
-  const paged = usePaged(filtered, `${shopId}-${tab}-${filtered.length}`);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["seller-products"] });
@@ -382,252 +386,269 @@ export function SellerProductsScreen() {
             </Text>
           </Pressable>
         </View>
-      ) : list.isLoading ? (
+      ) : list.isLoading && products.length === 0 ? (
         <ActivityIndicator color={c.primary} style={{ marginTop: 24 }} />
       ) : (
-        <ScrollView
+        <FlatList
+          data={products}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (list.hasNextPage && !list.isFetchingNextPage) {
+              void list.fetchNextPage();
+            }
+          }}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingBottom: insets.bottom + 24,
             gap: 12,
           }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <ShopPicker
-            shops={shops}
-            value={shopId}
-            allLabel="Toutes les boutiques"
-            onChange={setShopId}
-          />
-          {shopId ? <ShipRewardsCard shopId={shopId} /> : null}
-
-          <View style={styles.tabs}>
-            {TABS.map((item) => {
-              const on = tab === item.key;
-              const count =
-                item.key === "all"
-                  ? null
-                  : products.filter((p) => p.status === item.key).length;
-              return (
-                <Pressable
-                  key={item.key}
-                  onPress={() => setTab(item.key)}
-                  style={[
-                    styles.tab,
-                    on
-                      ? { backgroundColor: c.primary }
-                      : { backgroundColor: "rgba(127,127,140,0.14)" },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      { color: on ? c.primaryForeground : c.textMuted },
-                    ]}
-                  >
-                    {item.label}
-                    {count != null ? ` (${count})` : ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {filtered.length === 0 ? (
+          ListHeaderComponent={
+            <View style={{ gap: 12, marginBottom: 12 }}>
+              <ShopPicker
+                shops={shops}
+                value={shopId}
+                allLabel="Toutes les boutiques"
+                onChange={setShopId}
+              />
+              {shopId ? <ShipRewardsCard shopId={shopId} /> : null}
+              <View style={styles.tabs}>
+                {TABS.map((item) => {
+                  const on = tab === item.key;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      onPress={() => setTab(item.key)}
+                      style={[
+                        styles.tab,
+                        on
+                          ? { backgroundColor: c.primary }
+                          : { backgroundColor: "rgba(127,127,140,0.14)" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabText,
+                          { color: on ? c.primaryForeground : c.textMuted },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          }
+          ListEmptyComponent={
             <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
               <Text style={{ color: c.textMuted, textAlign: "center" }}>
-                Aucun produit —
+                {list.isError
+                  ? "Impossible de charger les produits"
+                  : "Aucun produit —"}
               </Text>
-              <Pressable onPress={() => router.push("/publish")}>
-                <Text style={{ color: c.primary, fontWeight: "800" }}>
-                  créer
-                </Text>
-              </Pressable>
+              {list.isError ? (
+                <Pressable onPress={() => void list.refetch()}>
+                  <Text style={{ color: c.primary, fontWeight: "800" }}>
+                    Réessayer
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => router.push("/publish")}>
+                  <Text style={{ color: c.primary, fontWeight: "800" }}>
+                    créer
+                  </Text>
+                </Pressable>
+              )}
             </View>
-          ) : (
-            <>
-              {paged.visible.map((item) => {
-                const cover = mediaUrl(coverOf(item.images));
-                return (
-                  <View
-                    key={item.id}
+          }
+          ListFooterComponent={
+            list.isFetchingNextPage ? (
+              <ActivityIndicator
+                color={c.primary}
+                style={{ marginVertical: 16 }}
+              />
+            ) : undefined
+          }
+          renderItem={({ item }) => {
+            const cover = mediaUrl(coverOf(item.images));
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.row,
+                  { backgroundColor: c.card, borderColor: HAIRLINE },
+                ]}
+              >
+                <View style={styles.rowTop}>
+                  {cover ? (
+                    <Image
+                      source={{ uri: cover }}
+                      style={styles.thumb}
+                      contentFit="cover"
+                      recyclingKey={item.id}
+                      cachePolicy="memory-disk"
+                    />
+                  ) : (
+                    <View style={[styles.thumb, { backgroundColor: "#222" }]} />
+                  )}
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text
+                      style={[styles.name, { color: c.text }]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text style={{ color: c.textMuted, fontSize: 12 }}>
+                      {formatMoney(item.priceCents, item.currency)} · stock{" "}
+                      {item.quantity ?? 0} ·{" "}
+                      <Text
+                        style={{
+                          color: statusColor(item.status),
+                          fontWeight: "800",
+                        }}
+                      >
+                        {STATUS_LABEL[item.status ?? "ACTIVE"] ?? item.status}
+                      </Text>
+                      {(item.ordersCount ?? 0) > 0
+                        ? ` · ${item.ordersCount} vente(s)`
+                        : ""}
+                    </Text>
+                    <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                      @{item.shop.name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.btnRow}>
+                  <Pressable
+                    disabled={busy}
+                    onPress={() => openEdit(item)}
                     style={[
-                      styles.row,
-                      { backgroundColor: c.card, borderColor: HAIRLINE },
+                      styles.chip,
+                      { backgroundColor: "rgba(127,127,140,0.14)" },
                     ]}
                   >
-                    <View style={styles.rowTop}>
-                      {cover ? (
-                        <Image
-                          source={{ uri: cover }}
-                          style={styles.thumb}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View
-                          style={[styles.thumb, { backgroundColor: "#222" }]}
-                        />
-                      )}
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <Text
-                          style={[styles.name, { color: c.text }]}
-                          numberOfLines={1}
-                        >
-                          {item.title}
-                        </Text>
-                        <Text style={{ color: c.textMuted, fontSize: 12 }}>
-                          {formatMoney(item.priceCents, item.currency)} · stock{" "}
-                          {item.quantity ?? 0} ·{" "}
-                          <Text
-                            style={{
-                              color: statusColor(item.status),
-                              fontWeight: "800",
-                            }}
-                          >
-                            {STATUS_LABEL[item.status ?? "ACTIVE"] ??
-                              item.status}
-                          </Text>
-                          {(item.ordersCount ?? 0) > 0
-                            ? ` · ${item.ordersCount} vente(s)`
-                            : ""}
-                        </Text>
-                        <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                          @{item.shop.name}
-                        </Text>
-                      </View>
-                    </View>
+                    <Ionicons name="pencil" size={13} color={c.text} />
+                    <Text style={[styles.chipText, { color: c.text }]}>
+                      Modifier
+                    </Text>
+                  </Pressable>
 
-                    <View style={styles.btnRow}>
-                      <Pressable
-                        disabled={busy}
-                        onPress={() => openEdit(item)}
+                  {item.status === "DRAFT" ? (
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => void setStatus(item.id, "ACTIVE")}
+                      style={[styles.chip, { backgroundColor: c.primary }]}
+                    >
+                      <Ionicons
+                        name="eye-outline"
+                        size={13}
+                        color={c.primaryForeground}
+                      />
+                      <Text
                         style={[
-                          styles.chip,
-                          { backgroundColor: "rgba(127,127,140,0.14)" },
+                          styles.chipText,
+                          { color: c.primaryForeground },
                         ]}
                       >
-                        <Ionicons name="pencil" size={13} color={c.text} />
-                        <Text style={[styles.chipText, { color: c.text }]}>
-                          Modifier
-                        </Text>
-                      </Pressable>
+                        Publier
+                      </Text>
+                    </Pressable>
+                  ) : null}
 
-                      {item.status === "DRAFT" ? (
-                        <Pressable
-                          disabled={busy}
-                          onPress={() => void setStatus(item.id, "ACTIVE")}
-                          style={[styles.chip, { backgroundColor: c.primary }]}
-                        >
-                          <Ionicons
-                            name="eye-outline"
-                            size={13}
-                            color={c.primaryForeground}
-                          />
-                          <Text
-                            style={[
-                              styles.chipText,
-                              { color: c.primaryForeground },
-                            ]}
-                          >
-                            Publier
-                          </Text>
-                        </Pressable>
-                      ) : null}
+                  {item.status === "ACTIVE" ? (
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => void setStatus(item.id, "HIDDEN")}
+                      style={[
+                        styles.chip,
+                        { borderColor: HAIRLINE, borderWidth: 1 },
+                      ]}
+                    >
+                      <Ionicons
+                        name="archive-outline"
+                        size={13}
+                        color={c.text}
+                      />
+                      <Text style={[styles.chipText, { color: c.text }]}>
+                        Archiver
+                      </Text>
+                    </Pressable>
+                  ) : null}
 
-                      {item.status === "ACTIVE" ? (
-                        <Pressable
-                          disabled={busy}
-                          onPress={() => void setStatus(item.id, "HIDDEN")}
-                          style={[
-                            styles.chip,
-                            { borderColor: HAIRLINE, borderWidth: 1 },
-                          ]}
-                        >
-                          <Ionicons
-                            name="archive-outline"
-                            size={13}
-                            color={c.text}
-                          />
-                          <Text style={[styles.chipText, { color: c.text }]}>
-                            Archiver
-                          </Text>
-                        </Pressable>
-                      ) : null}
-
-                      {item.status === "HIDDEN" ? (
-                        <Pressable
-                          disabled={busy}
-                          onPress={() => void setStatus(item.id, "ACTIVE")}
-                          style={[styles.chip, { backgroundColor: c.primary }]}
-                        >
-                          <Text
-                            style={[
-                              styles.chipText,
-                              { color: c.primaryForeground },
-                            ]}
-                          >
-                            Republier
-                          </Text>
-                        </Pressable>
-                      ) : null}
-
-                      {item.status === "SOLD" && (item.quantity ?? 0) > 0 ? (
-                        <Pressable
-                          disabled={busy}
-                          onPress={() => void setStatus(item.id, "ACTIVE")}
-                          style={[styles.chip, { backgroundColor: c.primary }]}
-                        >
-                          <Text
-                            style={[
-                              styles.chipText,
-                              { color: c.primaryForeground },
-                            ]}
-                          >
-                            Remettre en vente
-                          </Text>
-                        </Pressable>
-                      ) : null}
-
-                      <Pressable
-                        disabled={busy || !item.canDelete}
-                        onPress={() => remove(item)}
+                  {item.status === "HIDDEN" ? (
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => void setStatus(item.id, "ACTIVE")}
+                      style={[styles.chip, { backgroundColor: c.primary }]}
+                    >
+                      <Text
                         style={[
-                          styles.chip,
-                          {
-                            borderWidth: 1,
-                            borderColor: item.canDelete
-                              ? "rgba(255,69,58,0.45)"
-                              : HAIRLINE,
-                            opacity: item.canDelete ? 1 : 0.45,
-                          },
+                          styles.chipText,
+                          { color: c.primaryForeground },
                         ]}
                       >
-                        <Ionicons
-                          name="trash-outline"
-                          size={13}
-                          color={item.canDelete ? "#FF453A" : c.textMuted}
-                        />
-                        <Text
-                          style={[
-                            styles.chipText,
-                            { color: item.canDelete ? "#FF453A" : c.textMuted },
-                          ]}
-                        >
-                          Supprimer
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                );
-              })}
-              <PagedMore
-                hasMore={paged.hasMore}
-                remaining={paged.remaining}
-                onMore={paged.more}
-              />
-            </>
-          )}
-        </ScrollView>
+                        Republier
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  {item.status === "SOLD" && (item.quantity ?? 0) > 0 ? (
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => void setStatus(item.id, "ACTIVE")}
+                      style={[styles.chip, { backgroundColor: c.primary }]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          { color: c.primaryForeground },
+                        ]}
+                      >
+                        Remettre en vente
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  <Pressable
+                    disabled={busy || !item.canDelete}
+                    onPress={() => remove(item)}
+                    style={[
+                      styles.chip,
+                      {
+                        borderWidth: 1,
+                        borderColor: item.canDelete
+                          ? "rgba(255,69,58,0.45)"
+                          : HAIRLINE,
+                        opacity: item.canDelete ? 1 : 0.45,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={13}
+                      color={item.canDelete ? "#FF453A" : c.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: item.canDelete ? "#FF453A" : c.textMuted },
+                      ]}
+                    >
+                      Supprimer
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          }}
+        />
       )}
 
       <Modal

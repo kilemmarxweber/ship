@@ -1,8 +1,8 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { safeBack } from "@/src/nav";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -19,6 +19,7 @@ import { formatMoney } from "@/src/format";
 import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
+import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
 import { usePaged } from "@/src/use-paged";
 
@@ -208,11 +209,54 @@ export function SellerAdminScreen() {
     retry: false,
   });
 
-  const rows = useMemo(
+  const [extraRows, setExtraRows] = useState<
+    { id: string; title: string; meta: string }[]
+  >([]);
+  const [cursorOverride, setCursorOverride] = useState<
+    string | null | undefined
+  >(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const baseRows = useMemo(
     () => (q.data ? rowsFromPayload(page, q.data) : []),
     [q.data, page],
   );
+  const cursorFromQuery =
+    typeof q.data?.nextCursor === "string" ? q.data.nextCursor : null;
+  const rows = useMemo(() => {
+    if (extraRows.length === 0) return baseRows;
+    const seen = new Set(baseRows.map((row) => row.id));
+    return [...baseRows, ...extraRows.filter((row) => !seen.has(row.id))];
+  }, [baseRows, extraRows]);
   const paged = usePaged(rows, `${page}-${rows.length}`);
+  const moreCursor =
+    cursorOverride === undefined ? cursorFromQuery : cursorOverride;
+
+  useEffect(() => {
+    setExtraRows([]);
+    setCursorOverride(undefined);
+  }, [page, q.dataUpdatedAt]);
+
+  async function loadMoreRows() {
+    if (!moreCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const joiner = meta.path.includes("?") ? "&" : "?";
+      const data = await api<Record<string, unknown>>(
+        `${meta.path}${joiner}cursor=${encodeURIComponent(moreCursor)}`,
+      );
+      setExtraRows((prev) => [...prev, ...rowsFromPayload(page, data)]);
+      setCursorOverride(
+        typeof data.nextCursor === "string" ? data.nextCursor : null,
+      );
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Page suivante indisponible",
+        "error",
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <ScrollView
@@ -298,6 +342,19 @@ export function SellerAdminScreen() {
             remaining={paged.remaining}
             onMore={paged.more}
           />
+          {!paged.hasMore && moreCursor ? (
+            <Pressable
+              disabled={loadingMore}
+              onPress={() => void loadMoreRows()}
+              style={[styles.primary, { backgroundColor: c.primary }]}
+            >
+              <Text
+                style={[styles.primaryText, { color: c.primaryForeground }]}
+              >
+                {loadingMore ? "Chargement…" : "Page suivante"}
+              </Text>
+            </Pressable>
+          ) : null}
         </>
       )}
     </ScrollView>

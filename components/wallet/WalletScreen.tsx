@@ -1,8 +1,8 @@
+import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { safeBack } from "@/src/nav";
 import * as WebBrowser from "expo-web-browser";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, apiPayment } from "@/src/api";
 import { formatMoney } from "@/src/format";
+import { DEFAULT_FX } from "@/src/fx";
 import {
     clearPaymentIdempotencyKey,
     paymentIdempotencyKey,
@@ -42,6 +43,28 @@ import {
     type WalletPots,
     type WalletTxn,
 } from "@/src/wallet";
+
+function moneyCents(raw: string) {
+  const value = Number.parseFloat(raw.trim().replace(",", "."));
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}
+
+function minWithdrawCents(currency: string) {
+  if (currency === "CDF") return DEFAULT_FX.cdfPerUsd * 100;
+  return 100;
+}
+
+type WithdrawResult = {
+  withdrawal?: { status?: string };
+};
+
+type Recipient = {
+  id: string;
+  name: string;
+  shopName: string | null;
+  phoneMasked: string;
+};
 
 type WalletPayload = {
   wallet?: WalletBalances;
@@ -94,16 +117,47 @@ export function WalletScreen() {
   const phones = phoneOverride ?? contactsFromApi;
   const [provider, setProvider] = useState<RailProvider>("MPESA");
   const [amount, setAmount] = useState("50");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [currency, setCurrency] = useState<AppCurrency>("USD");
   const [bucket, setBucket] = useState<WalletBucket>("BUYER");
+  const [payoutTo, setPayoutTo] = useState<"mine" | "other">("mine");
+  const [otherPhone, setOtherPhone] = useState("");
+  const [topUpFor, setTopUpFor] = useState<"me" | "someone">("me");
+  const [recipientQuery, setRecipientQuery] = useState("");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [picked, setPicked] = useState<Recipient | null>(null);
+  const [payFromBalance, setPayFromBalance] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [ussdHint, setUssdHint] = useState<string | null>(null);
 
   const payIntent = useMemo(
-    () => `deposit:${amount}:${currency}:${provider}`,
-    [amount, currency, provider],
+    () =>
+      `deposit:${amount}:${currency}:${payFromBalance ? "balance" : provider}:${topUpFor === "someone" ? (picked?.id ?? "") : "me"}`,
+    [amount, currency, payFromBalance, picked?.id, provider, topUpFor],
   );
+
+  useEffect(() => {
+    if (topUpFor !== "someone" || picked) return;
+    const q = recipientQuery.trim();
+    if (q.length < 2) return;
+    let cancel = false;
+    const timer = setTimeout(() => {
+      void api<{ recipients?: Recipient[] }>(
+        `/api/wallet/recipients?q=${encodeURIComponent(q)}`,
+      )
+        .then((data) => {
+          if (!cancel) setRecipients(data.recipients ?? []);
+        })
+        .catch(() => {
+          if (!cancel) setRecipients([]);
+        });
+    }, 300);
+    return () => {
+      cancel = true;
+      clearTimeout(timer);
+    };
+  }, [picked, recipientQuery, topUpFor]);
 
   async function refresh() {
     await queryClient.invalidateQueries({
@@ -171,7 +225,10 @@ export function WalletScreen() {
       json.alreadyApplied ||
       json.alreadyConfirmed
     ) {
-      showToast("Compte rechargé", "success");
+      showToast(
+        topUpFor === "someone" ? "Recharge envoyée" : "Compte rechargé",
+        "success",
+      );
       setPendingId(null);
       setUssdHint(null);
       await clearPaymentIdempotencyKey(payIntent);
@@ -202,9 +259,40 @@ export function WalletScreen() {
   }
 
   async function deposit() {
-    const cents = Math.round(Number.parseFloat(amount) * 100);
+    if (topUpFor === "someone" && !picked) {
+      showToast("Choisis la personne", "error");
+      return;
+    }
+    const cents = Math.round(Number.parseFloat(amount.replace(",", ".")) * 100);
     if (!Number.isFinite(cents) || cents < 100) {
       showToast("Montant invalide", "error");
+      return;
+    }
+    if (topUpFor === "someone" && payFromBalance) {
+      setBusy(true);
+      try {
+        const key = await paymentIdempotencyKey(payIntent);
+        await apiPayment("/api/wallet/transfer", {
+          method: "POST",
+          idempotencyKey: key,
+          body: JSON.stringify({
+            amountCents: cents,
+            currency,
+            beneficiaryUserId: picked?.id,
+            idempotencyKey: key,
+          }),
+        });
+        await clearPaymentIdempotencyKey(payIntent);
+        showToast("Transfert effectué", "success");
+        await refresh();
+      } catch (cause) {
+        showToast(
+          cause instanceof Error ? cause.message : "Transfert impossible",
+          "error",
+        );
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     const parts = splitPhone(phones[provider]);
@@ -225,6 +313,7 @@ export function WalletScreen() {
           phone: e164,
           amountCents: cents,
           currency,
+          beneficiaryUserId: topUpFor === "someone" ? picked?.id : undefined,
           idempotencyKey: key,
         }),
       });
@@ -239,16 +328,51 @@ export function WalletScreen() {
     }
   }
 
+  const withdrawGross = moneyCents(withdrawAmount);
+  const withdrawFee =
+    withdrawGross == null
+      ? 0
+      : Math.floor((withdrawGross * withdrawFeePct(bucket)) / 100);
+  const withdrawNet =
+    withdrawGross == null ? 0 : Math.max(0, withdrawGross - withdrawFee);
+
   async function withdraw() {
-    const phone =
-      phones[provider] || Object.values(phones).find((value) => value.trim());
-    if (!phone) {
-      showToast("Choisis un réseau et un numéro", "error");
+    if (payoutTo === "other" && !otherPhone.trim()) {
+      showToast("Précise le numéro du transfert", "error");
       return;
     }
-    const gross = pots[bucket];
-    if (gross <= 0) {
-      showToast("Ce pot est vide", "error");
+    const phone =
+      payoutTo === "other"
+        ? otherPhone
+        : phones[provider] ||
+          Object.values(phones).find((value) => value.trim());
+    if (!phone) {
+      showToast("Choisis le réseau CinetPay et le numéro", "error");
+      return;
+    }
+    if (displayCurrency === "KW") {
+      showToast("CinetPay envoie le fond en $US ou en CDF", "error");
+      return;
+    }
+    const available = pots[bucket];
+    if (available <= 0) {
+      showToast("Ce fond est vide", "error");
+      return;
+    }
+    const gross = moneyCents(withdrawAmount);
+    if (gross == null || gross <= 0) {
+      showToast("Indique la somme à retirer", "error");
+      return;
+    }
+    if (gross > available) {
+      showToast("Cette somme dépasse le fond", "error");
+      return;
+    }
+    if (gross < minWithdrawCents(displayCurrency)) {
+      showToast(
+        displayCurrency === "CDF" ? "Minimum 2 400 CDF" : "Minimum 1 $US",
+        "error",
+      );
       return;
     }
     const parts = splitPhone(phone);
@@ -258,12 +382,12 @@ export function WalletScreen() {
       return;
     }
     setBusy(true);
-    const feePct = withdrawFeePct(bucket);
-    const fee = Math.floor((gross * feePct) / 100);
-    const intent = `withdraw:${bucket}:${gross}:${displayCurrency}`;
+    const fee = Math.floor((gross * withdrawFeePct(bucket)) / 100);
+    const net = gross - fee;
+    const intent = `withdraw:${bucket}:${gross}:${displayCurrency}:${e164}`;
     try {
       const key = await paymentIdempotencyKey(intent);
-      await apiPayment("/api/wallet/withdraw", {
+      const json = await apiPayment<WithdrawResult>("/api/wallet/withdraw", {
         method: "POST",
         idempotencyKey: key,
         replayScope: "WITHDRAW",
@@ -277,10 +401,19 @@ export function WalletScreen() {
         }),
       });
       await clearPaymentIdempotencyKey(intent);
+      const sent = formatMoney(net, displayCurrency);
       showToast(
-        `Retrait ${formatMoney(gross - fee, displayCurrency)} (frais ${formatMoney(fee, displayCurrency)})`,
+        json.withdrawal?.status === "PENDING"
+          ? payoutTo === "other"
+            ? `CinetPay transfère ${sent}`
+            : `CinetPay envoie ${sent}`
+          : payoutTo === "other"
+            ? `Transfert de ${sent} enregistré`
+            : `Retrait de ${sent} enregistré`,
         "success",
       );
+      setWithdrawAmount("");
+      if (payoutTo === "other") setOtherPhone("");
       await refresh();
     } catch (cause) {
       showToast(
@@ -303,11 +436,12 @@ export function WalletScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
+      <Pressable
+        accessibilityLabel="Retour"
+        onPress={() => safeBack()}
+        style={styles.back}
+      >
+        <Ionicons name="chevron-back" size={22} color="#fff" />
       </Pressable>
       <Text style={styles.title}>Portefeuille</Text>
       {!token ? (
@@ -336,7 +470,8 @@ export function WalletScreen() {
               ))}
             </View>
             <Text style={styles.hint}>
-              Achats = solde interne. CinetPay sert à recharger et retirer.
+              Les achats partent du solde. CinetPay recharge le compte et envoie
+              le retrait sur le numéro Mobile Money.
             </Text>
             <View style={styles.pots}>
               {WALLET_BUCKETS.map((item) => (
@@ -355,24 +490,53 @@ export function WalletScreen() {
                 </Pressable>
               ))}
             </View>
-            <Pressable
-              style={[styles.withdraw, busy && { opacity: 0.6 }]}
-              disabled={busy || pots[bucket] <= 0}
-              onPress={() => void withdraw()}
-            >
-              <Text style={styles.withdrawText}>
-                Retirer le pot {bucketLabel(bucket).toLowerCase()}
-              </Text>
-            </Pressable>
+            <Text style={styles.fieldLabel}>Somme à retirer</Text>
+            <TextInput
+              value={withdrawAmount}
+              onChangeText={setWithdrawAmount}
+              keyboardType="decimal-pad"
+              placeholder="0,00"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              style={styles.input}
+            />
+            <Text style={styles.hint}>
+              Disponible {formatMoney(pots[bucket], displayCurrency)}
+              {withdrawGross != null && withdrawGross > 0
+                ? `. Frais ${formatMoney(withdrawFee, displayCurrency)}. Tu reçois ${formatMoney(withdrawNet, displayCurrency)}.`
+                : "."}{" "}
+              {payoutTo === "other"
+                ? "Le transfert part vers le numéro saisi plus bas."
+                : "CinetPay envoie cette somme sur ton numéro."}
+            </Text>
           </View>
 
-          <Text style={styles.section}>Recharger avec CinetPay</Text>
+          <Text style={styles.section}>Où envoyer le fond</Text>
+          <View style={styles.choiceRow}>
+            <Pressable
+              onPress={() => setPayoutTo("mine")}
+              style={[styles.choice, payoutTo === "mine" && styles.choiceOn]}
+            >
+              <Text style={styles.choiceText}>Mon numéro</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setPayoutTo("other")}
+              style={[styles.choice, payoutTo === "other" && styles.choiceOn]}
+            >
+              <Text style={styles.choiceText}>Autre numéro</Text>
+            </Pressable>
+          </View>
           <View style={styles.rowWrap}>
             {RAIL_PROVIDERS.map((id) => (
               <Pressable
                 key={id}
-                onPress={() => setProvider(id)}
-                style={[styles.rail, provider === id && styles.railOn]}
+                onPress={() => {
+                  setProvider(id);
+                  setPayFromBalance(false);
+                }}
+                style={[
+                  styles.rail,
+                  !payFromBalance && provider === id && styles.railOn,
+                ]}
               >
                 <Text
                   style={[
@@ -390,16 +554,116 @@ export function WalletScreen() {
             onChangeText={(value) =>
               setPhoneOverride({ ...phones, [provider]: value })
             }
-            placeholder="+243…"
+            placeholder="Mon numéro"
             placeholderTextColor="rgba(255,255,255,0.35)"
             keyboardType="phone-pad"
             style={styles.input}
           />
+          <Pressable onPress={() => void saveContacts()}>
+            <Text style={styles.link}>Enregistrer ce numéro</Text>
+          </Pressable>
+          {payoutTo === "other" ? (
+            <TextInput
+              value={otherPhone}
+              onChangeText={setOtherPhone}
+              placeholder="Numéro du transfert"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              keyboardType="phone-pad"
+              style={styles.input}
+            />
+          ) : null}
+          <Pressable
+            style={[styles.withdraw, busy && { opacity: 0.6 }]}
+            disabled={busy}
+            onPress={() => void withdraw()}
+          >
+            <Text style={styles.withdrawText}>
+              {payoutTo === "other" ? "Transfert" : "Retirer le fond"}
+            </Text>
+            <Text style={styles.withdrawMeta}>
+              {withdrawGross != null && withdrawGross > 0
+                ? `${formatMoney(withdrawGross, displayCurrency)} via CinetPay`
+                : "Indique la somme"}
+            </Text>
+          </Pressable>
+
+          <Text style={styles.section}>Recharger</Text>
+          <View style={styles.choiceRow}>
+            <Pressable
+              onPress={() => {
+                setTopUpFor("me");
+                setPayFromBalance(false);
+                setRecipients([]);
+              }}
+              style={[styles.choice, topUpFor === "me" && styles.choiceOn]}
+            >
+              <Text style={styles.choiceText}>Moi</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setTopUpFor("someone")}
+              style={[styles.choice, topUpFor === "someone" && styles.choiceOn]}
+            >
+              <Text style={styles.choiceText}>Quelqu{"\u2019"}un</Text>
+            </Pressable>
+          </View>
+          {topUpFor === "someone" ? (
+            <>
+              <TextInput
+                value={recipientQuery}
+                onChangeText={(value) => {
+                  setRecipientQuery(value);
+                  setPicked(null);
+                  if (value.trim().length < 2) setRecipients([]);
+                }}
+                placeholder="Nom, boutique ou numéro"
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                style={styles.input}
+              />
+              {picked ? (
+                <Text style={styles.hint}>
+                  Tu recharges {picked.shopName ? `${picked.shopName} · ` : ""}
+                  {picked.name}
+                </Text>
+              ) : (
+                recipients.map((person) => (
+                  <Pressable
+                    key={person.id}
+                    onPress={() => setPicked(person)}
+                    style={styles.recipient}
+                  >
+                    <Text style={styles.recipientName} numberOfLines={1}>
+                      {person.shopName
+                        ? `${person.shopName} · ${person.name}`
+                        : person.name}
+                    </Text>
+                    <Text style={styles.hint}>{person.phoneMasked}</Text>
+                  </Pressable>
+                ))
+              )}
+              <Pressable
+                onPress={() => setPayFromBalance(true)}
+                style={[styles.rail, payFromBalance && styles.railOn]}
+              >
+                <Text
+                  style={[styles.railText, payFromBalance && styles.railTextOn]}
+                >
+                  Solde ShipShop
+                </Text>
+              </Pressable>
+              <Text style={styles.hint}>
+                {payFromBalance
+                  ? "ShipShop débite ton solde et crédite cette personne."
+                  : "CinetPay débite ton numéro et crédite cette personne."}
+              </Text>
+            </>
+          ) : null}
           <View style={styles.amountRow}>
             <TextInput
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
+              placeholder="Somme"
+              placeholderTextColor="rgba(255,255,255,0.35)"
               style={[styles.input, { flex: 1 }]}
             />
             {APP_CURRENCIES.filter((code) => code !== "KW").map((code) => (
@@ -426,7 +690,11 @@ export function WalletScreen() {
             onPress={() => void deposit()}
           >
             <Text style={styles.primaryText}>
-              {busy ? "CinetPay…" : "Payer avec CinetPay"}
+              {busy
+                ? "Envoi…"
+                : topUpFor === "someone" && payFromBalance
+                  ? "Envoyer le solde"
+                  : "Payer avec CinetPay"}
             </Text>
           </Pressable>
           {pendingId ? (
@@ -434,9 +702,6 @@ export function WalletScreen() {
               <Text style={styles.link}>J’ai payé — vérifier</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={() => void saveContacts()}>
-            <Text style={styles.link}>Enregistrer ce numéro</Text>
-          </Pressable>
 
           <Text style={styles.section}>Mouvements</Text>
           {txns.length === 0 ? (
@@ -468,18 +733,10 @@ export function WalletScreen() {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.background },
   back: {
-    flexDirection: "row",
+    width: 44,
+    height: 44,
     alignItems: "center",
-    gap: 4,
-    paddingRight: 16,
-    overflow: "visible",
-  },
-  backText: {
-    color: "#fff",
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
+    justifyContent: "center",
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800" },
   card: { borderRadius: 24, padding: 18, gap: 10 },
@@ -514,18 +771,64 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   potFee: { color: "#fcd34d", fontSize: 9 },
+  fieldLabel: { color: "#fff", fontWeight: "700", marginTop: 4 },
   withdraw: {
     backgroundColor: colors.emerald,
     borderRadius: 14,
-    paddingVertical: 12,
+    minHeight: 48,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     alignItems: "center",
+    justifyContent: "center",
   },
-  withdrawText: { color: "#04281c", fontWeight: "800" },
+  withdrawText: {
+    color: "#04281c",
+    fontWeight: "800",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  withdrawMeta: {
+    color: "#04281c",
+    fontWeight: "700",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 2,
+  },
   section: { color: "#fff", fontWeight: "800", marginTop: 6 },
+  choiceRow: { flexDirection: "row", gap: 8 },
+  choice: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 8,
+  },
+  choiceOn: { backgroundColor: "#FF7A00" },
+  choiceText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 15,
+    textAlign: "center",
+  },
+  recipient: {
+    minHeight: 44,
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(127,127,140,0.22)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recipientName: { color: "#fff", fontWeight: "700" },
   rail: {
+    minHeight: 44,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   railOn: { backgroundColor: "#FF7A00" },

@@ -1,43 +1,43 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import {
-    useInfiniteQuery,
-    useQuery,
-    useQueryClient,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useIsFocused, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Pressable,
-    Share,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
-    type NativeScrollEvent,
-    type NativeSyntheticEvent,
+  ActivityIndicator,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import Animated, {
-    Easing,
-    FadeOut,
-    interpolate,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withTiming,
-    ZoomIn,
+  Easing,
+  FadeOut,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  ZoomIn,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ReelGallery } from "@/components/feed/ReelGallery";
 import { ReelCover, ReelSoundtrack } from "@/components/feed/ReelVideo";
 import {
-    BuySheet,
-    CommentsSheet,
-    ShopProfileSheet,
+  BuySheet,
+  CommentsSheet,
+  ShopProfileSheet,
 } from "@/components/feed/Sheets";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
@@ -45,9 +45,9 @@ import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
 import { WantedHomePane } from "@/components/wanted/WantedHomePane";
 import { api, ApiError, apiOrigin, isVideoUrl, mediaUrl } from "@/src/api";
 import {
-    emptyWeaveMemory,
-    weaveChallenges,
-    type MixedRow,
+  emptyWeaveMemory,
+  weaveChallenges,
+  type MixedRow,
 } from "@/src/challenge-place";
 import { trackCisEvent } from "@/src/cis/events";
 import { colorHex } from "@/src/color";
@@ -61,10 +61,10 @@ import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import {
-    flattenUniqueProducts,
-    isLocalFeedCursor,
-    normalizeFeedPage,
-    safeNextCursor,
+  flattenUniqueProducts,
+  isLocalFeedCursor,
+  normalizeFeedPage,
+  safeNextCursor,
 } from "@/src/product-normalize";
 import { useSession } from "@/src/session";
 import { stockAlertColor, stockFraction } from "@/src/stock";
@@ -73,9 +73,9 @@ import { showToast } from "@/src/toast";
 import type { FeedPage, GrowthSurface, LiveTeaser, Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
 import {
-    fetchWantedFeed,
-    useWantedOfferSync,
-    WANTED_FEED_KEY,
+  fetchWantedFeed,
+  useWantedOfferSync,
+  WANTED_FEED_KEY,
 } from "@/src/wanted";
 
 type FeedTab = "foryou" | "following" | "search";
@@ -302,23 +302,21 @@ export function FeedScreen() {
     });
   }, [active, feedRows, tab]);
 
-  // Affiche du produit suivant seulement, après le geste, pour ne pas
-  // bloquer l'image pendant que le doigt est encore sur l'écran.
+  // L'affiche d'à côté est déjà en mémoire avant le geste, donc pas d'écran noir.
   useEffect(() => {
     const posters: string[] = [];
-    const last = Math.min(feedRows.length - 1, active + 1);
-    for (let index = active; index <= last; index += 1) {
+    const from = Math.max(0, active - 1);
+    const last = Math.min(feedRows.length - 1, active + 2);
+    for (let index = from; index <= last; index += 1) {
       const row = feedRows[index];
       if (row?.kind !== "item") continue;
       const cover = coverOf(row.item.images);
       if (!cover || isVideoUrl(cover)) continue;
       posters.push(cover);
     }
-    if (!posters.length) return;
-    const timer = setTimeout(() => {
+    if (posters.length) {
       void Image.prefetch(posters, { cachePolicy: "memory-disk" });
-    }, 280);
-    return () => clearTimeout(timer);
+    }
   }, [active, feedRows]);
 
   function selectTab(next: FeedTab) {

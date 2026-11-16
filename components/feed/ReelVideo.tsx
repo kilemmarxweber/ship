@@ -72,7 +72,7 @@ export function ReelVideo({
   });
 
   return (
-    <View style={styles.media}>
+    <View style={styles.videoLayer} pointerEvents="none">
       <VideoView
         player={player}
         nativeControls={false}
@@ -80,9 +80,8 @@ export function ReelVideo({
         surfaceType="textureView"
         allowsPictureInPicture={false}
         onFirstFrameRender={() => setFrameReady(true)}
-        style={styles.media}
+        style={[styles.mediaPhoto, frameReady ? null : styles.hiddenUntilFrame]}
       />
-      {poster && !frameReady ? <ReelCover uri={poster} /> : null}
     </View>
   );
 }
@@ -100,16 +99,11 @@ function cacheRatio(uri: string, ratio: number) {
 }
 
 export function ReelCover({ uri }: { uri: string }) {
-  const [loaded, setLoaded] = useState<{ uri: string; ratio: number } | null>(
-    null,
-  );
-  const cached = ratioCache.get(uri);
-  const ratio = cached ?? (loaded?.uri === uri ? loaded.ratio : null);
-
+  const ratio = ratioCache.get(uri) ?? null;
   const wide = ratio !== null && ratio > 1;
 
   return (
-    <View style={styles.media} pointerEvents="none">
+    <View style={styles.videoLayer} pointerEvents="none">
       {wide ? (
         <Image
           source={{ uri }}
@@ -131,11 +125,7 @@ export function ReelCover({ uri }: { uri: string }) {
         onLoad={(event) => {
           const nextW = event.source.width;
           const nextH = event.source.height;
-          if (nextW > 0 && nextH > 0) {
-            const next = nextW / nextH;
-            cacheRatio(uri, next);
-            setLoaded({ uri, ratio: next });
-          }
+          if (nextW > 0 && nextH > 0) cacheRatio(uri, nextW / nextH);
         }}
       />
     </View>
@@ -191,14 +181,12 @@ export function ReelSoundtrack({
 }
 
 const styles = StyleSheet.create({
-  media: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#0A0A0F",
-    overflow: "hidden",
+  videoLayer: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "transparent",
+  },
+  hiddenUntilFrame: {
+    opacity: 0,
   },
   mediaPhoto: {
     position: "absolute",

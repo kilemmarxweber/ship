@@ -1,81 +1,95 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-    AndroidAudioTypePresets,
-    AudioDeviceModule,
-    AudioEngineMuteMode,
-    AudioSession,
-    isTrackReference,
-    registerGlobals,
-    RoomContext,
-    useConnectionState,
-    useDataChannel,
-    useLocalParticipant,
-    useRoomContext,
-    useTracks,
-    VideoTrack,
+  AndroidAudioTypePresets,
+  AudioDeviceModule,
+  AudioEngineMuteMode,
+  AudioSession,
+  isTrackReference,
+  registerGlobals,
+  RoomContext,
+  useConnectionState,
+  useDataChannel,
+  useLocalParticipant,
+  useRoomContext,
+  useTracks,
+  VideoTrack,
 } from "@livekit/react-native";
 import {
-    ConnectionQuality,
-    ConnectionState,
-    Room,
-    RoomEvent,
-    Track,
-    VideoPresets,
-    type LocalParticipant,
-    type ScreenShareCaptureOptions,
+  ConnectionQuality,
+  ConnectionState,
+  Room,
+  RoomEvent,
+  Track,
+  VideoQuality,
+  type LocalParticipant,
+  type RemoteTrackPublication,
+  type ScreenShareCaptureOptions,
 } from "livekit-client";
 import {
-    Component,
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-    type ErrorInfo,
-    type ReactNode,
+  buildLiveRoomOptions,
+  captureOptionsForProfile,
+  DEFAULT_LIVE_QUALITY,
+  SCREEN_SHARE_QUALITY,
+  type LiveQualityProfileId,
+} from "@/src/live-quality";
+import {
+  formatLiveQualityStats,
+  startLiveQualityManager,
+  type LiveQualityManager,
+} from "@/src/live-quality-manager";
+import { useMe } from "@/src/me";
+import {
+  Component,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ErrorInfo,
+  type ReactNode,
 } from "react";
 import {
-    AppState,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  AppState,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
 import {
-    LiveScreenShareSheet,
-    type LiveScreenShareMode,
+  LiveScreenShareSheet,
+  type LiveScreenShareMode,
 } from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
 import { AR_FILTERS, isArFilterId } from "@/src/live-ar-filters";
 import {
-    decodeFacePose,
-    encodeFacePose,
-    parseFacePosePayload,
-    type FacePose,
+  decodeFacePose,
+  encodeFacePose,
+  parseFacePosePayload,
+  type FacePose,
 } from "@/src/live-face-tracking";
 import { isLiveLookId } from "@/src/live-look";
 import {
-    demanderMicro,
-    ensureCameraPermission,
-    isLiveRtcAvailable,
-    requestLiveAvPermissions,
-    requestNotificationPermission,
+  demanderMicro,
+  ensureCameraPermission,
+  isLiveRtcAvailable,
+  requestLiveAvPermissions,
+  requestNotificationPermission,
 } from "@/src/live-rtc";
 import {
-    getActiveScreenShareLiveId,
-    setActiveScreenShareLiveId,
+  getActiveScreenShareLiveId,
+  setActiveScreenShareLiveId,
 } from "@/src/live-share-session";
 import {
-    normalizeStageLayout,
-    type LiveStageLayoutId,
+  normalizeStageLayout,
+  type LiveStageLayoutId,
 } from "@/src/live-stage-layout";
 import { showToast } from "@/src/toast";
 import { useLiveFacePose } from "@/src/use-live-face-pose";
@@ -84,12 +98,6 @@ if (isLiveRtcAvailable()) {
   registerGlobals();
 }
 
-const CAMERA = {
-  facingMode: "user" as const,
-  // Portrait HD — couches simulcast pour réseaux faibles.
-  resolution: { width: 720, height: 1280, frameRate: 30 },
-};
-
 const MIC_CAPTURE = {
   echoCancellation: true,
   noiseSuppression: true,
@@ -97,33 +105,42 @@ const MIC_CAPTURE = {
 };
 const MIC_PUBLISH = { stopMicTrackOnMute: true };
 
-const ROOM_OPTIONS = {
-  adaptiveStream: true,
-  dynacast: true,
-  stopLocalTrackOnUnpublish: true,
-  videoCaptureDefaults: CAMERA,
-  audioCaptureDefaults: MIC_CAPTURE,
-  publishDefaults: {
-    simulcast: true,
-    stopMicTrackOnMute: true,
-    degradationPreference: "maintain-framerate" as const,
-    videoEncoding: {
-      maxBitrate: 2_500_000,
-      maxFramerate: 30,
-    },
-    // Couches basses pour spectateurs en 3G / Wi‑Fi saturé.
-    videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h180],
-    screenShareEncoding: { maxBitrate: 2_000_000, maxFramerate: 15 },
-    screenShareSimulcastLayers: [VideoPresets.h360, VideoPresets.h720],
-  },
+const SCREEN_SHARE_RESOLUTION = {
+  width: SCREEN_SHARE_QUALITY.width,
+  height: SCREEN_SHARE_QUALITY.height,
+  frameRate: SCREEN_SHARE_QUALITY.frameRate,
 };
 
-const SCREEN_SHARE_RESOLUTION = {
-  // 720p @ 15 fps — netteté écran sans OOM Android.
-  width: 720,
-  height: 1280,
-  frameRate: 15,
-};
+async function enableLiveCamera(
+  localParticipant: LocalParticipant,
+  on: boolean,
+  profileId: LiveQualityProfileId = DEFAULT_LIVE_QUALITY,
+) {
+  if (!on) {
+    await localParticipant.setCameraEnabled(false);
+    return;
+  }
+  try {
+    await localParticipant.setCameraEnabled(
+      true,
+      captureOptionsForProfile(profileId),
+    );
+  } catch {
+    if (profileId !== "economy") {
+      await localParticipant.setCameraEnabled(
+        true,
+        captureOptionsForProfile("economy"),
+      );
+    } else {
+      throw new Error("camera unavailable");
+    }
+  }
+  const media = localParticipant.getTrackPublication(Track.Source.Camera)?.track
+    ?.mediaStreamTrack;
+  if (media && "contentHint" in media) {
+    media.contentHint = "detail";
+  }
+}
 
 function androidApiLevel() {
   if (Platform.OS !== "android") return 0;
@@ -312,6 +329,8 @@ const ScreenShareCtx = createContext<{
   setMode: () => undefined,
 });
 
+const QualityManagerCtx = createContext<LiveQualityManager | null>(null);
+
 function useLiveRoomOrNull() {
   return useContext(RoomContext) ?? null;
 }
@@ -361,6 +380,41 @@ function LiveLookProvider({
       {children}
     </LookCtx.Provider>
   );
+}
+
+function MainStageVideoQuality({
+  publication,
+}: {
+  publication?: RemoteTrackPublication;
+}) {
+  useEffect(() => {
+    if (!publication || typeof publication.setVideoQuality !== "function") {
+      return;
+    }
+    publication.setVideoQuality(VideoQuality.HIGH);
+  }, [publication]);
+  return null;
+}
+
+function PipVideoQuality({
+  publication,
+  width,
+  height,
+}: {
+  publication?: RemoteTrackPublication;
+  width: number;
+  height: number;
+}) {
+  useEffect(() => {
+    if (!publication || typeof publication.setVideoQuality !== "function") {
+      return;
+    }
+    publication.setVideoQuality(VideoQuality.LOW);
+    if (typeof publication.setVideoDimensions === "function") {
+      publication.setVideoDimensions({ width, height });
+    }
+  }, [height, publication, width]);
+  return null;
 }
 
 function LiveConnectionQualityBadge({ isHost }: { isHost: boolean }) {
@@ -587,7 +641,7 @@ function PublishLocalAv({
     let cancelled = false;
     void (async () => {
       try {
-        await localParticipant.setCameraEnabled(wantCamera, CAMERA);
+        await enableLiveCamera(localParticipant, wantCamera);
       } catch {
         if (!cancelled)
           showToast("Caméra indisponible sur cet appareil", "error");
@@ -606,11 +660,12 @@ function PublishLocalAv({
   return null;
 }
 
-function SubscribeRemoteVideo() {
+function SubscribeRemoteVideo({ hostUserId }: { hostUserId?: string }) {
   const room = useRoomContext();
   useEffect(() => {
     const pull = () => {
       for (const participant of room.remoteParticipants.values()) {
+        const isMainStage = !hostUserId || participant.identity === hostUserId;
         for (const pub of participant.trackPublications.values()) {
           const video =
             pub.source === Track.Source.Camera ||
@@ -622,6 +677,24 @@ function SubscribeRemoteVideo() {
             pub.kind === Track.Kind.Audio;
           if (!video && !audio) continue;
           if (!pub.isSubscribed) pub.setSubscribed(true);
+          // PiP guests : couche basse ; scène host / screen : haute.
+          if (
+            video &&
+            pub.source === Track.Source.Camera &&
+            typeof (pub as RemoteTrackPublication).setVideoQuality ===
+              "function"
+          ) {
+            (pub as RemoteTrackPublication).setVideoQuality(
+              isMainStage ? VideoQuality.HIGH : VideoQuality.LOW,
+            );
+          } else if (
+            video &&
+            pub.source === Track.Source.ScreenShare &&
+            typeof (pub as RemoteTrackPublication).setVideoQuality ===
+              "function"
+          ) {
+            (pub as RemoteTrackPublication).setVideoQuality(VideoQuality.HIGH);
+          }
         }
       }
     };
@@ -634,8 +707,77 @@ function SubscribeRemoteVideo() {
       room.off(RoomEvent.ParticipantConnected, pull);
       room.off(RoomEvent.TrackPublished, pull);
     };
-  }, [room]);
+  }, [hostUserId, room]);
   return null;
+}
+
+function LiveQualityHostController({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: ReactNode;
+}) {
+  const room = useRoomContext();
+  const connection = useConnectionState();
+  const [manager, setManager] = useState<LiveQualityManager | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (!enabled || connection !== ConnectionState.Connected) {
+      queueMicrotask(() => {
+        if (alive) setManager(null);
+      });
+      return () => {
+        alive = false;
+      };
+    }
+
+    const next = startLiveQualityManager(room, {
+      enabled: true,
+      initialProfile: DEFAULT_LIVE_QUALITY,
+    });
+    queueMicrotask(() => {
+      if (alive) setManager(next);
+    });
+    return () => {
+      alive = false;
+      next.stop();
+      queueMicrotask(() => {
+        setManager((current) => (current === next ? null : current));
+      });
+    };
+  }, [connection, enabled, room]);
+
+  return (
+    <QualityManagerCtx.Provider value={manager}>
+      {children}
+    </QualityManagerCtx.Provider>
+  );
+}
+
+function LiveQualityStatsOverlay({ isHost }: { isHost: boolean }) {
+  const manager = useContext(QualityManagerCtx);
+  const { data: me } = useMe();
+  const isAdmin = Boolean(me?.roles?.includes("ADMIN"));
+  const [, bump] = useState(0);
+
+  useEffect(() => {
+    if (!manager || !isHost) return;
+    return manager.subscribe(() => bump((n) => n + 1));
+  }, [isHost, manager]);
+
+  const show = isHost && Boolean(manager) && (__DEV__ || isAdmin);
+  if (!show || !manager) return null;
+
+  return (
+    <View style={styles.qualityStats} pointerEvents="none">
+      <Text style={styles.qualityStatsText}>
+        {formatLiveQualityStats(manager.getStats())}
+      </Text>
+    </View>
+  );
 }
 
 export function LiveKitRoomGate({
@@ -643,6 +785,7 @@ export function LiveKitRoomGate({
   token,
   canPublish,
   isHost = canPublish,
+  hostUserId,
   connect,
   paused,
   cameraOn = true,
@@ -653,6 +796,7 @@ export function LiveKitRoomGate({
   token: string;
   canPublish: boolean;
   isHost?: boolean;
+  hostUserId?: string;
   connect: boolean;
   paused?: boolean;
   cameraOn?: boolean;
@@ -664,7 +808,9 @@ export function LiveKitRoomGate({
     camera: !canPublish,
     microphone: !canPublish,
   });
-  const [room] = useState(() => new Room(ROOM_OPTIONS));
+  const [room] = useState(
+    () => new Room(buildLiveRoomOptions(DEFAULT_LIVE_QUALITY)),
+  );
   const avApi = useMemo(
     () => ({
       setCamOk: (ok: boolean) => setAv((cur) => ({ ...cur, camera: ok })),
@@ -787,13 +933,15 @@ export function LiveKitRoomGate({
       <ScreenShareCtx.Provider value={screenShareApi}>
         <RoomContext.Provider value={room}>
           <LiveLookProvider isHost={isHost}>
-            <PublishLocalAv
-              enabled={canPublish && audioOn}
-              cameraOn={cameraOn && av.camera}
-              micOn={micOn && av.microphone}
-            />
-            <SubscribeRemoteVideo />
-            {children}
+            <LiveQualityHostController enabled={canPublish && isHost}>
+              <PublishLocalAv
+                enabled={canPublish && audioOn}
+                cameraOn={cameraOn && av.camera}
+                micOn={micOn && av.microphone}
+              />
+              <SubscribeRemoteVideo hostUserId={hostUserId} />
+              {children}
+            </LiveQualityHostController>
           </LiveLookProvider>
         </RoomContext.Provider>
       </ScreenShareCtx.Provider>
@@ -936,6 +1084,13 @@ function LiveKitVideoInner({
           </View>
         ) : hasVideo && isTrackReference(shown) ? (
           <TrackSafe fallback={null}>
+            <MainStageVideoQuality
+              publication={
+                !shown.participant.isLocal
+                  ? (shown.publication as RemoteTrackPublication)
+                  : undefined
+              }
+            />
             <VideoTrack
               trackRef={shown}
               style={styles.fill}
@@ -960,6 +1115,7 @@ function LiveKitVideoInner({
           </View>
         ) : null}
         <LiveConnectionQualityBadge isHost={isHost} />
+        <LiveQualityStatsOverlay isHost={isHost} />
       </View>
 
       {stageSlots.length > 0 ? (
@@ -991,6 +1147,15 @@ function LiveKitVideoInner({
                 key={row.participant.sid || row.participant.identity}
                 style={[styles.guestPip, pipPos]}
               >
+                <PipVideoQuality
+                  publication={
+                    !row.participant.isLocal
+                      ? (row.publication as RemoteTrackPublication)
+                      : undefined
+                  }
+                  width={pipW}
+                  height={pipH}
+                />
                 <TrackSafe fallback={null}>
                   <VideoTrack
                     trackRef={row}
@@ -1349,7 +1514,7 @@ function LiveHostAvButtonsInner({
               return;
             }
             try {
-              await localParticipant.setCameraEnabled(next, CAMERA);
+              await enableLiveCamera(localParticipant, next);
               if (next) av.setCamOk(true);
               onCamera(next);
             } catch {
@@ -1446,6 +1611,23 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "800",
+  },
+  qualityStats: {
+    position: "absolute",
+    bottom: 120,
+    left: 10,
+    right: 10,
+    zIndex: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  qualityStatsText: {
+    color: "#B8F5D4",
+    fontSize: 10,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
   },
   guestRail: {
     ...StyleSheet.absoluteFill,

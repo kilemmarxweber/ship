@@ -1198,6 +1198,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
         token={sfu.token}
         canPublish={canPublish}
         isHost={isHost}
+        hostUserId={live.user?.id}
         connect={!ended}
         paused={paused}
         cameraOn={live.cameraOn !== false}

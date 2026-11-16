@@ -1,27 +1,27 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/Toast";
 import { authRequest } from "@/src/api";
 import {
-    countries,
-    defaultCountry,
-    digitsOnly,
-    type CountryDial,
+  countries,
+  defaultCountry,
+  digitsOnly,
+  type CountryDial,
 } from "@/src/countries";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
@@ -54,6 +54,9 @@ function AuthSheetContent({
   const insets = useSafeAreaInsets();
   const c = useColors();
   const [mode, setMode] = useState<"in" | "up">("in");
+  const [step, setStep] = useState<"auth" | "forgot" | "code">("auth");
+  const [code, setCode] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [via, setVia] = useState<"phone" | "email">("phone");
   const [country, setCountry] = useState(defaultCountry);
   const [picking, setPicking] = useState(false);
@@ -96,6 +99,95 @@ function AuthSheetContent({
     setPhone(digitsOnly(value).slice(0, country.max));
   }
 
+  function identifier() {
+    if (via === "email") return email.trim();
+    return `+${country.dial}${phone}`;
+  }
+
+  function identifierOk() {
+    if (via === "phone") {
+      if (phone.length < country.min) {
+        showToast(
+          `Le numéro ${country.name} doit avoir ${country.min} chiffre${country.min > 1 ? "s" : ""}.`,
+          "error",
+        );
+        return false;
+      }
+      return true;
+    }
+    if (!email.includes("@")) {
+      showToast("Entre un e-mail valide.", "error");
+      return false;
+    }
+    return true;
+  }
+
+  async function requestReset() {
+    if (!identifierOk()) return;
+    setPending(true);
+    try {
+      const result = await authRequest("/api/auth/password-reset/request", {
+        identifier: identifier(),
+      });
+      const minutes = Number(result.data.expiresInMinutes);
+      showToast(
+        Number.isFinite(minutes) && minutes > 0
+          ? `Si un compte existe, un code a été envoyé. Il expire dans ${minutes} minutes.`
+          : "Si un compte existe, un code a été envoyé.",
+        "success",
+      );
+      setStep("code");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Envoi impossible",
+        "error",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function confirmReset() {
+    if (!identifierOk()) return;
+    if (!/^\d{6}$/.test(code)) {
+      showToast("Entre le code à 6 chiffres.", "error");
+      return;
+    }
+    if (password.length < 8) {
+      showToast(
+        "Le mot de passe doit contenir au moins 8 caractères.",
+        "error",
+      );
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("Les deux mots de passe ne correspondent pas.", "error");
+      return;
+    }
+    setPending(true);
+    try {
+      await authRequest("/api/auth/password-reset/confirm", {
+        identifier: identifier(),
+        code,
+        password,
+        confirmPassword,
+      });
+      setPassword("");
+      setConfirmPassword("");
+      setCode("");
+      setStep("auth");
+      setMode("in");
+      showToast("Mot de passe mis à jour. Connecte-toi.", "success");
+    } catch (cause) {
+      showToast(
+        cause instanceof Error ? cause.message : "Réinitialisation impossible",
+        "error",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
   function pickCountry(next: CountryDial) {
     setCountry(next);
     setPhone((current) => digitsOnly(current).slice(0, next.max));
@@ -104,18 +196,7 @@ function AuthSheetContent({
   }
 
   async function submit() {
-    if (via === "phone") {
-      if (phone.length < country.min) {
-        showToast(
-          `Le numéro ${country.name} doit avoir ${country.min} chiffre${country.min > 1 ? "s" : ""}.`,
-          "error",
-        );
-        return;
-      }
-    } else if (!email.includes("@")) {
-      showToast("Entre un e-mail valide.", "error");
-      return;
-    }
+    if (!identifierOk()) return;
     if (password.length < 6) {
       showToast(
         "Le mot de passe doit contenir au moins 6 caractères.",
@@ -183,7 +264,13 @@ function AuthSheetContent({
                 <Ionicons name="bag-handle" size={18} color="#04281c" />
               </View>
               <Text style={[styles.title, { color: c.text }]}>
-                {mode === "in" ? "Se connecter" : "Créer un compte"}
+                {step === "forgot"
+                  ? "Mot de passe oublié"
+                  : step === "code"
+                    ? "Nouveau mot de passe"
+                    : mode === "in"
+                      ? "Se connecter"
+                      : "Créer un compte"}
               </Text>
             </View>
             <Pressable onPress={closeAuth} hitSlop={12} style={styles.close}>
@@ -192,9 +279,13 @@ function AuthSheetContent({
           </View>
           <View style={[styles.body, { marginBottom: lift }]}>
             <Text style={[styles.hint, { color: c.textMuted }]}>
-              {via === "phone"
-                ? "Numéro avec l'indicatif du pays"
-                : "Connexion avec ton e-mail"}
+              {step === "forgot"
+                ? "Un code part seulement si un compte existe."
+                : step === "code"
+                  ? "Entre le code reçu, puis choisis un mot de passe."
+                  : via === "phone"
+                    ? "Numéro avec l'indicatif du pays"
+                    : "Connexion avec ton e-mail"}
             </Text>
 
             <View style={styles.tabs}>
@@ -317,7 +408,7 @@ function AuthSheetContent({
                   </Text>
                 ) : null}
 
-                {mode === "up" ? (
+                {step === "auth" && mode === "up" ? (
                   <View style={styles.field}>
                     <Ionicons name="person-outline" size={18} color="#8d8d98" />
                     <TextInput
@@ -330,35 +421,82 @@ function AuthSheetContent({
                   </View>
                 ) : null}
 
-                <View style={styles.field}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={18}
-                    color="#8d8d98"
-                  />
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={hidePass}
-                    placeholder="Mot de passe"
-                    placeholderTextColor="rgba(255,255,255,0.35)"
-                    style={styles.fieldInput}
-                  />
-                  <Pressable
-                    onPress={() => setHidePass((value) => !value)}
-                    hitSlop={8}
-                  >
+                {step === "code" ? (
+                  <View style={styles.field}>
+                    <Ionicons name="key-outline" size={18} color="#8d8d98" />
+                    <TextInput
+                      value={code}
+                      onChangeText={(value) =>
+                        setCode(value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      keyboardType="number-pad"
+                      placeholder="Code à 6 chiffres"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      style={styles.fieldInput}
+                      maxLength={6}
+                    />
+                  </View>
+                ) : null}
+
+                {step === "forgot" ? null : (
+                  <View style={styles.field}>
                     <Ionicons
-                      name={hidePass ? "eye-off-outline" : "eye-outline"}
-                      size={20}
+                      name="lock-closed-outline"
+                      size={18}
                       color="#8d8d98"
                     />
-                  </Pressable>
-                </View>
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={hidePass}
+                      placeholder={
+                        step === "code"
+                          ? "Nouveau mot de passe"
+                          : "Mot de passe"
+                      }
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      style={styles.fieldInput}
+                    />
+                    <Pressable
+                      onPress={() => setHidePass((value) => !value)}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name={hidePass ? "eye-off-outline" : "eye-outline"}
+                        size={20}
+                        color="#8d8d98"
+                      />
+                    </Pressable>
+                  </View>
+                )}
+
+                {step === "code" ? (
+                  <View style={styles.field}>
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={18}
+                      color="#8d8d98"
+                    />
+                    <TextInput
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={hidePass}
+                      placeholder="Confirmer le mot de passe"
+                      placeholderTextColor="rgba(255,255,255,0.35)"
+                      style={styles.fieldInput}
+                    />
+                  </View>
+                ) : null}
 
                 <Pressable
                   style={styles.primary}
-                  onPress={() => void submit()}
+                  onPress={() =>
+                    void (step === "forgot"
+                      ? requestReset()
+                      : step === "code"
+                        ? confirmReset()
+                        : submit())
+                  }
                   disabled={pending}
                 >
                   {pending ? (
@@ -367,27 +505,61 @@ function AuthSheetContent({
                     <>
                       <Ionicons
                         name={
-                          mode === "in"
-                            ? "log-in-outline"
-                            : "person-add-outline"
+                          step === "auth" && mode === "up"
+                            ? "person-add-outline"
+                            : step === "auth"
+                              ? "log-in-outline"
+                              : "key-outline"
                         }
                         size={20}
                         color="#04281c"
                       />
                       <Text style={styles.primaryText}>
-                        {mode === "in" ? "Se connecter" : "Créer le compte"}
+                        {step === "forgot"
+                          ? "Envoyer le code"
+                          : step === "code"
+                            ? "Enregistrer"
+                            : mode === "in"
+                              ? "Se connecter"
+                              : "Créer le compte"}
                       </Text>
                     </>
                   )}
                 </Pressable>
+                {step === "auth" && mode === "in" ? (
+                  <Pressable
+                    onPress={() => {
+                      setStep("forgot");
+                      hideToast();
+                    }}
+                    style={styles.linkHit}
+                  >
+                    <Text style={[styles.switch, { color: c.text }]}>
+                      Mot de passe oublié
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
                   onPress={() => {
+                    if (step !== "auth") {
+                      setStep("auth");
+                      setCode("");
+                      setPassword("");
+                      setConfirmPassword("");
+                      hideToast();
+                      return;
+                    }
                     setMode(mode === "in" ? "up" : "in");
                     hideToast();
                   }}
+                  style={styles.linkHit}
                 >
                   <Text style={styles.switch}>
-                    {mode === "in" ? "Créer un compte" : "J'ai déjà un compte"}
+                    {step !== "auth"
+                      ? "Retour à la connexion"
+                      : mode === "in"
+                        ? "Créer un compte"
+                        : "J'ai déjà un compte"}
                   </Text>
                 </Pressable>
               </>
@@ -499,6 +671,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   primaryText: { color: "#04281c", fontWeight: "800", fontSize: 16 },
+  linkHit: { minHeight: 44, justifyContent: "center" },
   switch: {
     textAlign: "center",
     color: colors.emerald,

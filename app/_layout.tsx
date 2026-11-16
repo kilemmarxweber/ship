@@ -17,12 +17,15 @@ import { hydrateOffline } from "@/src/offline/hydrate";
 import { watchNetwork } from "@/src/offline/network";
 import { injectSnapshots } from "@/src/offline/persist";
 import { startSilentSync } from "@/src/offline/sync";
+import { initSentry, sentryWrap } from "@/src/monitoring/sentry";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
 import { paletteOf } from "@/src/theme";
 import { watchStoreUpdates } from "@/src/updates";
 
 export { ErrorBoundary } from "expo-router";
+
+initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -55,7 +58,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout() {
+function RootLayout() {
   const hydrate = useSession((state) => state.hydrate);
   const token = useSession((state) => state.token);
   const refreshCart = useCart((state) => state.refresh);
@@ -154,3 +157,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default sentryWrap(RootLayout);

@@ -6,6 +6,8 @@ export function LiveKitGate({
   url?: string;
   token?: string;
   canPublish?: boolean;
+  isHost?: boolean;
+  hostUserId?: string;
   connect?: boolean;
   paused?: boolean;
   cameraOn?: boolean;

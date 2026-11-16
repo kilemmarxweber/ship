@@ -45,7 +45,31 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.kilemmarxweber.ShipShop"
+      "package": "com.kilemmarxweber.ShipShop",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "shipshop.klambocore.com",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "shipshop.klambocore.com",
+              "pathPrefix": "/shop"
+            },
+            {
+              "scheme": "https",
+              "host": "shipshop.klambocore.com",
+              "pathPrefix": "/live"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -116,6 +140,7 @@
     "extra": {
       "apiUrl": "https://shipshop.klambocore.com",
       "router": {
+        "origin": "https://shipshop.klambocore.com",
         "asyncRoutes": {
           "web": true
         }

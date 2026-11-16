@@ -7,6 +7,7 @@ function LiveKitGateInner({
   token,
   canPublish,
   isHost,
+  hostUserId,
   connect,
   paused,
   cameraOn,
@@ -17,6 +18,7 @@ function LiveKitGateInner({
   token: string;
   canPublish: boolean;
   isHost?: boolean;
+  hostUserId?: string;
   connect: boolean;
   paused?: boolean;
   cameraOn?: boolean;
@@ -31,6 +33,7 @@ function LiveKitGateInner({
       token={token}
       canPublish={canPublish}
       isHost={isHost}
+      hostUserId={hostUserId}
       connect={connect}
       paused={paused}
       cameraOn={cameraOn}

@@ -1,15 +1,16 @@
 import {
-  onlineManager,
-  QueryClient,
-  QueryClientProvider,
+    onlineManager,
+    QueryClient,
+    QueryClientProvider,
 } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
+import { LaunchSplash } from "@/components/LaunchSplash";
 import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
@@ -28,6 +29,9 @@ export { ErrorBoundary } from "expo-router";
 initSentry();
 
 SplashScreen.preventAutoHideAsync();
+
+/** Temps mini pour lire « from Klambocore » après le paint React. */
+const BRAND_HOLD_MS = 900;
 
 onlineManager.setOnline(false);
 onlineManager.setEventListener((setOnline) => {
@@ -66,6 +70,28 @@ function RootLayout() {
   const applyRemote = usePrefs((state) => state.applyRemote);
   const theme = usePrefs((state) => state.theme);
   const palette = paletteOf(theme);
+  const [showLaunch, setShowLaunch] = useState(true);
+  const bootReady = useRef(false);
+  const splashPainted = useRef(false);
+  const brandShownAt = useRef(0);
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const tryDismissLaunch = useCallback(() => {
+    if (!bootReady.current || !splashPainted.current) return;
+    const elapsed = Date.now() - brandShownAt.current;
+    const wait = Math.max(0, BRAND_HOLD_MS - elapsed);
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    dismissTimer.current = setTimeout(() => {
+      setShowLaunch(false);
+    }, wait);
+  }, []);
+
+  const onLaunchPaint = useCallback(() => {
+    splashPainted.current = true;
+    brandShownAt.current = Date.now();
+    void SplashScreen.hideAsync().catch(() => undefined);
+    tryDismissLaunch();
+  }, [tryDismissLaunch]);
 
   useEffect(() => {
     let stopSync: (() => void) | undefined;
@@ -73,11 +99,24 @@ function RootLayout() {
       .then(() => hydrateOffline(queryClient))
       .catch(() => undefined)
       .finally(() => {
-        void SplashScreen.hideAsync();
+        bootReady.current = true;
         stopSync = startSilentSync(queryClient);
+        tryDismissLaunch();
       });
-    return () => stopSync?.();
-  }, [hydrate, hydratePrefs]);
+    // Filet : si onPaint rate, on retire quand même le splash natif.
+    const safety = setTimeout(() => {
+      void SplashScreen.hideAsync().catch(() => undefined);
+      bootReady.current = true;
+      splashPainted.current = true;
+      if (!brandShownAt.current) brandShownAt.current = Date.now();
+      tryDismissLaunch();
+    }, 4000);
+    return () => {
+      stopSync?.();
+      clearTimeout(safety);
+      if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    };
+  }, [hydrate, hydratePrefs, tryDismissLaunch]);
 
   useEffect(() => {
     injectSnapshots(queryClient, token);
@@ -153,6 +192,7 @@ function RootLayout() {
         </Stack>
         <AuthSheet />
         <ToastHost />
+        {showLaunch ? <LaunchSplash onPaint={onLaunchPaint} /> : null}
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

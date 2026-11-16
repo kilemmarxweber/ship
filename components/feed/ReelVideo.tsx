@@ -2,7 +2,7 @@ import { useEventListener } from "expo";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
-import { Image as RNImage, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 function bindPlayer(
   player: ReturnType<typeof useVideoPlayer>,
@@ -50,6 +50,11 @@ export function ReelVideo({
     next.volume = 1;
     next.audioMixingMode = "mixWithOthers";
     next.muted = muted;
+    next.bufferOptions = {
+      preferredForwardBufferDuration: 2,
+      minBufferForPlayback: 1,
+      maxBufferBytes: 4 * 1024 * 1024,
+    };
     if (playing) {
       next.replay();
       void next.play();
@@ -101,24 +106,6 @@ export function ReelCover({ uri }: { uri: string }) {
   const cached = ratioCache.get(uri);
   const ratio = cached ?? (loaded?.uri === uri ? loaded.ratio : null);
 
-  useEffect(() => {
-    if (ratioCache.has(uri)) return;
-    let live = true;
-    RNImage.getSize(
-      uri,
-      (nextW, nextH) => {
-        if (!live || nextW <= 0 || nextH <= 0) return;
-        const next = nextW / nextH;
-        cacheRatio(uri, next);
-        setLoaded({ uri, ratio: next });
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [uri]);
-
   const wide = ratio !== null && ratio > 1;
 
   return (
@@ -130,6 +117,7 @@ export function ReelCover({ uri }: { uri: string }) {
           contentFit="cover"
           contentPosition="center"
           blurRadius={36}
+          cachePolicy="memory-disk"
           recyclingKey={`${uri}-wide-bg`}
         />
       ) : null}
@@ -138,6 +126,7 @@ export function ReelCover({ uri }: { uri: string }) {
         style={styles.mediaPhoto}
         contentFit={wide ? "contain" : "cover"}
         contentPosition={wide ? "center" : "top"}
+        cachePolicy="memory-disk"
         recyclingKey={uri}
         onLoad={(event) => {
           const nextW = event.source.width;

@@ -58,7 +58,6 @@ import { isSellerOfShop, useMe } from "@/src/me";
 import { coverOf, mediaList, playableMediaUrl } from "@/src/media";
 import { kvGet, kvSet } from "@/src/offline/db";
 import { feedQueryKey } from "@/src/offline/keys";
-import { cacheMediaNow } from "@/src/offline/media-cache";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import {
@@ -154,6 +153,8 @@ export function FeedScreen() {
   const [tab, setTab] = useState<FeedTab>(readLastTab);
   const online = useOnline();
   const [activeState, setActiveState] = useState({ rowCount: 0, index: 0 });
+  const [windowIndex, setWindowIndex] = useState(0);
+  const windowRef = useRef(0);
   const listRef = useRef<FlashListRef<MixedRow<Product>>>(null);
   const weaveMemory = useMemo(() => emptyWeaveMemory(), []);
   const fetchingNextPage = useRef(false);
@@ -261,14 +262,12 @@ export function FeedScreen() {
       "feed",
     );
   }, [products, tab, surface.data?.challenges, me.data?.id, weaveMemory]);
-  const active =
-    activeState.rowCount === feedRows.length
-      ? Math.max(0, Math.min(activeState.index, feedRows.length - 1))
-      : 0;
+  const active = Math.min(activeState.index, Math.max(0, feedRows.length - 1));
   const setActive = useCallback(
     (next: number | ((current: number) => number)) => {
       setActiveState((current) => {
-        const index = current.rowCount === feedRows.length ? current.index : 0;
+        // Une page de plus (en ligne) ne doit pas ramener le fil au 1er produit.
+        const index = Math.min(current.index, Math.max(0, feedRows.length - 1));
         return {
           rowCount: feedRows.length,
           index: typeof next === "function" ? next(index) : next,
@@ -305,48 +304,63 @@ export function FeedScreen() {
     });
   }, [active, feedRows, tab]);
 
-  // Prefetch local SQLite media for the visible reel (video + soundtrack).
+  // Affiche du produit suivant seulement, après le geste, pour ne pas
+  // bloquer l'image pendant que le doigt est encore sur l'écran.
   useEffect(() => {
-    const row = feedRows[active];
-    if (row?.kind !== "item") return;
-    const item = row.item;
-    for (const raw of item.images ?? []) {
-      const remote = mediaUrl(raw);
-      if (
-        remote &&
-        !remote.startsWith("file://") &&
-        !remote.startsWith("content://") &&
-        isVideoUrl(remote)
-      ) {
-        void cacheMediaNow(remote, "video");
-      }
+    const posters: string[] = [];
+    const last = Math.min(feedRows.length - 1, active + 1);
+    for (let index = active; index <= last; index += 1) {
+      const row = feedRows[index];
+      if (row?.kind !== "item") continue;
+      const cover = coverOf(row.item.images);
+      if (!cover || isVideoUrl(cover)) continue;
+      posters.push(cover);
     }
-    const remoteAudio = mediaUrl(item.soundtrack?.audioUrl);
-    if (
-      remoteAudio &&
-      !remoteAudio.startsWith("file://") &&
-      !remoteAudio.startsWith("content://")
-    ) {
-      void cacheMediaNow(remoteAudio, "audio");
-    }
+    if (!posters.length) return;
+    const timer = setTimeout(() => {
+      void Image.prefetch(posters, { cachePolicy: "memory-disk" });
+    }, 280);
+    return () => clearTimeout(timer);
   }, [active, feedRows]);
 
   function selectTab(next: FeedTab) {
     setTab(next);
     setActive(0);
+    windowRef.current = 0;
+    setWindowIndex(0);
     setPaused(false);
     setMuted(false);
   }
+
+  const noteWindow = useCallback(
+    (offsetY: number) => {
+      if (!isReelTab || height <= 0) return;
+      const last = Math.max(0, feedRows.length - 1);
+      const next = Math.max(0, Math.min(last, Math.round(offsetY / height)));
+      if (windowRef.current === next) return;
+      windowRef.current = next;
+      setWindowIndex(next);
+    },
+    [feedRows.length, height, isReelTab],
+  );
+
+  const onFeedScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      noteWindow(event.nativeEvent.contentOffset.y);
+    },
+    [noteWindow],
+  );
 
   const settleCard = useCallback(
     (offsetY: number) => {
       if (!isReelTab || height <= 0) return;
       const last = Math.max(0, feedRows.length - 1);
       const next = Math.max(0, Math.min(last, Math.round(offsetY / height)));
+      noteWindow(offsetY);
       setActive((current) => (current === next ? current : next));
       setPaused(false);
     },
-    [height, isReelTab, feedRows.length, setActive],
+    [height, isReelTab, feedRows.length, noteWindow, setActive],
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -386,7 +400,7 @@ export function FeedScreen() {
     if (
       isReelTab &&
       remainingProductsByRow[active] !== undefined &&
-      remainingProductsByRow[active] <= 2
+      remainingProductsByRow[active] <= 6
     ) {
       fetchNextPageSilently();
     }
@@ -395,6 +409,7 @@ export function FeedScreen() {
   const feedExtraData = useMemo(
     () => ({
       active,
+      windowIndex,
       paused,
       muted,
       focused,
@@ -408,6 +423,7 @@ export function FeedScreen() {
     }),
     [
       active,
+      windowIndex,
       busyChallengeId,
       expandedCaptionId,
       focused,
@@ -797,13 +813,15 @@ export function FeedScreen() {
             style={{ height, width }}
             data={feedRows}
             pagingEnabled={isReelTab}
-            snapToInterval={isReelTab ? height : undefined}
-            snapToAlignment="start"
+            drawDistance={isReelTab ? Math.round(height * 0.6) : 280}
+            maxItemsInRecyclePool={0}
             decelerationRate={isReelTab ? "fast" : "normal"}
             disableIntervalMomentum={isReelTab}
             bounces={false}
             overScrollMode="never"
             showsVerticalScrollIndicator={false}
+            scrollEventThrottle={32}
+            onScroll={onFeedScroll}
             keyExtractor={(item) => item.key}
             getItemType={(item) => item.kind}
             onMomentumScrollEnd={onMomentumScrollEnd}
@@ -837,6 +855,7 @@ export function FeedScreen() {
                 );
               }
               const item = row.item;
+              const near = Math.abs(index - windowIndex) <= 1;
               const live = matchOpenLive(lives.data?.lives, {
                 productId: item.id,
                 ownerUserId: item.shop.ownerUserId,
@@ -869,19 +888,11 @@ export function FeedScreen() {
               const followed = Boolean(item.shop.followedByMe);
               return (
                 <View style={[styles.page, { height, width }]}>
-                  {/* Cover stays mounted; gallery never remounts on scroll (no on/off swap). */}
-                  {cover && !isVideoUrl(cover) ? (
-                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                      <ReelCover uri={cover} />
-                    </View>
-                  ) : null}
-                  {slides.length > 0 ? (
+                  {index === windowIndex && slides.length > 0 ? (
                     <ReelGallery
                       urls={slides}
                       playing={
-                        index === active &&
-                        !paused &&
-                        (focused || commentProduct?.id === item.id)
+                        !paused && (focused || commentProduct?.id === item.id)
                       }
                       muted={muted || Boolean(item.soundtrack?.audioUrl)}
                       width={width}
@@ -891,13 +902,20 @@ export function FeedScreen() {
                       restartToken={item.id}
                       poster={cover}
                     />
+                  ) : near && cover && !isVideoUrl(cover) ? (
+                    <Pressable
+                      style={StyleSheet.absoluteFill}
+                      onPress={() => onMediaPress(item)}
+                    >
+                      <ReelCover uri={cover} />
+                    </Pressable>
                   ) : (
                     <Pressable
                       style={StyleSheet.absoluteFill}
                       onPress={() => onMediaPress(item)}
                     />
                   )}
-                  {item.soundtrack?.audioUrl && index === active ? (
+                  {item.soundtrack?.audioUrl && index === windowIndex ? (
                     <ReelSoundtrack
                       uri={
                         playableMediaUrl(item.soundtrack.audioUrl) ??

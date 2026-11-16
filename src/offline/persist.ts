@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 
-import { remoteMediaUrl } from "@/src/api";
+import { isVideoUrl, remoteMediaUrl } from "@/src/api";
 import { parseCart, type CartPayload } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import type { InboxSnapshot } from "@/src/inbox";
@@ -29,7 +29,6 @@ import {
     inboxSnapKey,
     threadSnapKey,
 } from "@/src/offline/keys";
-import { enqueueMediaCache } from "@/src/offline/media-cache";
 import type { CommentItem, FeedPage } from "@/src/types";
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -52,24 +51,16 @@ function later(key: string, write: () => void) {
 
 function prefetchFeedAvMedia(products: CompactProduct[]) {
   try {
+    // Hors ligne il n'y a rien à charger, le scroll tient.
+    // En ligne, précharger toutes les vidéos du fil sature le décodeur vers le 5e produit.
     const posters = products
+      .slice(-3)
       .map((row) => remoteMediaUrl(row.poster))
-      .filter((url): url is string => Boolean(url));
-    if (posters.length) void Image.prefetch(posters);
-
-    // Absolute URLs only — media_cache keys must match playableMediaUrl lookups.
-    enqueueMediaCache(
-      products.flatMap((row) => {
-        const video = remoteMediaUrl(row.videoUrl);
-        const audio = remoteMediaUrl(row.audioUrl);
-        return [
-          video ? { url: video, kind: "video" as const } : null,
-          audio ? { url: audio, kind: "audio" as const } : null,
-        ].filter((item): item is { url: string; kind: "video" | "audio" } =>
-          Boolean(item?.url),
-        );
-      }),
-    );
+      .filter((url): url is string => Boolean(url) && !isVideoUrl(url))
+      .slice(-2);
+    if (posters.length) {
+      void Image.prefetch(posters, { cachePolicy: "memory-disk" });
+    }
   } catch {
     /* never crash the UI while warming offline media */
   }

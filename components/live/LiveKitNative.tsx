@@ -104,7 +104,7 @@ import {
 } from "@/src/use-live-face-pose";
 
 if (isLiveRtcAvailable()) {
-  registerGlobals();
+registerGlobals();
 }
 
 const MIC_CAPTURE = {
@@ -868,21 +868,21 @@ export function LiveKitRoomGate({
             notifications: true,
           });
       try {
-        await AudioSession.configureAudio({
-          android: {
+      await AudioSession.configureAudio({
+        android: {
             preferredOutputList: [
               "speaker",
               "bluetooth",
               "headset",
               "earpiece",
             ],
-            audioTypeOptions: canPublish
-              ? AndroidAudioTypePresets.communication
-              : AndroidAudioTypePresets.media,
-          },
-          ios: { defaultOutput: "speaker" },
-        });
-        await AudioSession.startAudioSession();
+          audioTypeOptions: canPublish
+            ? AndroidAudioTypePresets.communication
+            : AndroidAudioTypePresets.media,
+        },
+        ios: { defaultOutput: "speaker" },
+      });
+      await AudioSession.startAudioSession();
         const access = await permissionTask;
         if (stop) return;
         if (canPublish) {
@@ -956,13 +956,13 @@ export function LiveKitRoomGate({
         <RoomContext.Provider value={room}>
           <LiveLookProvider isHost={isHost}>
             <LiveQualityHostController enabled={canPublish && isHost}>
-              <PublishLocalAv
+      <PublishLocalAv
                 enabled={canPublish && audioOn}
                 cameraOn={cameraOn && av.camera}
                 micOn={micOn && av.microphone}
               />
               <SubscribeRemoteVideo hostUserId={hostUserId} />
-              {children}
+      {children}
             </LiveQualityHostController>
           </LiveLookProvider>
         </RoomContext.Provider>
@@ -1033,8 +1033,8 @@ function LiveKitVideoInner({
   );
   const hostScreen =
     screenTracks.find(
-      (row) =>
-        isTrackReference(row) &&
+    (row) =>
+      isTrackReference(row) &&
         (isHost
           ? row.participant.isLocal
           : !hostUserId || row.participant.identity === hostUserId),
@@ -1044,7 +1044,7 @@ function LiveKitVideoInner({
     ) ??
     (isHost
       ? screenTracks.find(
-          (row) => isTrackReference(row) && row.participant.isLocal,
+    (row) => isTrackReference(row) && row.participant.isLocal,
         )
       : undefined);
   const sharing = isTrackReference(hostScreen);
@@ -1113,8 +1113,8 @@ function LiveKitVideoInner({
                   : undefined
               }
             />
-            <VideoTrack
-              trackRef={shown}
+        <VideoTrack
+          trackRef={shown}
               style={styles.fill}
               objectFit={sharing ? "contain" : "cover"}
               zOrder={0}
@@ -1181,15 +1181,15 @@ function LiveKitVideoInner({
                 <TrackSafe fallback={null}>
                   <VideoTrack
                     trackRef={row}
-                    style={styles.fill}
-                    objectFit="cover"
+          style={styles.fill}
+          objectFit="cover"
                     zOrder={3 + index}
                     mirror={row.participant.isLocal}
-                  />
+        />
                 </TrackSafe>
                 {hasVideo ? (
                   <LiveFilterOverlay look={look} intensity="pip" />
-                ) : null}
+      ) : null}
               </View>
             );
           })}
@@ -1538,7 +1538,7 @@ function LiveHostAvButtonsInner({
             try {
               await enableLiveCamera(localParticipant, next);
               if (next) av.setCamOk(true);
-              onCamera(next);
+          onCamera(next);
             } catch {
               showToast("Caméra indisponible sur cet appareil", "error");
             }
@@ -1567,7 +1567,7 @@ function LiveHostAvButtonsInner({
             try {
               await setLiveMicrophone(localParticipant, next);
               av.setMicOk(next);
-              onMic(next);
+          onMic(next);
             } catch {
               showToast("Micro indisponible", "error");
             }

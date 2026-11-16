@@ -308,12 +308,7 @@ function ProductExplain({
     <View style={{ flexShrink: 1, minHeight: 280 }}>
       <View style={styles.head}>
         {isHost ? (
-          <Pressable
-            accessibilityLabel="Liste"
-            onPress={onBack}
-            hitSlop={8}
-            style={styles.back}
-          >
+          <Pressable onPress={onBack} hitSlop={8} style={styles.back}>
             <Ionicons name="chevron-back" size={20} color="#fff" />
             <Text style={styles.backText}>Liste</Text>
           </Pressable>
@@ -469,13 +464,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 24,
   },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    minWidth: 44,
-    minHeight: 44,
-  },
+  back: { flexDirection: "row", alignItems: "center", gap: 2 },
   backText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   hero: {
     width: "100%",

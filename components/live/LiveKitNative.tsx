@@ -1,104 +1,95 @@
-import {
-    buildLiveRoomOptions,
-    captureOptionsForProfile,
-    DEFAULT_LIVE_QUALITY,
-    SCREEN_SHARE_QUALITY,
-    type LiveQualityProfileId,
-} from "@/src/live-quality";
-import {
-    formatLiveQualityStats,
-    startLiveQualityManager,
-    type LiveQualityManager,
-} from "@/src/live-quality-manager";
-import { useMe } from "@/src/me";
 import { Ionicons } from "@expo/vector-icons";
 import {
-    AndroidAudioTypePresets,
-    AudioDeviceModule,
-    AudioEngineMuteMode,
-    AudioSession,
-    isTrackReference,
-    registerGlobals,
-    RoomContext,
-    useConnectionState,
-    useDataChannel,
-    useLocalParticipant,
-    useRoomContext,
-    useTracks,
-    VideoTrack,
+  AndroidAudioTypePresets,
+  AudioDeviceModule,
+  AudioEngineMuteMode,
+  AudioSession,
+  isTrackReference,
+  registerGlobals,
+  RoomContext,
+  useConnectionState,
+  useDataChannel,
+  useLocalParticipant,
+  useRoomContext,
+  useTracks,
+  VideoTrack,
 } from "@livekit/react-native";
 import {
-    ConnectionQuality,
-    ConnectionState,
-    Room,
-    RoomEvent,
-    Track,
-    VideoQuality,
-    type LocalParticipant,
-    type RemoteTrackPublication,
-    type ScreenShareCaptureOptions,
+  ConnectionQuality,
+  ConnectionState,
+  Room,
+  RoomEvent,
+  Track,
+  VideoQuality,
+  type LocalParticipant,
+  type RemoteTrackPublication,
+  type ScreenShareCaptureOptions,
 } from "livekit-client";
 import {
-    Component,
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-    type ErrorInfo,
-    type ReactNode,
+  buildLiveRoomOptions,
+  captureOptionsForProfile,
+  DEFAULT_LIVE_QUALITY,
+  SCREEN_SHARE_QUALITY,
+  type LiveQualityProfileId,
+} from "@/src/live-quality";
+import {
+  formatLiveQualityStats,
+  startLiveQualityManager,
+  type LiveQualityManager,
+} from "@/src/live-quality-manager";
+import { useMe } from "@/src/me";
+import {
+  Component,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ErrorInfo,
+  type ReactNode,
 } from "react";
 import {
-    AppState,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  AppState,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
 import {
-    LiveScreenShareSheet,
-    type LiveScreenShareMode,
+  LiveScreenShareSheet,
+  type LiveScreenShareMode,
 } from "@/components/live/LiveScreenShareSheet";
 import { LiveWaiting } from "@/components/live/LiveWaiting";
+import { AR_FILTERS, isArFilterId } from "@/src/live-ar-filters";
 import {
-    applyLiveFilterPick,
-    AR_FILTERS,
-    encodeLiveFilterCombo,
-    isLiveFilterComboId,
-    isPropFilter,
-    isToneFilter,
-    parseLiveFilterCombo,
-    type LiveFilterCombo,
-} from "@/src/live-ar-filters";
-import {
-    decodeFacePose,
-    encodeFacePose,
-    parseFacePosePayload,
-    type FacePose,
+  decodeFacePose,
+  encodeFacePose,
+  parseFacePosePayload,
+  type FacePose,
 } from "@/src/live-face-tracking";
 import { isLiveLookId } from "@/src/live-look";
 import {
-    demanderMicro,
-    ensureCameraPermission,
-    isLiveRtcAvailable,
-    requestLiveAvPermissions,
-    requestNotificationPermission,
+  demanderMicro,
+  ensureCameraPermission,
+  isLiveRtcAvailable,
+  requestLiveAvPermissions,
+  requestNotificationPermission,
 } from "@/src/live-rtc";
 import {
-    getActiveScreenShareLiveId,
-    setActiveScreenShareLiveId,
+  getActiveScreenShareLiveId,
+  setActiveScreenShareLiveId,
 } from "@/src/live-share-session";
 import {
-    normalizeStageLayout,
-    type LiveStageLayoutId,
+  normalizeStageLayout,
+  type LiveStageLayoutId,
 } from "@/src/live-stage-layout";
 import { showToast } from "@/src/toast";
 import { useLiveFacePose } from "@/src/use-live-face-pose";
@@ -320,13 +311,11 @@ const AvCtx = createContext<{
 
 const LookCtx = createContext<{
   look: string;
-  combo: LiveFilterCombo;
   pick: (id: string) => void;
   isHost: boolean;
   pose: FacePose | null;
 }>({
   look: "studio",
-  combo: { tone: "studio", prop: null },
   pick: () => undefined,
   isHost: false,
   pose: null,
@@ -353,10 +342,7 @@ function LiveLookProvider({
   isHost: boolean;
   children: ReactNode;
 }) {
-  const [localCombo, setLocalCombo] = useState<LiveFilterCombo>({
-    tone: "studio",
-    prop: null,
-  });
+  const [localLook, setLocalLook] = useState("studio");
   const { pose: localPose } = useLiveFacePose({ enabled: isHost, hz: 20 });
   const { send, message } = useDataChannel("ss-filter");
   const faceChannel = useDataChannel("ss-face");
@@ -364,12 +350,9 @@ function LiveLookProvider({
   const remoteLook = useMemo(() => {
     if (!message?.payload) return null;
     const next = new TextDecoder().decode(message.payload);
-    if (isLiveFilterComboId(next) || isLiveLookId(next)) return next;
-    return null;
+    return isLiveLookId(next) || isArFilterId(next) ? next : null;
   }, [message]);
-  const localLook = encodeLiveFilterCombo(localCombo);
   const look = !isHost && remoteLook ? remoteLook : localLook;
-  const combo = parseLiveFilterCombo(look);
 
   const remotePose = useMemo(() => {
     if (isHost || !faceChannel.message?.payload) return null;
@@ -386,19 +369,14 @@ function LiveLookProvider({
   }, [isHost, localPose, sendFace]);
 
   const pick = (id: string) => {
-    setLocalCombo((prev) => {
-      const next = applyLiveFilterPick(prev, id);
-      const encoded = encodeLiveFilterCombo(next);
-      if (isHost)
-        void send(new TextEncoder().encode(encoded), { reliable: true });
-      return next;
-    });
+    setLocalLook(id);
+    if (isHost) void send(new TextEncoder().encode(id), { reliable: true });
   };
 
   const pose = isHost ? localPose : remotePose;
 
   return (
-    <LookCtx.Provider value={{ look, combo, pick, isHost, pose }}>
+    <LookCtx.Provider value={{ look, pick, isHost, pose }}>
       {children}
     </LookCtx.Provider>
   );
@@ -1220,20 +1198,11 @@ const FILTER_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export function LiveFilterBar() {
-  const { combo, pick, isHost } = useContext(LookCtx);
+  const { look, pick, isHost } = useContext(LookCtx);
   const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   if (!isHost) return null;
-  const menuWidth = Math.max(220, Math.min(width - 88, 360));
-  const tones = AR_FILTERS.filter(
-    (item) => item.id === "none" || isToneFilter(item),
-  );
-  const props = AR_FILTERS.filter((item) => isPropFilter(item));
-
-  function chipOn(id: string) {
-    if (id === "none") return !combo.tone && !combo.prop;
-    return combo.tone === id || combo.prop === id;
-  }
+  const menuWidth = Math.max(200, Math.min(width - 100, 340));
 
   return (
     <View style={styles.studioWrap} collapsable={false}>
@@ -1244,7 +1213,6 @@ export function LiveFilterBar() {
           onMoveShouldSetResponder={() => true}
           collapsable={false}
         >
-          <Text style={styles.studioHint}>Teint + accessoire</Text>
           <ScrollView
             horizontal
             nestedScrollEnabled
@@ -1257,13 +1225,13 @@ export function LiveFilterBar() {
             style={styles.studioMenuScroll}
             contentContainerStyle={styles.studioMenu}
           >
-            {tones.map((item) => {
-              const on = chipOn(item.id);
+            {AR_FILTERS.map((item) => {
+              const on = look === item.id;
               const icon = FILTER_ICONS[item.id];
               return (
                 <Pressable
-                  key={`tone-${item.id}`}
-                  accessibilityLabel={`Teint ${item.name}`}
+                  key={item.id}
+                  accessibilityLabel={item.name}
                   onPress={() => pick(item.id)}
                   style={[styles.filterChip, on && styles.filterChipOn]}
                 >
@@ -1279,35 +1247,13 @@ export function LiveFilterBar() {
                 </Pressable>
               );
             })}
-            <View style={styles.studioSep} />
-            {props.map((item) => {
-              const on = chipOn(item.id);
-              return (
-                <Pressable
-                  key={`prop-${item.id}`}
-                  accessibilityLabel={`Accessoire ${item.name}`}
-                  onPress={() => pick(item.id)}
-                  style={[
-                    styles.filterChip,
-                    styles.filterChipProp,
-                    on && styles.filterChipOn,
-                  ]}
-                >
-                  <Text style={styles.filterEmoji}>{item.emoji}</Text>
-                </Pressable>
-              );
-            })}
           </ScrollView>
         </View>
       ) : null}
       <Pressable
-        style={[
-          styles.avBtn,
-          open && styles.studioBtnOn,
-          Boolean(combo.prop) && styles.studioBtnProp,
-        ]}
+        style={[styles.avBtn, open && styles.studioBtnOn]}
         onPress={() => setOpen((value) => !value)}
-        accessibilityLabel="Galerie filtres teint et accessoire"
+        accessibilityLabel="Galerie filtres"
       >
         <Ionicons name="color-filter" size={20} color="#fff" />
       </Pressable>
@@ -1838,32 +1784,21 @@ const styles = StyleSheet.create({
     borderColor: "#00D68F",
     backgroundColor: "rgba(0,214,143,0.22)",
   },
-  studioBtnProp: {
-    borderColor: "rgba(255,214,102,0.7)",
-  },
   studioMenuShell: {
     position: "absolute",
     right: 52,
     bottom: 0,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.62)",
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.55)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
     overflow: "hidden",
     zIndex: 30,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  studioHint: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 9,
-    fontWeight: "700",
-    paddingHorizontal: 10,
-    marginBottom: 2,
   },
   studioMenuScroll: {
     flexGrow: 0,
-    height: 44,
+    height: 48,
   },
   studioMenu: {
     flexDirection: "row",
@@ -1871,13 +1806,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 8,
     paddingRight: 10,
-    minHeight: 44,
-  },
-  studioSep: {
-    width: 1,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    marginHorizontal: 2,
+    minHeight: 48,
   },
   filterChip: {
     width: 40,
@@ -1888,9 +1817,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  filterChipProp: {
-    borderColor: "rgba(255,214,102,0.35)",
   },
   filterChipOn: {
     backgroundColor: "#00D68F",

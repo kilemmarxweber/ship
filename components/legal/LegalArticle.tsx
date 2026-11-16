@@ -3,6 +3,7 @@ import { safeBack } from "@/src/nav";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useT } from "@/src/i18n";
 import type { LegalSection } from "@/src/legal";
 import { useColors } from "@/src/use-colors";
 
@@ -16,6 +17,7 @@ export function LegalArticle({
   sections: LegalSection[];
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const c = useColors();
   return (
     <ScrollView
@@ -27,9 +29,12 @@ export function LegalArticle({
         gap: 14,
       }}
     >
-      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        
+        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
+          {t("back")}
+          {"\u00A0"}
+        </Text>
       </Pressable>
       <Text style={[styles.title, { color: c.text }]}>{title}</Text>
       <Text style={[styles.intro, { color: c.textMuted }]}>{intro}</Text>
@@ -60,10 +65,13 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-    minWidth: 44,
-    minHeight: 44,
-
-  },
+  },
+  backText: {
+    fontWeight: "700",
+    includeFontPadding: false,
+    paddingRight: 12,
+    flexShrink: 0,
+  },
   title: { fontSize: 24, fontWeight: "800" },
   intro: { lineHeight: 20 },
   card: {

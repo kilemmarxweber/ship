@@ -179,8 +179,9 @@ export function FeedScreen() {
 
   const wanted = useQuery({
     queryKey: WANTED_FEED_KEY,
-    enabled: focused,
-    staleTime: 20_000,
+    enabled: tab === "search",
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: fetchWantedFeed,
   });
   const wantedItems = wanted.data?.requests ?? [];
@@ -758,7 +759,7 @@ export function FeedScreen() {
       {tab === "search" ? (
         <WantedHomePane
           items={wantedItems}
-          loading={wanted.isLoading && wantedItems.length === 0}
+          loading={wanted.isLoading}
           error={wanted.isError}
           onRetry={() => void wanted.refetch()}
           paddingTop={wantedHeaderPad}
@@ -1231,7 +1232,7 @@ export function FeedScreen() {
         <View style={styles.headerRow}>
           <View style={styles.headerSide}>
             {tab === "search" ? (
-              <Pressable accessibilityLabel="Retour"
+              <Pressable
                 onPress={() => selectTab("foryou")}
                 hitSlop={8}
                 style={styles.iconHit}

@@ -1,16 +1,15 @@
 import {
-    onlineManager,
-    QueryClient,
-    QueryClientProvider,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
 } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
-import { LaunchSplash } from "@/components/LaunchSplash";
 import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
@@ -67,14 +66,6 @@ function RootLayout() {
   const applyRemote = usePrefs((state) => state.applyRemote);
   const theme = usePrefs((state) => state.theme);
   const palette = paletteOf(theme);
-  const [bootDone, setBootDone] = useState(false);
-  const [holdSplash, setHoldSplash] = useState(true);
-  const showLaunch = !bootDone || holdSplash;
-
-  useEffect(() => {
-    const timer = setTimeout(() => setHoldSplash(false), 900);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     let stopSync: (() => void) | undefined;
@@ -82,7 +73,7 @@ function RootLayout() {
       .then(() => hydrateOffline(queryClient))
       .catch(() => undefined)
       .finally(() => {
-        setBootDone(true);
+        void SplashScreen.hideAsync();
         stopSync = startSilentSync(queryClient);
       });
     return () => stopSync?.();
@@ -122,7 +113,7 @@ function RootLayout() {
       style={{ flex: 1, backgroundColor: palette.background }}
     >
       <QueryClientProvider client={queryClient}>
-        <StatusBar style={showLaunch || theme !== "light" ? "light" : "dark"} />
+        <StatusBar style={theme === "light" ? "dark" : "light"} />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -162,9 +153,6 @@ function RootLayout() {
         </Stack>
         <AuthSheet />
         <ToastHost />
-        {showLaunch ? (
-          <LaunchSplash onPaint={() => void SplashScreen.hideAsync()} />
-        ) : null}
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

@@ -132,9 +132,9 @@ export default function PublishedProductScreen() {
   return (
     <View style={[ui.root, { backgroundColor: c.background }]}>
       <View style={[ui.head, { paddingTop: insets.top + 8 }]}>
-        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={ui.back} hitSlop={8}>
+        <Pressable onPress={() => safeBack()} style={ui.back} hitSlop={8}>
           <Ionicons name="chevron-back" size={22} color={c.text} />
-          
+          <Text style={[ui.backText, { color: c.text }]}>Retour</Text>
         </Pressable>
         <Pressable
           onPress={() => router.push("/(tabs)/cart" as Href)}
@@ -391,6 +391,7 @@ const ui = StyleSheet.create({
     alignItems: "center",
     minHeight: 44,
   },
+  backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   bagHit: {
     width: 42,
     height: 42,

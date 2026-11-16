@@ -182,9 +182,15 @@ export function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.topRow}>
-          <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
+          <Pressable onPress={() => safeBack()} style={styles.back}>
             <Ionicons name="chevron-back" size={20} color={c.text} />
-            
+            <Text
+              style={[styles.backText, { color: c.text }]}
+              numberOfLines={1}
+            >
+              {t("back")}
+              {"\u00A0"}
+            </Text>
           </Pressable>
           {token ? (
             <Pressable
@@ -719,9 +725,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 16,
     overflow: "visible",
-    minWidth: 44,
-    minHeight: 44,
-
+  },
+  backText: {
+    fontWeight: "700",
+    includeFontPadding: false,
+    paddingRight: 12,
+    flexShrink: 0,
   },
   logoutBtn: {
     minWidth: 44,

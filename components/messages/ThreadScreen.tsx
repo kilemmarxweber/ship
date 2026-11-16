@@ -284,7 +284,7 @@ export function ThreadScreen({ id }: { id: string }) {
     return (
       <View style={[styles.wrap, { paddingTop: insets.top + 12 }]}>
         <View style={styles.header}>
-          <Pressable accessibilityLabel="Retour"
+          <Pressable
             onPress={() => router.replace("/messages" as Href)}
             style={styles.back}
           >
@@ -313,7 +313,7 @@ export function ThreadScreen({ id }: { id: string }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Pressable accessibilityLabel="Retour"
+        <Pressable
           onPress={() => router.replace("/messages" as Href)}
           style={styles.back}
         >
@@ -519,9 +519,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 44,
-    minHeight: 44,
-
   },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   sub: { color: colors.emerald, fontWeight: "700", fontSize: 12, marginTop: 2 },

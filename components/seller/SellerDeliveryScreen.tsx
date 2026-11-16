@@ -16,6 +16,7 @@ import { ShopPicker } from "@/components/profile/ShopPicker";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api } from "@/src/api";
 import { formatMoney } from "@/src/format";
+import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { usePaged } from "@/src/use-paged";
@@ -44,6 +45,7 @@ type Rate = {
 
 export function SellerDeliveryScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -94,9 +96,12 @@ export function SellerDeliveryScreen() {
         gap: 12,
       }}
     >
-      <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back}>
+      <Pressable onPress={() => safeBack()} style={styles.back}>
         <Ionicons name="chevron-back" size={20} color={c.text} />
-        
+        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
+          {t("back")}
+          {"\u00A0"}
+        </Text>
       </Pressable>
       <View>
         <Text style={[styles.title, { color: c.text }]}>Livraison boutique</Text>
@@ -247,9 +252,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingRight: 16,
-    minWidth: 44,
-    minHeight: 44,
-
+  },
+  backText: {
+    fontWeight: "700",
+    includeFontPadding: false,
+    paddingRight: 12,
+    flexShrink: 0,
   },
   title: { fontSize: 26, fontWeight: "800" },
   lead: { fontSize: 12, marginTop: 4 },

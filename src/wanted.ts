@@ -121,17 +121,17 @@ function mergeWantedLists(
 }
 
 export async function fetchWantedFeed() {
+  const published = await api<{ requests?: WantedListItem[] }>("/api/wanted");
   const token = useSession.getState().token;
-  const [published, mine] = await Promise.all([
-    api<{ requests?: WantedListItem[] }>("/api/wanted"),
-    token
-      ? api<{ requests?: WantedListItem[] }>("/api/wanted?mine=1").catch(
-          () => null,
-        )
-      : Promise.resolve(null),
-  ]);
-  if (!mine) return { requests: published.requests ?? [] };
-  return { requests: mergeWantedLists(mine.requests, published.requests) };
+  if (!token) return { requests: published.requests ?? [] };
+  try {
+    const mine = await api<{ requests?: WantedListItem[] }>(
+      "/api/wanted?mine=1",
+    );
+    return { requests: mergeWantedLists(mine.requests, published.requests) };
+  } catch {
+    return { requests: published.requests ?? [] };
+  }
 }
 
 function toListItem(

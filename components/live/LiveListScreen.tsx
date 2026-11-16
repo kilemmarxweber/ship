@@ -1,8 +1,8 @@
-import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
+import { safeBack } from "@/src/nav";
 import {
     ActivityIndicator,
     Pressable,
@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
+import { useT } from "@/src/i18n";
 
 type LiveRow = {
   id: string;
@@ -28,6 +29,7 @@ type LiveRow = {
 
 export function LiveListScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const lives = useQuery({
     queryKey: ["lives"],
     queryFn: () => api<{ lives: LiveRow[] }>("/api/growth/lives"),
@@ -45,12 +47,12 @@ export function LiveListScreen() {
         gap: 10,
       }}
     >
-      <Pressable
-        accessibilityLabel="Retour"
-        style={styles.back}
-        onPress={() => safeBack()}
-      >
+      <Pressable style={styles.back} onPress={() => safeBack()}>
         <Ionicons name="chevron-back" size={22} color="#fff" />
+        <Text style={styles.backText}>
+          {t("back")}
+          {"\u00A0"}
+        </Text>
       </Pressable>
       <Text style={styles.title}>Lives</Text>
       <Pressable
@@ -120,8 +122,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingRight: 16,
-    minWidth: 44,
-    minHeight: 44,
+  },
+  backText: {
+    color: "#fff",
+    fontWeight: "700",
+    includeFontPadding: false,
+    paddingRight: 12,
   },
   title: { color: "#fff", fontSize: 26, fontWeight: "800" },
   arEntry: {

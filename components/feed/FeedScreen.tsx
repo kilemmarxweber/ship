@@ -55,7 +55,7 @@ import { compactCount, formatMoney } from "@/src/format";
 import { useInbox } from "@/src/inbox";
 import { matchOpenLive } from "@/src/live";
 import { isSellerOfShop, useMe } from "@/src/me";
-import { coverOf, mediaList, playableMediaUrl } from "@/src/media";
+import { coverOf, mediaList, playableMediaUrl, stillOf } from "@/src/media";
 import { kvGet, kvSet } from "@/src/offline/db";
 import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
@@ -827,7 +827,6 @@ export function FeedScreen() {
                 );
               }
               const item = row.item;
-              const near = Math.abs(index - active) <= 1;
               const live = matchOpenLive(lives.data?.lives, {
                 productId: item.id,
                 ownerUserId: item.shop.ownerUserId,
@@ -845,6 +844,7 @@ export function FeedScreen() {
                 : (item.shop.followersCount ?? item.viewsCount ?? 0);
               const slides = mediaList(item.images);
               const cover = coverOf(item.images);
+              const still = stillOf(item.images);
               const promo =
                 item.promoPercent && item.promoPercent > 0
                   ? item.promoPercent
@@ -860,9 +860,9 @@ export function FeedScreen() {
               const followed = Boolean(item.shop.followedByMe);
               return (
                 <View style={[styles.page, { height, width }]}>
-                  {near && cover && !isVideoUrl(cover) ? (
+                  {still ? (
                     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                      <ReelCover uri={cover} />
+                      <ReelCover uri={still} />
                     </View>
                   ) : null}
                   {index === active && slides.length > 0 ? (
@@ -877,7 +877,7 @@ export function FeedScreen() {
                       onTap={() => onMediaPress(item)}
                       dotsBottom={bottom + 100}
                       restartToken={item.id}
-                      poster={cover}
+                      poster={still ?? cover}
                     />
                   ) : (
                     <Pressable
@@ -1221,9 +1221,11 @@ export function FeedScreen() {
           <View style={styles.headerSide}>
             {tab === "search" ? (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
                 onPress={() => selectTab("foryou")}
                 hitSlop={8}
-                style={styles.iconHit}
+                style={styles.backHit}
               >
                 <Ionicons name="chevron-back" size={22} color="#F5F7FA" />
               </Pressable>
@@ -1556,6 +1558,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#111722",
     borderWidth: 1.5,
     borderColor: "#FF5A1F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backHit: {
+    width: 44,
+    height: 44,
+    marginLeft: -6,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -4,11 +4,11 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SheetReduce } from "@/components/ui/SheetReduce";
-import { mediaUrl } from "@/src/api";
+import { isVideoUrl, mediaUrl } from "@/src/api";
 import {
-  formatRatio,
-  orientationOf,
-  type ProductImageMeta,
+    formatRatio,
+    orientationOf,
+    type ProductImageMeta,
 } from "@/src/product-image-intel";
 import { HAIRLINE } from "@/src/theme";
 import { useColors } from "@/src/use-colors";
@@ -39,7 +39,12 @@ export function ProductImagePreviewSheet({
   const orient = orientationOf(meta.ratio);
 
   return (
-    <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={open}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View
@@ -57,9 +62,16 @@ export function ProductImagePreviewSheet({
             {meta.width}×{meta.height} · {formatRatio(meta.ratio)} · {orient}
           </Text>
           {meta.warning ? (
-            <View style={[styles.warn, { backgroundColor: "rgba(251,191,36,0.14)" }]}>
+            <View
+              style={[
+                styles.warn,
+                { backgroundColor: "rgba(251,191,36,0.14)" },
+              ]}
+            >
               <Ionicons name="warning-outline" size={16} color="#FBBF24" />
-              <Text style={[styles.warnText, { color: c.text }]}>{meta.warning}</Text>
+              <Text style={[styles.warnText, { color: c.text }]}>
+                {meta.warning}
+              </Text>
             </View>
           ) : null}
           {meta.tip ? (
@@ -68,7 +80,11 @@ export function ProductImagePreviewSheet({
 
           <Text style={[styles.label, { color: c.textMuted }]}>Originale</Text>
           <View style={[styles.previewBox, { backgroundColor: c.background }]}>
-            <Image source={{ uri }} style={styles.previewImg} contentFit="contain" />
+            <Image
+              source={{ uri }}
+              style={styles.previewImg}
+              contentFit="contain"
+            />
           </View>
 
           <View
@@ -77,12 +93,22 @@ export function ProductImagePreviewSheet({
               { backgroundColor: "#0E0E14", borderColor: HAIRLINE },
             ]}
           >
-            <Image source={{ uri }} style={styles.productMockImg} contentFit="contain" />
+            <Image
+              source={{ uri }}
+              style={styles.productMockImg}
+              contentFit="contain"
+            />
           </View>
 
-          <Text style={[styles.label, { color: c.textMuted }]}>Plein écran</Text>
+          <Text style={[styles.label, { color: c.textMuted }]}>
+            Plein écran
+          </Text>
           <View style={[styles.fullMock, { backgroundColor: "#000" }]}>
-            <Image source={{ uri }} style={styles.fullMockImg} contentFit="contain" />
+            <Image
+              source={{ uri }}
+              style={styles.fullMockImg}
+              contentFit="contain"
+            />
           </View>
 
           <View style={styles.actions}>
@@ -91,31 +117,51 @@ export function ProductImagePreviewSheet({
                 style={[styles.btn, { backgroundColor: `${c.primary}22` }]}
                 onPress={onSetPrimary}
               >
-                <Text style={[styles.btnText, { color: c.primary }]}>Principale</Text>
+                <Text style={[styles.btnText, { color: c.primary }]}>
+                  Principale
+                </Text>
               </Pressable>
             ) : (
               <View style={[styles.btn, { backgroundColor: `${c.emerald}22` }]}>
-                <Text style={[styles.btnText, { color: c.emerald }]}>★ Principale</Text>
+                <Text style={[styles.btnText, { color: c.emerald }]}>
+                  ★ Principale
+                </Text>
               </View>
             )}
-            {meta.width > 0 ? (
+            <Pressable
+              style={[styles.btn, { backgroundColor: `${c.primary}22` }]}
+              onPress={onEdit}
+            >
+              <Text style={[styles.btnText, { color: c.primary }]}>
+                Retoucher
+              </Text>
+            </Pressable>
+            {isVideoUrl(meta.url) ? null : (
               <Pressable
-                style={[styles.btn, { backgroundColor: `${c.primary}22` }]}
-                onPress={onEdit}
+                style={[
+                  styles.btn,
+                  {
+                    backgroundColor: c.card,
+                    borderColor: HAIRLINE,
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={onCrop}
               >
-                <Text style={[styles.btnText, { color: c.primary }]}>
-                  Retoucher
+                <Text style={[styles.btnText, { color: c.text }]}>
+                  Recadrer
                 </Text>
               </Pressable>
-            ) : null}
+            )}
             <Pressable
-              style={[styles.btn, { backgroundColor: c.card, borderColor: HAIRLINE, borderWidth: 1 }]}
-              onPress={onCrop}
-            >
-              <Text style={[styles.btnText, { color: c.text }]}>Recadrer</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, { backgroundColor: c.card, borderColor: HAIRLINE, borderWidth: 1 }]}
+              style={[
+                styles.btn,
+                {
+                  backgroundColor: c.card,
+                  borderColor: HAIRLINE,
+                  borderWidth: 1,
+                },
+              ]}
               onPress={onReplace}
             >
               <Text style={[styles.btnText, { color: c.text }]}>Remplacer</Text>
@@ -124,11 +170,15 @@ export function ProductImagePreviewSheet({
               style={[styles.btn, { backgroundColor: "rgba(239,68,68,0.16)" }]}
               onPress={onRemove}
             >
-              <Text style={[styles.btnText, { color: "#F87171" }]}>Supprimer</Text>
+              <Text style={[styles.btnText, { color: "#F87171" }]}>
+                Supprimer
+              </Text>
             </Pressable>
           </View>
           <Pressable onPress={onClose} style={styles.close}>
-            <Text style={{ color: c.textMuted, fontWeight: "700" }}>Fermer</Text>
+            <Text style={{ color: c.textMuted, fontWeight: "700" }}>
+              Fermer
+            </Text>
           </Pressable>
         </View>
       </View>

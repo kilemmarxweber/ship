@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,6 +30,7 @@ import { badgeKey, badgeLabel, type GrowthBadge } from "@/src/growth";
 import { useT } from "@/src/i18n";
 import { useMe } from "@/src/me";
 import { usePrefs } from "@/src/prefs";
+import { useRequireSession } from "@/src/require-session";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -57,7 +59,7 @@ export function ProfileScreen() {
   const t = useT();
   const c = useColors();
   const queryClient = useQueryClient();
-  const token = useSession((state) => state.token);
+  const { token, allowed } = useRequireSession();
   const openAuth = useSession((state) => state.openAuth);
   const logout = useSession((state) => state.logout);
   const applyRemote = usePrefs((state) => state.applyRemote);
@@ -182,16 +184,7 @@ export function ProfileScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.topRow}>
-          <Pressable onPress={() => safeBack()} style={styles.back}>
-            <Ionicons name="chevron-back" size={20} color={c.text} />
-            <Text
-              style={[styles.backText, { color: c.text }]}
-              numberOfLines={1}
-            >
-              {t("back")}
-              {"\u00A0"}
-            </Text>
-          </Pressable>
+          <IconBackButton color={c.text} />
           {token ? (
             <Pressable
               accessibilityRole="button"
@@ -211,17 +204,9 @@ export function ProfileScreen() {
           ) : null}
         </View>
 
-        {!token ? (
+        {!allowed ? (
           <View style={styles.center}>
-            <Text style={[styles.title, { color: c.text }]}>
-              Ton profil ShipShop
-            </Text>
-            <Text style={[styles.lead, { color: c.textMuted }]}>
-              Compte obligatoire pour acheter, vendre et recharger.
-            </Text>
-            <Pressable style={styles.primary} onPress={openAuth}>
-              <Text style={styles.primaryText}>Se connecter</Text>
-            </Pressable>
+            <ActivityIndicator color={c.primary} />
           </View>
         ) : profile.isLoading ? (
           <ActivityIndicator color={c.emerald} />

@@ -1,11 +1,6 @@
 import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import {
-    getPermissionsAsync,
-    requestPermissionsAsync,
-    saveToLibraryAsync,
-} from "expo-media-library";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -18,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveFilterOverlay } from "@/components/live/LiveFilterOverlay";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { AR_FILTERS } from "@/src/live-ar-filters";
 import { showToast } from "@/src/toast";
 import { useLiveFacePose } from "@/src/use-live-face-pose";
@@ -44,9 +40,10 @@ export function ArStudioScreen() {
   }, [permission, requestPermission]);
 
   async function ensureLibrary() {
-    const current = await getPermissionsAsync();
+    const MediaLibrary = await import("expo-media-library");
+    const current = await MediaLibrary.getPermissionsAsync();
     if (current.granted) return true;
-    const asked = await requestPermissionsAsync();
+    const asked = await MediaLibrary.requestPermissionsAsync();
     return asked.granted;
   }
 
@@ -60,7 +57,9 @@ export function ArStudioScreen() {
       });
       if (!photo?.uri) throw new Error("Capture impossible");
       if (await ensureLibrary()) {
-        await saveToLibraryAsync(photo.uri);
+        await (
+          await import("expo-media-library")
+        ).saveToLibraryAsync(photo.uri);
         showToast("Photo enregistrée dans la galerie", "info");
       } else {
         showToast("Photo prise — autorise la galerie pour sauvegarder", "info");
@@ -93,7 +92,9 @@ export function ArStudioScreen() {
       const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
       setRecording(false);
       if (video?.uri && (await ensureLibrary())) {
-        await saveToLibraryAsync(video.uri);
+        await (
+          await import("expo-media-library")
+        ).saveToLibraryAsync(video.uri);
         showToast("Vidéo enregistrée (filtre visible à l’écran)", "info");
       }
     } catch (cause) {
@@ -129,11 +130,7 @@ export function ArStudioScreen() {
         >
           <Text style={styles.permBtnText}>Autoriser</Text>
         </Pressable>
-        <Pressable onPress={() => safeBack()} style={{ marginTop: 16 }}>
-          <Text style={{ color: "rgba(255,255,255,0.6)", fontWeight: "700" }}>
-            Retour
-          </Text>
-        </Pressable>
+        <IconBackButton color="#F5F7FA" style={styles.permBack} />
       </View>
     );
   }
@@ -225,6 +222,7 @@ export function ArStudioScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000" },
   center: { alignItems: "center", justifyContent: "center" },
+  permBack: { marginTop: 8, marginLeft: 0 },
   topBar: {
     position: "absolute",
     left: 0,

@@ -1,14 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,15 +16,13 @@ import { OnboardFlow } from "@/components/publish/OnboardFlow";
 import { SellFlow, type SellShop } from "@/components/publish/SellFlow";
 import { WantedFlow } from "@/components/publish/WantedFlow";
 import { api } from "@/src/api";
-import { useSession } from "@/src/session";
-import { HAIRLINE } from "@/src/theme";
+import { useRequireSession } from "@/src/require-session";
 import { useColors } from "@/src/use-colors";
 
 export default function PublishScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const token = useSession((state) => state.token);
-  const openAuth = useSession((state) => state.openAuth);
+  const { token, allowed } = useRequireSession();
   const params = useLocalSearchParams<{ mode?: string; shopId?: string }>();
   const mode = typeof params.mode === "string" ? params.mode : undefined;
   const initialShopId =
@@ -39,9 +35,23 @@ export default function PublishScreen() {
   });
   const shopList = shops.data?.shops ?? [];
   const hasShop = shopList.length > 0;
+  const sellStudio = mode === "sell" && hasShop && !shops.isLoading;
 
   function goChooser() {
     router.replace("/publish");
+  }
+
+  if (sellStudio) {
+    return (
+      <View style={[styles.flex, { backgroundColor: "#000000" }]}>
+        <SellFlow
+          shops={shopList}
+          initialShopId={initialShopId}
+          onBack={goChooser}
+          onNeedShop={() => router.setParams({ mode: "sell" })}
+        />
+      </View>
+    );
   }
 
   return (
@@ -59,25 +69,9 @@ export default function PublishScreen() {
           },
         ]}
       >
-        {!token ? (
+        {!allowed ? (
           <View style={styles.center}>
-            <View style={[styles.iconBubble, { backgroundColor: c.primary }]}>
-              <Ionicons name="add" size={28} color={c.primaryForeground} />
-            </View>
-            <Text style={[styles.title, { color: c.text }]}>Publier</Text>
-            <Text style={[styles.text, { color: c.textMuted }]}>
-              Connecte-toi pour publier en vidéo ou demander un article.
-            </Text>
-            <Pressable
-              style={[styles.primary, { backgroundColor: c.primary }]}
-              onPress={openAuth}
-            >
-              <Text
-                style={[styles.primaryText, { color: c.primaryForeground }]}
-              >
-                Se connecter
-              </Text>
-            </Pressable>
+            <ActivityIndicator color={c.primary} />
           </View>
         ) : mode === "wanted" ? (
           <WantedFlow onBack={goChooser} />
@@ -97,13 +91,6 @@ export default function PublishScreen() {
           <OnboardFlow
             onBack={goChooser}
             onCreated={() => router.setParams({ mode: "sell" })}
-          />
-        ) : mode === "sell" ? (
-          <SellFlow
-            shops={shopList}
-            initialShopId={initialShopId}
-            onBack={goChooser}
-            onNeedShop={() => router.setParams({ mode: "sell" })}
           />
         ) : (
           <View style={styles.chooser}>
@@ -127,7 +114,7 @@ export default function PublishScreen() {
             <ChoiceCard
               icon="bag-add"
               title="Publier un article"
-              subtitle="Publier en vidéo — 3 gestes : vidéo, prix, poster"
+              subtitle="Photos ou vidéos, son, prix — puis tu publies"
               delay={40}
               onPress={() => router.setParams({ mode: "sell" })}
             />
@@ -160,25 +147,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
-  iconBubble: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   title: { fontSize: 26, fontWeight: "800" },
   text: {
     lineHeight: 22,
     textAlign: "center",
   },
-  primary: {
-    marginTop: 8,
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
-  },
-  primaryText: { fontWeight: "800" },
 });

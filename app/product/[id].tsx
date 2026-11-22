@@ -14,15 +14,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api, isVideoUrl, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { formatMoney } from "@/src/format";
 import { coverOf, mediaList } from "@/src/media";
-import { safeBack } from "@/src/nav";
 import { saveCartLine } from "@/src/offline/writes";
 import { useSession } from "@/src/session";
 import { productInStock, productStock } from "@/src/stock";
+import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
@@ -132,10 +133,7 @@ export default function PublishedProductScreen() {
   return (
     <View style={[ui.root, { backgroundColor: c.background }]}>
       <View style={[ui.head, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => safeBack()} style={ui.back} hitSlop={8}>
-          <Ionicons name="chevron-back" size={22} color={c.text} />
-          <Text style={[ui.backText, { color: c.text }]}>Retour</Text>
-        </Pressable>
+        <IconBackButton color={c.text} />
         <Pressable
           onPress={() => router.push("/(tabs)/cart" as Href)}
           hitSlop={8}
@@ -205,10 +203,36 @@ export default function PublishedProductScreen() {
               {formatMoney(product.priceCents, product.currency)}
             </Text>
             {product.shop?.name ? (
-              <Text style={[ui.meta, { color: c.textMuted }]}>
-                {product.shop.name}
-                {product.category ? ` · ${product.category}` : ""}
-              </Text>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Boutique ${product.shop.name}`}
+                hitSlop={8}
+                onPress={() => {
+                  if (!product.shop?.slug) return;
+                  router.push(`/shop/${product.shop.slug}` as Href);
+                }}
+                style={ui.shopLink}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[ui.shopName, { color: c.text }]}
+                >
+                  {product.shop.name}
+                </Text>
+                {product.category ? (
+                  <Text
+                    numberOfLines={1}
+                    style={[ui.meta, { color: c.textMuted }]}
+                  >
+                    {product.category}
+                  </Text>
+                ) : null}
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={c.textMuted}
+                />
+              </Pressable>
             ) : null}
             {product.description ? (
               <Text style={[ui.body, { color: c.textMuted }]}>
@@ -229,9 +253,7 @@ export default function PublishedProductScreen() {
                         style={[
                           ui.chip,
                           {
-                            borderColor: on
-                              ? c.primary
-                              : "rgba(255,255,255,0.12)",
+                            borderColor: on ? c.primary : HAIRLINE,
                             backgroundColor: on
                               ? "rgba(255,90,31,0.16)"
                               : c.sheet,
@@ -266,9 +288,7 @@ export default function PublishedProductScreen() {
                         style={[
                           ui.chip,
                           {
-                            borderColor: on
-                              ? c.primary
-                              : "rgba(255,255,255,0.12)",
+                            borderColor: on ? c.primary : HAIRLINE,
                             backgroundColor: on
                               ? "rgba(255,90,31,0.16)"
                               : c.sheet,
@@ -308,19 +328,29 @@ export default function PublishedProductScreen() {
                 </Text>
                 <View style={ui.qtyRow}>
                   <Pressable
+                    accessibilityLabel="Diminuer la quantité"
                     disabled={pending || qty <= 1}
                     onPress={() => setQty((v) => Math.max(1, v - 1))}
-                    style={[ui.qtyBtn, { backgroundColor: c.sheet }]}
+                    style={[
+                      ui.qtyBtn,
+                      { backgroundColor: c.sheet },
+                      (pending || qty <= 1) && ui.qtyOff,
+                    ]}
                   >
-                    <Ionicons name="remove" size={16} color={c.text} />
+                    <Ionicons name="remove" size={18} color={c.text} />
                   </Pressable>
                   <Text style={[ui.qtyValue, { color: c.text }]}>{qty}</Text>
                   <Pressable
+                    accessibilityLabel="Augmenter la quantité"
                     disabled={pending || qty >= stock}
                     onPress={() => setQty((v) => Math.min(stock, v + 1))}
-                    style={[ui.qtyBtn, { backgroundColor: c.sheet }]}
+                    style={[
+                      ui.qtyBtn,
+                      { backgroundColor: c.sheet },
+                      (pending || qty >= stock) && ui.qtyOff,
+                    ]}
                   >
-                    <Ionicons name="add" size={16} color={c.text} />
+                    <Ionicons name="add" size={18} color={c.text} />
                   </Pressable>
                   <Text style={{ color: c.textMuted, fontSize: 12 }}>
                     max {stock}
@@ -336,7 +366,7 @@ export default function PublishedProductScreen() {
               {
                 paddingBottom: Math.max(14, insets.bottom + 8),
                 backgroundColor: c.background,
-                borderTopColor: "rgba(255,255,255,0.08)",
+                borderTopColor: HAIRLINE,
               },
             ]}
           >
@@ -386,15 +416,16 @@ const ui = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  back: {
+  shopLink: {
+    marginTop: 6,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 44,
+    gap: 6,
   },
-  backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   bagHit: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -428,7 +459,8 @@ const ui = StyleSheet.create({
   liveText: { color: "#fff", fontWeight: "800", fontSize: 12, marginLeft: 4 },
   title: { fontSize: 24, fontWeight: "800" },
   price: { marginTop: 6, fontSize: 20, fontWeight: "800" },
-  meta: { marginTop: 6, fontSize: 14 },
+  shopName: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
+  meta: { fontSize: 14 },
   body: { marginTop: 14, fontSize: 15, lineHeight: 22 },
   optionBlock: { marginTop: 18, gap: 10 },
   optionLabel: { fontSize: 14, fontWeight: "800" },
@@ -439,8 +471,8 @@ const ui = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minHeight: 44,
   },
   swatch: {
     width: 14,
@@ -451,12 +483,13 @@ const ui = StyleSheet.create({
   },
   qtyRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   qtyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
+  qtyOff: { opacity: 0.35 },
   qtyValue: {
     fontSize: 17,
     fontWeight: "800",

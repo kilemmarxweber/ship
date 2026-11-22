@@ -15,6 +15,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ParcelMap } from "@/components/orders/ParcelMap";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { MediaStrip } from "@/components/publish/MediaStrip";
 import { api } from "@/src/api";
 import {
@@ -274,12 +275,7 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Pressable onPress={onBack} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} onPress={onBack} />
       <Text style={styles.title}>Je cherche</Text>
       <View style={styles.steps}>
         {["Besoin", "Budget", "Lieu"].map((label, index) => (
@@ -503,8 +499,12 @@ export function WantedFlow({ onBack }: { onBack: () => void }) {
 
       <View style={styles.navRow}>
         {step > 0 ? (
-          <Pressable style={styles.secondaryCta} onPress={() => setStep(step - 1)}>
-            <Text style={styles.secondaryCtaText}>Retour</Text>
+          <Pressable
+            accessibilityLabel="Retour"
+            style={[styles.secondaryCta, styles.iconCta]}
+            onPress={() => setStep(step - 1)}
+          >
+            <Ionicons name="chevron-back" size={22} color={c.text} />
           </Pressable>
         ) : null}
         {step < 2 ? (
@@ -691,6 +691,7 @@ function makeWantedStyles(c: ThemeColors = colors) {
       alignItems: "center",
     },
     ctaText: { color: c.primaryForeground, fontWeight: "800" },
+    iconCta: { width: 44, minWidth: 44, paddingHorizontal: 0 },
     secondaryCta: {
       minHeight: 50,
       minWidth: 104,
@@ -700,6 +701,5 @@ function makeWantedStyles(c: ThemeColors = colors) {
       borderWidth: 1,
       borderColor: HAIRLINE,
     },
-    secondaryCtaText: { color: c.text, fontWeight: "800" },
   });
 }

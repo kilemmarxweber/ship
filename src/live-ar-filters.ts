@@ -115,7 +115,7 @@ export const AR_FILTERS: ArFilter[] = [
     emoji: "👑",
     type: "overlay",
     anchor: "head",
-    scale: 1.15,
+    scale: 1.45,
     enabled: true,
   },
   {
@@ -125,7 +125,7 @@ export const AR_FILTERS: ArFilter[] = [
     emoji: "🧢",
     type: "overlay",
     anchor: "head",
-    scale: 1.1,
+    scale: 1.4,
     enabled: true,
   },
   {
@@ -135,7 +135,7 @@ export const AR_FILTERS: ArFilter[] = [
     emoji: "🕶️",
     type: "overlay",
     anchor: "eyes",
-    scale: 1.05,
+    scale: 1.55,
     enabled: true,
   },
   {
@@ -145,7 +145,7 @@ export const AR_FILTERS: ArFilter[] = [
     emoji: "💎",
     type: "overlay",
     anchor: "ears",
-    scale: 0.85,
+    scale: 1.05,
     enabled: true,
   },
   {
@@ -155,7 +155,7 @@ export const AR_FILTERS: ArFilter[] = [
     emoji: "🐱",
     type: "overlay",
     anchor: "head",
-    scale: 1.2,
+    scale: 1.5,
     enabled: true,
   },
   {

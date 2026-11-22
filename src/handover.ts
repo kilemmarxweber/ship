@@ -6,8 +6,8 @@ export type HandoverQrPayload = {
   s: string;
 };
 
-export function qrImageUrl(data: string, size = 240) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=8&data=${encodeURIComponent(data)}`;
+export function qrImageUrl(data: string, size = 240, margin = 8) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=${margin}&data=${encodeURIComponent(data)}`;
 }
 
 export function parseHandoverQrPayload(raw: string): HandoverQrPayload | null {

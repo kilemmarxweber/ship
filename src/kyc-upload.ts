@@ -15,7 +15,7 @@ async function imagePicker() {
 
 async function uploadImage(uri: string, name: string) {
   const form = new FormData();
-  appendUploadFile(form, { uri, fileName: name, mimeType: "image/jpeg" });
+  await appendUploadFile(form, { uri, fileName: name, mimeType: "image/jpeg" });
   form.append("variant", "document");
   const uploaded = await apiUpload<{ url?: string }>("/api/upload", form);
   if (!uploaded.url) throw new Error("Média non reçu");

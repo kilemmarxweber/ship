@@ -18,6 +18,8 @@ export type OnlineTrackHit = {
   title: string;
   artist: string;
   file: string;
+  previewUrl?: string;
+  hookMs?: number;
 };
 
 export type LocalSoundtrackClip = {
@@ -26,7 +28,22 @@ export type LocalSoundtrackClip = {
   fileName: string;
   mimeType: string;
   durationMs: number;
+  artist?: string;
+  remote?: { identifier: string; file: string };
+  hookMs?: number;
 };
+
+export function viewerCountry(currency?: string | null) {
+  if ((currency ?? "").toUpperCase() === "CDF") return "CD";
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    const region = locale.split("-")[1]?.toUpperCase() ?? "";
+    if (/^[A-Z]{2}$/.test(region)) return region;
+  } catch {
+    return "CD";
+  }
+  return "CD";
+}
 
 export function clampSoundtrackStartMs(
   startMs: number,

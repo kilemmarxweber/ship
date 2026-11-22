@@ -1,7 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useMemo } from "react";
 import {
     ActivityIndicator,
@@ -16,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { useColors } from "@/src/use-colors";
@@ -189,7 +187,6 @@ function rowsFromPayload(page: PageKey, data: Record<string, unknown>) {
 
 export function SellerAdminScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -224,13 +221,7 @@ export function SellerAdminScreen() {
         gap: 12,
       }}
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} />
       <View>
         <Text style={[styles.title, { color: c.text }]}>{meta.title}</Text>
         <Text style={[styles.lead, { color: c.textMuted }]}>

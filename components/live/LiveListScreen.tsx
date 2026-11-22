@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
 import {
     ActivityIndicator,
     Pressable,
@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 
 type LiveRow = {
   id: string;
@@ -29,7 +28,6 @@ type LiveRow = {
 
 export function LiveListScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const lives = useQuery({
     queryKey: ["lives"],
     queryFn: () => api<{ lives: LiveRow[] }>("/api/growth/lives"),
@@ -47,13 +45,7 @@ export function LiveListScreen() {
         gap: 10,
       }}
     >
-      <Pressable style={styles.back} onPress={() => safeBack()}>
-        <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={styles.backText}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={"#fff"} />
       <Text style={styles.title}>Lives</Text>
       <Pressable
         style={styles.arEntry}

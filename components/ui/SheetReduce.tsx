@@ -1,7 +1,13 @@
 import { Pressable, StyleSheet, View } from "react-native";
 
 /** Poignée seule en haut du sheet — ferme / réduit au tap (sans libellé). */
-export function SheetReduce({ onPress }: { onPress: () => void }) {
+export function SheetReduce({
+  onPress,
+  color = "rgba(255,255,255,0.28)",
+}: {
+  onPress: () => void;
+  color?: string;
+}) {
   return (
     <Pressable
       style={styles.hit}
@@ -10,7 +16,7 @@ export function SheetReduce({ onPress }: { onPress: () => void }) {
       accessibilityLabel="Réduire"
       hitSlop={12}
     >
-      <View style={styles.handle} />
+      <View style={[styles.handle, { backgroundColor: color }]} />
     </Pressable>
   );
 }
@@ -28,6 +34,5 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.28)",
   },
 });

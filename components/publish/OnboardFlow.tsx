@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { MediaStrip } from "@/components/publish/MediaStrip";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api } from "@/src/api";
 import { getDeviceCoords } from "@/src/geo";
 import {
@@ -121,12 +122,7 @@ export function OnboardFlow({
       contentContainerStyle={styles.wrap}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={onBack} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} onPress={onBack} />
       <Text style={styles.title}>Devenir Business</Text>
       <Text style={styles.lead}>
         Crée ta boutique Business — ensuite tu publies en 3 gestes : vidéo,

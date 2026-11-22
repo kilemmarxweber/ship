@@ -1,7 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { safeBack } from "@/src/nav";
 import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -22,7 +21,6 @@ import {
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import {
     normalizeStoryTemplate,
@@ -116,7 +114,6 @@ function StoryPreview({
 
 export function PartnerCampaignsScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -241,13 +238,7 @@ export function PartnerCampaignsScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} />
 
       <View>
         <Text style={[styles.title, { color: c.text }]}>

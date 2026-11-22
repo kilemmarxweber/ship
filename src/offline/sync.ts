@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from "react-native";
 
 import { api } from "@/src/api";
 import { kvSet } from "@/src/offline/db";
+import { refreshPopularSounds } from "@/src/soundtrack-library";
 import { isOnline, watchNetwork } from "@/src/offline/network";
 import { drainCisOutbox } from "@/src/cis/sync";
 import { drainOutbox } from "@/src/offline/outbox";
@@ -234,6 +235,11 @@ async function runSync(
       });
     }
 
+    try {
+      await refreshPopularSounds();
+    } catch {
+      /* le menu Populaire garde le cache SQLite */
+    }
     kvSet("lastSyncAt", String(Date.now()));
     retries = 0;
   } catch {

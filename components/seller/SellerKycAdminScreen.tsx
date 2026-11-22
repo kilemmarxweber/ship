@@ -1,7 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -16,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api, mediaUrl } from "@/src/api";
-import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -44,7 +42,6 @@ type Dossier = {
 
 export function SellerKycAdminScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -103,13 +100,7 @@ export function SellerKycAdminScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} />
       <View>
         <Text style={[styles.title, { color: c.text }]}>Revue KYC vendeurs</Text>
         <Text style={[styles.lead, { color: c.textMuted }]}>

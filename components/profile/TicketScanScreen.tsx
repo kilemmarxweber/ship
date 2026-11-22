@@ -1,17 +1,18 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { safeBack } from "@/src/nav";
 import { useRef, useState } from "react";
 import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api } from "@/src/api";
-import { useT } from "@/src/i18n";
+import { useRequireSession } from "@/src/require-session";
 import { showToast } from "@/src/toast";
 import { useColors } from "@/src/use-colors";
 
@@ -61,8 +62,8 @@ function CameraScan({
 
 export function TicketScanScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
+  const { allowed } = useRequireSession();
   const [last, setLast] = useState("");
   const lock = useRef(false);
 
@@ -89,19 +90,34 @@ export function TicketScanScreen() {
     }
   }
 
+  if (!allowed) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: c.background,
+          paddingTop: insets.top,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator color={c.primary} />
+      </View>
+    );
+  }
+
   return (
     <View
       style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}
     >
-      <Pressable onPress={() => safeBack()} style={{ padding: 16 }}>
-        <Text style={{ color: c.emerald, fontWeight: "800" }}>{t("back")}</Text>
-      </Pressable>
+      <IconBackButton color={c.text} style={styles.back} />
       <CameraScan onScan={(value) => void submit(value)} last={last} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  back: { marginLeft: 6, marginTop: 4 },
   camera: {
     flex: 1,
     marginHorizontal: 16,

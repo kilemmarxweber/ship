@@ -143,7 +143,7 @@ export function FlashPubSettings() {
       const asset = await pickMedia();
       if (!asset) return;
       const form = new FormData();
-      appendUploadFile(form, asset);
+      await appendUploadFile(form, asset);
       form.append("variant", "product");
       const uploaded = await apiUpload<{ url?: string }>("/api/upload", form);
       if (!uploaded.url) throw new Error("Média non reçu");

@@ -1,30 +1,33 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
+    ActivityIndicator,
+    FlatList,
     Keyboard,
     KeyboardAvoidingView,
     Linking,
-  Modal,
+    Modal,
     Platform,
-  Pressable,
+    Pressable,
     ScrollView,
     Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/Toast";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
+import { ShopQrButton } from "@/components/shop/ShopQrButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Face } from "@/components/ui/Face";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
@@ -37,6 +40,7 @@ import { snapshotGet } from "@/src/offline/db";
 import { commentsSnapKey } from "@/src/offline/keys";
 import { persistComments } from "@/src/offline/persist";
 import { requestOrQueue, saveCartLine } from "@/src/offline/writes";
+import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
 import {
     productInStock,
@@ -48,6 +52,25 @@ import {
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { CommentItem, Product, ShopCard } from "@/src/types";
+import { useColors } from "@/src/use-colors";
+
+function commentAge(iso: string) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60_000));
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} j`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `${weeks} sem`;
+  return new Date(iso).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+  });
+}
 
 function phoneDigits(phone: string) {
   return phone.replace(/\D/g, "");
@@ -101,7 +124,22 @@ function CommentsBody({
   onDeleted?: (productId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const c = useColors();
+  const dark = usePrefs((state) => state.theme) !== "light";
+  const token = useSession((state) => state.token);
   const me = useMe();
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const profile = useQuery({
+    queryKey: ["profile", token ?? "guest"],
+    enabled: Boolean(token),
+    staleTime: 60_000,
+    queryFn: () =>
+      api<{ user?: { name?: string; image?: string | null } }>("/api/profile"),
+  });
+  const myName = profile.data?.user?.name || "Moi";
+  const myImage = profile.data?.user?.image ?? null;
+  const listRef = useRef<FlatList<CommentItem>>(null);
   const [items, setItems] = useState<CommentItem[]>(
     () => snapshotGet<CommentItem[]>(commentsSnapKey(product.id)) ?? [],
   );
@@ -112,6 +150,8 @@ function CommentsBody({
     null,
   );
   const [deleting, setDeleting] = useState(false);
+  const [replyName, setReplyName] = useState<string | null>(null);
+  const [reaction, setReaction] = useState<Record<string, "up" | "down">>({});
 
   const myId = me.data?.id;
   const roles = me.data?.roles ?? [];
@@ -148,7 +188,12 @@ function CommentsBody({
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (event) => setKeyboard(event.endCoordinates.height),
+      (event) => {
+        setKeyboard(event.endCoordinates.height);
+        requestAnimationFrame(() =>
+          listRef.current?.scrollToEnd({ animated: true }),
+        );
+      },
     );
     const hide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
@@ -159,6 +204,27 @@ function CommentsBody({
       hide.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 320);
+    const scrollTimer = setTimeout(
+      () => listRef.current?.scrollToEnd({ animated: false }),
+      120,
+    );
+    return () => {
+      clearTimeout(focusTimer);
+      clearTimeout(scrollTimer);
+    };
+  }, [product.id]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    const timer = setTimeout(
+      () => listRef.current?.scrollToEnd({ animated: true }),
+      60,
+    );
+    return () => clearTimeout(timer);
+  }, [items.length]);
 
   useEffect(() => {
     let cancel = false;
@@ -191,7 +257,7 @@ function CommentsBody({
       id: `temp:${Date.now()}`,
       body: text,
       createdAt: new Date().toISOString(),
-      user: { id: "me", name: "Moi", image: null },
+      user: { id: myId ?? "me", name: myName, image: myImage },
     };
     setItems((current) => {
       const next = [...current, optimistic];
@@ -215,70 +281,212 @@ function CommentsBody({
         });
       }
       onPosted?.(product.id);
+      setReplyName(null);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        listRef.current?.scrollToEnd({ animated: true });
+      });
     } catch (cause) {
       setItems((current) => current.filter((row) => row.id !== optimistic.id));
       setError(cause instanceof Error ? cause.message : "Envoi impossible");
     }
   }
 
+  function reply(name: string) {
+    setReplyName(name);
+    setBody((current) => {
+      const mention = `@${name} `;
+      if (current.startsWith(mention)) return current;
+      return `${mention}${current.replace(/^@\S+\s+/, "")}`;
+    });
+    inputRef.current?.focus();
+  }
+
+  function toggleReaction(id: string, next: "up" | "down") {
+    setReaction((current) => {
+      if (current[id] === next) {
+        const copy = { ...current };
+        delete copy[id];
+        return copy;
+      }
+      return { ...current, [id]: next };
+    });
+  }
+
+  const ready = Boolean(body.trim());
+
   return (
     <KeyboardAvoidingView
       style={styles.frame}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
     >
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View
         style={[
           styles.sheet,
           {
-            marginBottom: Platform.OS === "android" ? keyboard : 0,
-            paddingBottom: Math.max(16, insets.bottom + 8),
+            backgroundColor: c.background,
+            height: Math.max(320, Math.round(height * 0.74) - keyboard),
+            paddingBottom: Math.max(12, insets.bottom + 8),
           },
         ]}
       >
-        <SheetReduce onPress={onClose} />
-        <Text style={styles.title}>Commentaires</Text>
+        <SheetReduce
+          onPress={onClose}
+          color={dark ? "rgba(255,255,255,0.28)" : "rgba(15,15,22,0.22)"}
+        />
+        <Text style={[styles.title, { color: c.text }]}>Commentaires</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
+          ref={listRef}
           data={items}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
-          style={{ maxHeight: 280 }}
-          renderItem={({ item }) => (
-            <View style={styles.commentRow}>
-            <Text style={styles.line}>
-              <Text style={styles.name}>{item.user.name} </Text>
-              {item.body}
-            </Text>
-              {canDelete(item) ? (
-                <Pressable
-                  onPress={() => setCommentToDelete(item)}
-                  hitSlop={8}
-                  style={styles.commentDelete}
-                  accessibilityLabel="Retirer le commentaire"
-                >
-                  <Ionicons
-                    name="trash-outline"
-                    size={14}
-                    color="rgba(255,255,255,0.5)"
-                  />
-                </Pressable>
-              ) : null}
-            </View>
-          )}
+          keyboardDismissMode="interactive"
+          style={{ flex: 1 }}
+          contentContainerStyle={{ gap: 10, paddingBottom: 8, flexGrow: 1 }}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: false })
+          }
+          renderItem={({ item }) => {
+            const mark = reaction[item.id];
+            return (
+              <View
+                style={[
+                  styles.commentCard,
+                  {
+                    backgroundColor: c.card,
+                    boxShadow: dark
+                      ? "0 1px 2px rgba(0,0,0,0.45)"
+                      : "0 1px 3px rgba(15,15,22,0.08)",
+                  },
+                ]}
+              >
+                <Face uri={item.user.image} name={item.user.name} size={36} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text
+                    style={[styles.commentName, { color: c.text }]}
+                    numberOfLines={1}
+                  >
+                    {item.user.name}
+                  </Text>
+                  <Text
+                    selectable
+                    style={[styles.commentBody, { color: c.text }]}
+                  >
+                    {item.body}
+                  </Text>
+                  <View style={styles.commentMeta}>
+                    <Text style={[styles.commentTime, { color: c.textMuted }]}>
+                      {commentAge(item.createdAt)}
+                    </Text>
+                    <Pressable
+                      onPress={() => reply(item.user.name)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Répondre à ${item.user.name}`}
+                      hitSlop={8}
+                    >
+                      <Text
+                        style={[styles.commentReply, { color: c.textMuted }]}
+                      >
+                        Répondre
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.commentActs}>
+                  <Pressable
+                    onPress={() => toggleReaction(item.id, "up")}
+                    accessibilityRole="button"
+                    accessibilityLabel="J'aime"
+                    accessibilityState={{ selected: mark === "up" }}
+                    hitSlop={6}
+                    style={styles.commentIcon}
+                  >
+                    <Ionicons
+                      name={mark === "up" ? "heart" : "heart-outline"}
+                      size={18}
+                      color={mark === "up" ? c.live : c.textMuted}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => toggleReaction(item.id, "down")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Je n'aime pas"
+                    accessibilityState={{ selected: mark === "down" }}
+                    hitSlop={6}
+                    style={styles.commentIcon}
+                  >
+                    <Ionicons
+                      name={
+                        mark === "down" ? "thumbs-down" : "thumbs-down-outline"
+                      }
+                      size={18}
+                      color={c.textMuted}
+                    />
+                  </Pressable>
+                  {canDelete(item) ? (
+                    <Pressable
+                      onPress={() => setCommentToDelete(item)}
+                      hitSlop={6}
+                      style={styles.commentIcon}
+                      accessibilityLabel="Retirer le commentaire"
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={16}
+                        color={c.textMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            );
+          }}
           ListEmptyComponent={
-            <Text style={styles.empty}>Aucun commentaire</Text>
+            <Text style={[styles.empty, { color: c.textMuted }]}>
+              Aucun commentaire
+            </Text>
           }
         />
-        <View style={styles.row}>
+        {replyName ? (
+          <Text style={[styles.replyHint, { color: c.textMuted }]}>
+            Réponse à {replyName}
+          </Text>
+        ) : null}
+        <View
+          style={[
+            styles.composerRow,
+            keyboard > 0 ? { marginBottom: 4 } : null,
+          ]}
+        >
+          <Face uri={myImage} name={myName} size={30} />
           <TextInput
+            ref={inputRef}
             value={body}
             onChangeText={setBody}
-            placeholder="Écrire un commentaire"
-            placeholderTextColor="rgba(255,255,255,0.35)"
-            style={styles.input}
+            placeholder="Ajouter un commentaire…"
+            placeholderTextColor={dark ? "rgba(255,255,255,0.35)" : "#8E8E93"}
+            style={[
+              styles.composerInput,
+              {
+                backgroundColor: dark ? "#1C1C1E" : "#F2F2F7",
+                color: dark ? "#fff" : c.text,
+              },
+            ]}
+            multiline
+            textAlignVertical="center"
+            autoFocus
+            blurOnSubmit={false}
           />
-          <Pressable onPress={() => void send()} style={styles.send}>
+          <Pressable
+            onPress={() => void send()}
+            disabled={!ready}
+            accessibilityRole="button"
+            accessibilityLabel="Publier le commentaire"
+            style={[styles.composerSend, { opacity: ready ? 1 : 0.35 }]}
+          >
             <Ionicons name="send" size={18} color="#fff" />
           </Pressable>
         </View>
@@ -395,7 +603,7 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
       onRequestClose={onClose}
     >
       <View style={styles.buyFrame}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={onClose} />
         <ToastHost />
         <View
           style={[
@@ -450,7 +658,7 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
                 product.compareAtCents > product.priceCents ? (
                   <Text style={styles.compare}>
                     {formatMoney(product.compareAtCents, product.currency)}
-        </Text>
+                  </Text>
                 ) : null}
               </View>
             </View>
@@ -495,11 +703,11 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
             </View>
           ) : null}
 
-        {product?.sizes.length ? (
+          {product?.sizes.length ? (
             <View style={styles.optionBlock}>
               <Text style={styles.optionLabel}>Taille</Text>
-          <View style={styles.chips}>
-            {product.sizes.map((item) => (
+              <View style={styles.chips}>
+                {product.sizes.map((item) => (
                   <Pressable
                     key={item}
                     onPress={() => setSize(item)}
@@ -513,11 +721,11 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
                     >
                       {item}
                     </Text>
-              </Pressable>
-            ))}
+                  </Pressable>
+                ))}
               </View>
-          </View>
-        ) : null}
+            </View>
+          ) : null}
 
           {stock > 0 ? (
             <View style={styles.qtyPick}>
@@ -537,11 +745,11 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
                   style={styles.qtyBtn}
                 >
                   <Ionicons name="add" size={16} color="#fff" />
-              </Pressable>
+                </Pressable>
                 <Text style={styles.qtyHint}>max {stock}</Text>
               </View>
-          </View>
-        ) : null}
+            </View>
+          ) : null}
 
           <Pressable
             onPress={() => void add()}
@@ -573,7 +781,7 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
                 </>
               )}
             </LinearGradient>
-        </Pressable>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -593,35 +801,58 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 10,
   },
-  title: { fontSize: 22, fontWeight: "800", color: "#fff" },
-  line: {
-    flex: 1,
-    color: "rgba(255,255,255,0.88)",
-    paddingVertical: 6,
-  },
-  name: { fontWeight: "700", color: "#fff" },
-  commentRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  commentDelete: { padding: 4 },
-  empty: { color: colors.muted, paddingVertical: 12 },
-  row: { flexDirection: "row", gap: 8, alignItems: "center" },
-  input: {
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.08)",
+  title: { fontSize: 20, fontWeight: "700", color: "#fff" },
+  commentCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: 18,
+    borderCurve: "continuous",
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#fff",
-    fontSize: 16,
+    paddingVertical: 12,
   },
-  send: {
-    backgroundColor: colors.emerald,
-    borderRadius: 12,
-    minHeight: 44,
-    minWidth: 44,
+  commentName: { fontSize: 15, fontWeight: "700" },
+  commentBody: { fontSize: 15, lineHeight: 21, fontWeight: "400" },
+  commentMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginTop: 4,
+  },
+  commentTime: { fontSize: 13, fontWeight: "500" },
+  commentReply: { fontSize: 13, fontWeight: "700" },
+  commentActs: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  commentIcon: {
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
   },
+  replyHint: { fontSize: 12, fontWeight: "600" },
+  composerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  composerInput: {
+    flex: 1,
+    minHeight: 34,
+    maxHeight: 88,
+    borderRadius: 17,
+    borderCurve: "continuous",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 14,
+  },
+  composerSend: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#0A84FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  empty: { color: colors.muted, paddingVertical: 12 },
   sendText: { color: "#04281c", fontWeight: "800" },
   error: { color: "#ff8a8a" },
   ok: { color: colors.emerald, fontWeight: "700" },
@@ -854,13 +1085,20 @@ const shopProfileStyles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 4,
     minHeight: 48,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 14,
+  },
+  linkMain: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   linkText: {
     flex: 1,
@@ -1271,18 +1509,26 @@ function ShopProfileBody({
             </View>
           ) : null}
 
-          <Pressable
-            style={shopProfileStyles.linkCard}
-            onPress={() => void shareShop()}
-            accessibilityRole="button"
-            accessibilityLabel="Partager le lien de la boutique"
-          >
-            <Ionicons name="link-outline" size={18} color={colors.emerald} />
-            <Text style={shopProfileStyles.linkText} numberOfLines={1}>
-              {shopUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <Ionicons name="share-outline" size={18} color="#fff" />
-          </Pressable>
+          <View style={shopProfileStyles.linkCard}>
+            <Pressable
+              style={shopProfileStyles.linkMain}
+              onPress={() => void shareShop()}
+              accessibilityRole="button"
+              accessibilityLabel="Partager le lien de la boutique"
+            >
+              <Ionicons name="link-outline" size={18} color={colors.emerald} />
+              <Text style={shopProfileStyles.linkText} numberOfLines={1}>
+                {shopUrl.replace(/^https?:\/\//, "")}
+              </Text>
+              <Ionicons name="share-outline" size={18} color="#fff" />
+            </Pressable>
+            <ShopQrButton
+              shopUrl={shopUrl}
+              shopName={shop.name}
+              bare
+              iconColor="#fff"
+            />
+          </View>
 
           <View style={shopProfileStyles.tools}>
             {phone ? (

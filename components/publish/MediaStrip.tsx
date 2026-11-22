@@ -1,30 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import * as ImageManipulator from "expo-image-manipulator";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 
-import { ProductImagePreviewSheet } from "@/components/publish/ProductImagePreviewSheet";
-import { ProductImageEditorSheet } from "@/components/publish/ProductImageEditorSheet";
-import { apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import {
-  pickMediaLibrary,
-  subscribePendingPickedMedia,
-  type PickKind,
+    ProductImageEditorSheet,
+    type MontageMedia,
+    type MontageSave,
+} from "@/components/publish/ProductImageEditorSheet";
+import { ProductImagePreviewSheet } from "@/components/publish/ProductImagePreviewSheet";
+import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
+import {
+    pickBrowseFiles,
+    pickMediaLibrary,
+    subscribePendingPickedMedia,
+    type PickKind,
 } from "@/src/pick-media";
 import {
-  analyzeProductImage,
-  formatRatio,
-  hintFromSellCategory,
-  sortPrimaryFirst,
-  type ProductImageMeta,
+    analyzeProductImage,
+    formatRatio,
+    hintFromSellCategory,
+    sortPrimaryFirst,
+    type ProductImageMeta,
 } from "@/src/product-image-intel";
 import { colors, HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -35,11 +39,16 @@ import type { ImagePickerAsset } from "expo-image-picker";
 type Kind = PickKind;
 
 async function uploadAsset(
-  asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+  asset: {
+    uri: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+    file?: Blob | null;
+  },
   variant: "product" | "avatar",
 ) {
   const form = new FormData();
-  appendUploadFile(form, asset);
+  await appendUploadFile(form, asset);
   form.append("variant", variant);
   const uploaded = await apiUpload<{ url?: string; posterUrl?: string }>(
     "/api/upload",
@@ -52,12 +61,13 @@ async function uploadAsset(
 
 async function optimizeStill(uri: string): Promise<string> {
   try {
+    const ImageManipulator = await import("expo-image-manipulator");
     const result = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 1600 } }],
       { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
     );
-    return result.uri;
+    return result.uri || uri;
   } catch {
     return uri;
   }
@@ -205,7 +215,7 @@ export function MediaStrip({
     });
   }, []);
 
-  async function add(pickKind: Kind) {
+  async function add() {
     if (busy || phase !== "idle") {
       showToast("Patiente, le média se charge encore.", "info");
       return;
@@ -214,11 +224,8 @@ export function MediaStrip({
     setPhase("picking");
     setBusy(true);
     try {
-      const assets = await pickMediaLibrary({
-        kind: pickKind,
-        limit: max === 1 ? 1 : Math.max(1, max - urls.length),
-        crop: false,
-      });
+      const limit = max === 1 ? 1 : Math.max(1, max - urls.length);
+      const assets = await pickBrowseFiles({ kind, limit });
       if (!assets.length) {
         setBusy(false);
         setPhase("idle");
@@ -296,7 +303,10 @@ export function MediaStrip({
       // Keep original earlier in list semantics: display uses cropped url,
       // originalUrl stays in meta via analyze on next effect.
       onChange(urls.map((item) => (item === url ? cropped : item)));
-      showToast("Recadrage appliqué — l’original reste sur le serveur si déjà envoyé", "info");
+      showToast(
+        "Recadrage appliqué — l’original reste sur le serveur si déjà envoyé",
+        "info",
+      );
     } catch (cause) {
       showToast(
         cause instanceof Error ? cause.message : "Recadrage impossible",
@@ -311,12 +321,29 @@ export function MediaStrip({
   const replace = max === 1 && urls.length >= 1;
   const locked = busy || phase !== "idle";
   const full = locked || (urls.length >= max && max !== 1);
-  const montageImage = urls.find((url) => !isVideoUrl(url));
-  const showPhotos = kind === "images" || kind === "mixed";
-  const showVideos = kind === "videos" || kind === "mixed";
+  const montageTarget = urls[0] ?? null;
+  const montageMedias: MontageMedia[] = urls.map((url) => {
+    const meta = metas.find((item) => item.url === url);
+    const video = isVideoUrl(url);
+    const ratio =
+      meta?.ratio && meta.ratio > 0 ? meta.ratio : video ? 9 / 16 : 1;
+    return {
+      url,
+      uri: mediaUrl(url) ?? url,
+      video,
+      width: meta?.width ?? 0,
+      ratio,
+    };
+  });
+  const browseLabel =
+    kind === "videos"
+      ? "Vidéos · 1 ou +"
+      : kind === "images"
+        ? "Photos · 1 ou +"
+        : "Photos ou vidéos";
   const status =
     phase === "picking"
-      ? "Ouverture de la galerie…"
+      ? "Ouverture des fichiers…"
       : total > 1
         ? `Envoi ${Math.min(done, total)}/${total}`
         : "Analyse + envoi…";
@@ -329,62 +356,36 @@ export function MediaStrip({
         contentContainerStyle={styles.row}
         pointerEvents={locked ? "none" : "auto"}
       >
-        {showPhotos ? (
-          <Pressable
-            style={[
-              styles.add,
-              {
-                borderColor: HAIRLINE,
-                backgroundColor: c.card,
-              },
-              locked && {
-                borderColor: `${c.primary}88`,
-                backgroundColor: `${c.primary}14`,
-              },
-            ]}
-            onPress={() => void add("images")}
-            disabled={full}
-          >
-            {locked ? (
-              <ActivityIndicator color={c.primary} />
-            ) : (
-              <Ionicons name="images-outline" size={24} color={c.text} />
-            )}
-            <Text style={[styles.addText, { color: c.text }]}>
-              {locked
-                ? "Chargement…"
-                : replace
-                  ? "Ajouter / remplacer"
-                  : "Photos · 1 ou +"}
+        <Pressable
+          style={[
+            styles.add,
+            {
+              borderColor: HAIRLINE,
+              backgroundColor: c.card,
+            },
+            locked && {
+              borderColor: `${c.primary}88`,
+              backgroundColor: `${c.primary}14`,
+            },
+          ]}
+          onPress={() => void add()}
+          disabled={full}
+          accessibilityLabel={`Parcourir ${browseLabel}`}
+        >
+          {locked ? (
+            <ActivityIndicator color={c.primary} />
+          ) : (
+            <Ionicons name="folder-open-outline" size={24} color={c.text} />
+          )}
+          <Text style={[styles.addText, { color: c.text }]}>
+            {locked ? "Chargement…" : replace ? "Remplacer" : "Parcourir"}
+          </Text>
+          {locked ? null : (
+            <Text style={[styles.addHint, { color: c.muted }]}>
+              {browseLabel}
             </Text>
-          </Pressable>
-        ) : null}
-        {showVideos ? (
-          <Pressable
-            style={[
-              styles.add,
-              {
-                borderColor: HAIRLINE,
-                backgroundColor: c.card,
-              },
-              locked && {
-                borderColor: `${c.primary}88`,
-                backgroundColor: `${c.primary}14`,
-              },
-            ]}
-            onPress={() => void add("videos")}
-            disabled={full}
-          >
-            {locked ? (
-              <ActivityIndicator color={c.primary} />
-            ) : (
-              <Ionicons name="videocam-outline" size={24} color={c.text} />
-            )}
-            <Text style={[styles.addText, { color: c.text }]}>
-              {locked ? "Chargement…" : "Vidéos · 1 ou +"}
-            </Text>
-          </Pressable>
-        ) : null}
+          )}
+        </Pressable>
         {phase === "uploading" ? (
           <View
             style={[
@@ -444,7 +445,9 @@ export function MediaStrip({
               ) : null}
               {meta && meta.width > 0 ? (
                 <View style={styles.ratioTag}>
-                  <Text style={styles.ratioText}>{formatRatio(meta.ratio)}</Text>
+                  <Text style={styles.ratioText}>
+                    {formatRatio(meta.ratio)}
+                  </Text>
                 </View>
               ) : null}
               <Pressable
@@ -484,26 +487,24 @@ export function MediaStrip({
             {
               backgroundColor: c.card,
               borderColor: `${c.primary}66`,
-              opacity: montageImage && !locked ? 1 : 0.5,
+              opacity: montageTarget && !locked ? 1 : 0.5,
             },
           ]}
-          disabled={!montageImage || locked}
+          disabled={!montageTarget || locked}
           accessibilityRole="button"
           accessibilityLabel="Ouvrir le montage du produit"
           onPress={() => {
-            if (!montageImage) return;
-            const meta = metas.find(
-              (item) => item.url === montageImage,
-            );
+            if (!montageTarget) return;
+            const meta = metas.find((item) => item.url === montageTarget);
             setEditing(
               meta ?? {
-                url: montageImage,
-                originalUrl: montageImage,
+                url: montageTarget,
+                originalUrl: montageTarget,
                 width: 0,
                 height: 0,
-                ratio: 1,
+                ratio: isVideoUrl(montageTarget) ? 9 / 16 : 1,
                 fit: "contain",
-                isPrimary: urls[0] === montageImage,
+                isPrimary: true,
               },
             );
           }}
@@ -542,34 +543,51 @@ export function MediaStrip({
         <ProductImageEditorSheet
           key={editing.url}
           open
-          uri={mediaUrl(editing.url) ?? editing.url}
+          medias={montageMedias}
+          initialUrl={editing.url}
           logoUri={mediaUrl(shopLogoUrl) ?? shopLogoUrl}
-          imageWidth={editing.width}
-          ratio={editing.ratio}
           onClose={() => setEditing(null)}
-          onSave={async (uri) => {
+          onSave={async (result: MontageSave) => {
             setPhase("uploading");
             setBusy(true);
             try {
-              const uploaded = await uploadAsset(
-                {
-                  uri,
-                  fileName: "retouched-product.jpg",
-                  mimeType: "image/jpeg",
-                },
-                variant,
-              );
-              const replacement = uploaded[0];
+              let replacement = "";
+              if (result.kind === "video") {
+                const captioned = await api<{ url?: string }>(
+                  "/api/media/caption",
+                  {
+                    method: "POST",
+                    body: JSON.stringify({
+                      url: result.targetUrl,
+                      text: result.text,
+                      position: result.position,
+                      size: result.size,
+                    }),
+                  },
+                );
+                replacement = captioned.url ?? "";
+                if (!replacement) throw new Error("Vidéo retouchée non reçue");
+              } else {
+                const uploaded = await uploadAsset(
+                  {
+                    uri: result.uri,
+                    fileName: "retouched-product.jpg",
+                    mimeType: "image/jpeg",
+                    file: result.file,
+                  },
+                  variant,
+                );
+                replacement = uploaded[0] ?? "";
+              }
+              if (!replacement) throw new Error("Média non reçu");
               urlsRef.current = urlsRef.current.map((url) =>
-                url === editing.url ? replacement : url,
+                url === result.targetUrl ? replacement : url,
               );
               onChange(urlsRef.current);
               return true;
             } catch (cause) {
               showToast(
-                cause instanceof Error
-                  ? cause.message
-                  : "Retouche impossible",
+                cause instanceof Error ? cause.message : "Retouche impossible",
                 "error",
               );
               return false;
@@ -587,7 +605,7 @@ export function MediaStrip({
 const styles = StyleSheet.create({
   row: { gap: 10, paddingVertical: 4 },
   add: {
-    width: 104,
+    width: 124,
     height: 112,
     borderRadius: 16,
     borderWidth: 1,
@@ -600,8 +618,14 @@ const styles = StyleSheet.create({
   },
   addText: {
     fontWeight: "700",
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
+  },
+  addHint: {
+    fontWeight: "600",
+    fontSize: 10,
+    textAlign: "center",
+    paddingHorizontal: 6,
   },
   pending: {
     width: 92,

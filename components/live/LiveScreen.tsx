@@ -1,4 +1,5 @@
 import { safeBack } from "@/src/nav";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { Ionicons } from "@expo/vector-icons";
 import {
     keepPreviousData,
@@ -602,9 +603,7 @@ export function LiveScreen({ liveId }: { liveId: string }) {
     return (
       <View style={styles.center}>
         <Text style={styles.endedTitle}>Live introuvable</Text>
-        <Pressable onPress={() => safeBack()}>
-          <Text style={styles.link}>Retour{"\u00A0"}</Text>
-        </Pressable>
+        <IconBackButton color="#F5F7FA" style={styles.missingBack} />
       </View>
     );
   }
@@ -1297,7 +1296,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   endedTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  link: { color: "#00D68F", fontWeight: "700" },
+  missingBack: { marginLeft: 0 },
   resumeWrap: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

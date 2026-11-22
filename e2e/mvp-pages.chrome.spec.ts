@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const shopWeb = process.env.SHOP_WEB_URL ?? "http://localhost:3000";
-const expoWeb = process.env.EXPO_WEB_URL ?? "http://localhost:8082";
+const expoWeb = process.env.EXPO_WEB_URL ?? "http://localhost:8081";
 
 test.describe("ShipShop MVP+ smoke (Chrome)", () => {
   test("shop Analytics admin charge", async ({ page }) => {

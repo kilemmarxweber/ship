@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -135,12 +135,7 @@ export function KycScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color="#fff" />
-        <Text style={styles.backText} numberOfLines={1}>
-          Retour{"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={"#fff"} />
       <Text style={styles.title}>Devenir Business pro</Text>
       <Text style={styles.lead}>
         Formulaire, puis photos de pièce d’identité. Publier reste possible sans
@@ -414,8 +409,12 @@ function KycForm({
             onUploaded={(url) => saveDoc("selfieUrl", url)}
           />
           <View style={styles.row}>
-            <Pressable style={styles.ghost} onPress={() => setStep(1)}>
-              <Text style={styles.ghostText}>Retour</Text>
+            <Pressable
+              accessibilityLabel="Retour"
+              style={styles.ghostIcon}
+              onPress={() => setStep(1)}
+            >
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable
               style={[
@@ -508,15 +507,15 @@ const styles = StyleSheet.create({
   choiceOn: { borderColor: "#FF7A00", backgroundColor: "rgba(255,122,0,0.18)" },
   choiceText: { color: colors.muted, fontWeight: "700" },
   choiceTextOn: { color: "#fff" },
-  ghost: {
-    flex: 1,
+  ghostIcon: {
+    width: 44,
+    height: 44,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.2)",
-    paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
-  ghostText: { color: "#fff", fontWeight: "800" },
   doc: {
     flexDirection: "row",
     alignItems: "center",

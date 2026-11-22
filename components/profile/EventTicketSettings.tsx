@@ -142,8 +142,7 @@ export function EventTicketSettings() {
   const [fxCdf, setFxCdf] = useState(String(DEFAULT_FX_CDF));
   const [fxConfirmed, setFxConfirmed] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
-  const sales =
-    salesState?.eventId === selectedId ? salesState.sales : null;
+  const sales = salesState?.eventId === selectedId ? salesState.sales : null;
   const currentQuery = organizerName.trim();
   const userHits =
     userHitResults?.query === currentQuery &&
@@ -201,14 +200,17 @@ export function EventTicketSettings() {
       .catch(() => setSalesState({ eventId: selectedId, sales: null }));
   }, [selectedId]);
 
-  const searchHits = useCallback(async (query: string) => {
-    const q = query.trim();
-    if (q.length < 2) return [] as UserHit[];
-    const data = await api<{ users?: UserHit[] }>(
-      `/api/admin/events/users?kind=${organizerKind}&q=${encodeURIComponent(q)}`,
-    );
-    return data.users ?? [];
-  }, [organizerKind]);
+  const searchHits = useCallback(
+    async (query: string) => {
+      const q = query.trim();
+      if (q.length < 2) return [] as UserHit[];
+      const data = await api<{ users?: UserHit[] }>(
+        `/api/admin/events/users?kind=${organizerKind}&q=${encodeURIComponent(q)}`,
+      );
+      return data.users ?? [];
+    },
+    [organizerKind],
+  );
 
   useEffect(() => {
     const q = organizerName.trim();
@@ -221,7 +223,9 @@ export function EventTicketSettings() {
           const auto = matchHit(q, hits);
           if (auto && !pickedIdRef.current) pickHit(auto, true);
         })
-        .catch(() => setUserHitResults({ query: q, kind: organizerKind, hits: [] }));
+        .catch(() =>
+          setUserHitResults({ query: q, kind: organizerKind, hits: [] }),
+        );
     }, 250);
     return () => clearTimeout(timer);
   }, [organizerName, organizerKind, pickedLabel, searchHits, pickHit]);
@@ -405,7 +409,7 @@ export function EventTicketSettings() {
       const asset = assets[0];
       if (!asset) return;
       const form = new FormData();
-      appendUploadFile(form, asset);
+      await appendUploadFile(form, asset);
       form.append("variant", "product");
       const uploaded = await apiUpload<{ url?: string }>("/api/upload", form);
       if (!uploaded.url) throw new Error("Affiche non reçue");

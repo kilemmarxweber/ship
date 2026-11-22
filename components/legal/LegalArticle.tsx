@@ -1,9 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
-import { safeBack } from "@/src/nav";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { IconBackButton } from "@/components/ui/IconBackButton";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useT } from "@/src/i18n";
 import type { LegalSection } from "@/src/legal";
 import { useColors } from "@/src/use-colors";
 
@@ -17,7 +15,6 @@ export function LegalArticle({
   sections: LegalSection[];
 }) {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   return (
     <ScrollView
@@ -29,13 +26,7 @@ export function LegalArticle({
         gap: 14,
       }}
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} />
       <Text style={[styles.title, { color: c.text }]}>{title}</Text>
       <Text style={[styles.intro, { color: c.textMuted }]}>{intro}</Text>
       {sections.map((section) => (
@@ -59,19 +50,6 @@ export function LegalArticle({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingRight: 16,
-    overflow: "visible",
-  },
-  backText: {
-    fontWeight: "700",
-    includeFontPadding: false,
-    paddingRight: 12,
-    flexShrink: 0,
-  },
   title: { fontSize: 24, fontWeight: "800" },
   intro: { lineHeight: 20 },
   card: {

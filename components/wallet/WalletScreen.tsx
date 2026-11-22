@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, apiPayment } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { DEFAULT_FX } from "@/src/fx";
 import {
     clearPaymentIdempotencyKey,
     paymentIdempotencyKey,
@@ -50,9 +49,14 @@ function moneyCents(raw: string) {
   return Math.round(value * 100);
 }
 
-function minWithdrawCents(currency: string) {
-  if (currency === "CDF") return DEFAULT_FX.cdfPerUsd * 100;
-  return 100;
+function minCashCents() {
+  return 500;
+}
+
+function minCashLabel(currency: string) {
+  if (currency === "CDF") return "Minimum 5 CDF";
+  if (currency === "KW") return "Minimum 5 KW";
+  return "Minimum 5 $US";
 }
 
 type WithdrawResult = {
@@ -264,8 +268,8 @@ export function WalletScreen() {
       return;
     }
     const cents = Math.round(Number.parseFloat(amount.replace(",", ".")) * 100);
-    if (!Number.isFinite(cents) || cents < 100) {
-      showToast("Montant invalide", "error");
+    if (!Number.isFinite(cents) || cents < minCashCents()) {
+      showToast(minCashLabel(currency), "error");
       return;
     }
     if (topUpFor === "someone" && payFromBalance) {
@@ -368,11 +372,8 @@ export function WalletScreen() {
       showToast("Cette somme dépasse le fond", "error");
       return;
     }
-    if (gross < minWithdrawCents(displayCurrency)) {
-      showToast(
-        displayCurrency === "CDF" ? "Minimum 2 400 CDF" : "Minimum 1 $US",
-        "error",
-      );
+    if (gross < minCashCents()) {
+      showToast(minCashLabel(displayCurrency), "error");
       return;
     }
     const parts = splitPhone(phone);
@@ -500,7 +501,8 @@ export function WalletScreen() {
               style={styles.input}
             />
             <Text style={styles.hint}>
-              Disponible {formatMoney(pots[bucket], displayCurrency)}
+              {minCashLabel(displayCurrency)}, sans conversion. Disponible{" "}
+              {formatMoney(pots[bucket], displayCurrency)}
               {withdrawGross != null && withdrawGross > 0
                 ? `. Frais ${formatMoney(withdrawFee, displayCurrency)}. Tu reçois ${formatMoney(withdrawNet, displayCurrency)}.`
                 : "."}{" "}

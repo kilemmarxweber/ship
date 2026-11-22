@@ -1,7 +1,10 @@
+import { Platform } from "react-native";
+
 export type UploadAsset = {
   uri: string;
   fileName?: string | null;
   mimeType?: string | null;
+  file?: Blob | null;
 };
 
 const EXT_MIME: Record<string, string> = {
@@ -74,9 +77,29 @@ export function guessUploadMeta(asset: UploadAsset) {
   return { name, type };
 }
 
-/** Partie fichier React Native — ne pas caster en Blob (fetch refuse). */
-export function appendUploadFile(form: FormData, asset: UploadAsset) {
+async function fileFromWebAsset(
+  asset: UploadAsset,
+  name: string,
+  type: string,
+) {
+  if (asset.file && asset.file.size > 0) {
+    const mime = asset.file.type || type;
+    return new File([asset.file], name, { type: mime });
+  }
+  const response = await fetch(asset.uri);
+  if (!response.ok) throw new Error("Ce fichier n’a pas pu être lu.");
+  const blob = await response.blob();
+  if (blob.size <= 0) throw new Error("Ce fichier est vide.");
+  return new File([blob], name, { type: blob.type || type });
+}
+
+/** Navigateur : un vrai File. Application native : l’objet { uri, name, type }. */
+export async function appendUploadFile(form: FormData, asset: UploadAsset) {
   const { name, type } = guessUploadMeta(asset);
+  if (Platform.OS === "web") {
+    form.append("file", await fileFromWebAsset(asset, name, type), name);
+    return { name, type };
+  }
   form.append("file", { uri: asset.uri, name, type } as never);
   return { name, type };
 }

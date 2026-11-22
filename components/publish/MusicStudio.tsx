@@ -5,7 +5,14 @@ import {
     useAudioPlayerStatus,
 } from "expo-audio";
 import { Image } from "expo-image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -27,13 +34,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SheetReduce } from "@/components/ui/SheetReduce";
-import {
-    api,
-    apiDownloadFile,
-    apiUpload,
-    isVideoUrl,
-    mediaUrl,
-} from "@/src/api";
+import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import {
     archivePreviewUrl,
     AUDIO_INPUT_MAX_BYTES,
@@ -50,15 +51,30 @@ import {
     SLIDE_MOTIONS,
     slideshowWindow,
     VIDEO_INPUT_MAX_BYTES,
+    viewerCountry,
     type CatalogTrack,
     type LocalSoundtrackClip,
     type OnlineTrackHit,
     type SlideMotion,
 } from "@/src/soundtrack";
+import {
+    libraryFromClip,
+    libraryFromHit,
+    pushRecent,
+    readFavorites,
+    readPopular,
+    readRecents,
+    refreshPopularSounds,
+    toggleFavorite,
+    type LibrarySound,
+} from "@/src/soundtrack-library";
 import { colors, HAIRLINE, type ThemeColors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import { appendUploadFile } from "@/src/upload-file";
 import { useColors } from "@/src/use-colors";
+
+const SOUND_TABS = ["Populaire", "Pour toi", "Favoris", "Récents"] as const;
+type SoundTab = (typeof SOUND_TABS)[number];
 
 async function pickSoundtrackFile() {
   const DocumentPicker = await import("expo-document-picker");
@@ -81,6 +97,7 @@ function ClipPreview({
   onDurationMs,
   onPlaying,
   paused,
+  autoPlay,
 }: {
   uri: string;
   durationMs: number;
@@ -89,20 +106,24 @@ function ClipPreview({
   onDurationMs?: (ms: number) => void;
   onPlaying?: (playing: boolean) => void;
   paused?: boolean;
+  autoPlay?: boolean;
 }) {
   const c = useColors();
   const styles = studioStyles;
   const player = useAudioPlayer(playableFileUri(uri), {
     updateInterval: 200,
-    downloadFirst: true,
+    downloadFirst: !uri.startsWith("http"),
   });
   const status = useAudioPlayerStatus(player);
   const barWidth = useRef(1);
+  const playGen = useRef(0);
+  const startRef = useRef(0);
   const loadedMs = Math.round((status.duration || 0) * 1000);
   const total = Math.max(1000, loadedMs > 400 ? loadedMs : durationMs);
   const clipMs = Math.min(MONTAGE_MAX_MS, total);
   const maxStart = Math.max(0, total - clipMs);
   const start = clampSoundtrackStartMs(startMs, total);
+  startRef.current = start;
   const end = start + clipMs;
   const leftPct = (start / total) * 100;
   const widthPct = (clipMs / total) * 100;
@@ -120,6 +141,56 @@ function ClipPreview({
   useEffect(() => {
     if (paused && status.playing) player.pause();
   }, [paused, player, status.playing]);
+
+  const ready = status.isLoaded && loadedMs > 400;
+
+  useEffect(() => {
+    if (!autoPlay) {
+      playGen.current += 1;
+      try {
+        player.pause();
+      } catch {
+        /* released */
+      }
+      return;
+    }
+    if (paused || !ready) {
+      if (paused) {
+        playGen.current += 1;
+        try {
+          player.pause();
+        } catch {
+          /* released */
+        }
+      }
+      return;
+    }
+    const gen = playGen.current + 1;
+    playGen.current = gen;
+    const from = startRef.current / 1000;
+    // Expo Audio exposes player controls as mutable properties.
+    // eslint-disable-next-line react-hooks/immutability
+    player.volume = 0.8;
+    void player.seekTo(from).then(() => {
+      if (playGen.current !== gen) return;
+      player.play();
+    });
+    return () => {
+      playGen.current += 1;
+    };
+  }, [autoPlay, paused, player, ready]);
+
+  useEffect(() => {
+    const current = player;
+    return () => {
+      playGen.current += 1;
+      try {
+        current.pause();
+      } catch {
+        /* released */
+      }
+    };
+  }, [player]);
 
   useEffect(() => {
     if (!status.playing) return;
@@ -238,7 +309,7 @@ function HitPreview({ uri }: { uri: string }) {
   const styles = studioStyles;
   const player = useAudioPlayer(uri, {
     updateInterval: 400,
-    downloadFirst: true,
+    downloadFirst: false,
   });
   const status = useAudioPlayerStatus(player);
 
@@ -394,8 +465,8 @@ function MontageSlides({
     <View style={styles.clipBox}>
       <Text style={styles.clipTitle}>Images sur 1 minute</Text>
       <Text style={styles.hint}>
-        Jusqu’à 12 images : elles défilent pendant la minute de son. Choisis le
-        mouvement de chaque vue.
+        Les photos défilent sur la minute de son. Une vidéo déjà filmée n’est
+        pas animée.
       </Text>
       <View style={styles.kenFrame}>
         <KenImage
@@ -441,41 +512,86 @@ function MontageSlides({
       >
         <Ionicons name="sparkles-outline" size={16} color={c.text} />
         <Text style={styles.importText}>
-          Animation : {videoSlide ? "—" : motion ? MOTION_LABELS[motion] : "—"}
+          {videoSlide
+            ? "Vidéo inchangée"
+            : motion
+              ? `Animation : ${MOTION_LABELS[motion]}`
+              : "Animation : aucune"}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-export function MusicStudio({
-  productTitle,
-  images,
-  soundtrackId,
-  onSoundtrackId,
-  startMs,
-  onStartMs,
-  localClip,
-  onLocalClip,
-  imageMotions,
-  onImageMotions,
-}: {
-  productTitle?: string;
-  images: string[];
-  soundtrackId: string | null;
-  onSoundtrackId: (id: string | null) => void;
-  startMs: number;
-  onStartMs: (ms: number) => void;
-  localClip: LocalSoundtrackClip | null;
-  onLocalClip: (clip: LocalSoundtrackClip | null) => void;
-  imageMotions: string[];
-  onImageMotions: (next: string[]) => void;
-}) {
+export type MusicStudioHandle = {
+  open: () => void;
+  close: () => void;
+};
+
+export const MusicStudio = forwardRef<
+  MusicStudioHandle,
+  {
+    productTitle?: string;
+    images: string[];
+    soundtrackId: string | null;
+    onSoundtrackId: (id: string | null) => void;
+    startMs: number;
+    onStartMs: (ms: number) => void;
+    localClip: LocalSoundtrackClip | null;
+    onLocalClip: (clip: LocalSoundtrackClip | null) => void;
+    imageMotions: string[];
+    onImageMotions: (next: string[]) => void;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    hideEntry?: boolean;
+    storyChrome?: boolean;
+    onTrackLabel?: (label: string | null) => void;
+  }
+>(function MusicStudio(
+  {
+    productTitle,
+    images,
+    soundtrackId,
+    onSoundtrackId,
+    startMs,
+    onStartMs,
+    localClip,
+    onLocalClip,
+    imageMotions,
+    onImageMotions,
+    open: openProp,
+    onOpenChange,
+    hideEntry = false,
+    storyChrome = false,
+    onTrackLabel,
+  },
+  ref,
+) {
   const c = useColors();
   const styles = studioStyles;
   const insets = useSafeAreaInsets();
-  const [open, setOpen] = useState(false);
-  const [tracks, setTracks] = useState<CatalogTrack[]>([]);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? Boolean(openProp) : internalOpen;
+
+  function setOpen(next: boolean) {
+    if (!controlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  }
+
+  useImperativeHandle(ref, () => ({
+    open: () => setOpen(true),
+    close: () => setOpen(false),
+  }));
+  const [suggestions, setSuggestions] = useState<OnlineTrackHit[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [soundTab, setSoundTab] = useState<SoundTab>("Populaire");
+  const [popular, setPopular] = useState<LibrarySound[]>(() => readPopular());
+  const [favorites, setFavorites] = useState<LibrarySound[]>(() =>
+    readFavorites(),
+  );
+  const [recents, setRecents] = useState<LibrarySound[]>(() => readRecents());
+  const [librarySound, setLibrarySound] = useState<LibrarySound | null>(null);
   const [searchDraft, setSearchDraft] = useState<{
     title: string;
     value: string;
@@ -486,6 +602,14 @@ export function MusicStudio({
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [clipPlaying, setClipPlaying] = useState(false);
+  const [playNonce, setPlayNonce] = useState(0);
+  const openRef = useRef(false);
+  openRef.current = open;
+
+  function requestPlay() {
+    if (!openRef.current) return;
+    setPlayNonce((n) => n + 1);
+  }
   const searchQ =
     searchDraft?.title === (productTitle ?? "")
       ? searchDraft.value
@@ -494,6 +618,12 @@ export function MusicStudio({
   function setSearchQ(value: string) {
     setSearchDraft({ title: productTitle ?? "", value });
   }
+
+  const autoApplied = useRef(false);
+  const soundtrackRef = useRef(soundtrackId);
+  soundtrackRef.current = soundtrackId;
+
+  const adoptLibraryRef = useRef<(sound: LibrarySound) => void>(() => {});
 
   useEffect(() => {
     if (!open) return;
@@ -504,10 +634,61 @@ export function MusicStudio({
   }, [open]);
 
   useEffect(() => {
-    void api<{ soundtracks?: CatalogTrack[] }>("/api/soundtracks")
-      .then((data) => setTracks(data.soundtracks ?? []))
-      .catch(() => setTracks([]));
+    const cached = readPopular();
+    setPopular(cached);
+    setFavorites(readFavorites());
+    setRecents(readRecents());
+    if (autoApplied.current || soundtrackRef.current || !cached[0]) return;
+    autoApplied.current = true;
+    adoptLibraryRef.current(cached[0]);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setPopular(readPopular());
+    setFavorites(readFavorites());
+    setRecents(readRecents());
+    if (readPopular().length) return;
+    let alive = true;
+    void refreshPopularSounds()
+      .then(() => {
+        if (!alive) return;
+        const next = readPopular();
+        setPopular(next);
+        if (autoApplied.current || soundtrackRef.current || !next[0]) return;
+        autoApplied.current = true;
+        adoptLibraryRef.current(next[0]);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || soundTab !== "Pour toi") return;
+    let alive = true;
+    const q = productTitle?.trim() || "afrobeats";
+    setSuggesting(true);
+    void api<{ tracks?: OnlineTrackHit[] }>(
+      `/api/soundtracks/suggest?q=${encodeURIComponent(q)}&country=${encodeURIComponent(viewerCountry())}`,
+    )
+      .then((data) => {
+        if (!alive) return;
+        setSuggestions(
+          (data.tracks ?? []).filter((item) => item.previewUrl || item.file),
+        );
+      })
+      .catch(() => {
+        if (alive) setSuggestions([]);
+      })
+      .finally(() => {
+        if (alive) setSuggesting(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, productTitle, soundTab]);
 
   const selectedTrack = useMemo(() => {
     if (soundtrackId === LOCAL_SOUNDTRACK_ID && localClip) {
@@ -519,8 +700,24 @@ export function MusicStudio({
         audioUrl: localClip.uri,
       };
     }
-    return tracks.find((track) => track.id === soundtrackId) ?? null;
-  }, [localClip, soundtrackId, tracks]);
+    if (
+      librarySound?.soundtrackId &&
+      soundtrackId === librarySound.soundtrackId
+    ) {
+      return {
+        id: librarySound.soundtrackId,
+        title: librarySound.title,
+        artist: librarySound.artist,
+        durationMs: librarySound.durationMs,
+        audioUrl: librarySound.uri,
+      };
+    }
+    return null;
+  }, [librarySound, localClip, soundtrackId]);
+
+  useEffect(() => {
+    onTrackLabel?.(selectedTrack?.title ?? null);
+  }, [onTrackLabel, selectedTrack?.title]);
 
   const previewUri = selectedTrack
     ? playableFileUri(
@@ -529,10 +726,85 @@ export function MusicStudio({
     : null;
 
   function adoptLocal(clip: LocalSoundtrackClip) {
+    setLibrarySound(null);
     setPreviewKey(null);
     onLocalClip(clip);
     onSoundtrackId(LOCAL_SOUNDTRACK_ID);
     onStartMs(0);
+    setRecents(pushRecent(libraryFromClip(clip)));
+    requestPlay();
+  }
+
+  function adoptOnline(hit: OnlineTrackHit) {
+    const hook = hit.hookMs ?? 0;
+    setLibrarySound(null);
+    setPreviewKey(null);
+    onLocalClip({
+      uri: hit.previewUrl || archivePreviewUrl(hit.identifier, hit.file),
+      title: hit.title,
+      artist: hit.artist,
+      fileName: hit.file,
+      mimeType: "audio/mpeg",
+      durationMs: MONTAGE_MAX_MS,
+      hookMs: hook,
+      remote: { identifier: hit.identifier, file: hit.file },
+    });
+    onSoundtrackId(LOCAL_SOUNDTRACK_ID);
+    onStartMs(hook);
+    setRecents(pushRecent(libraryFromHit(hit)));
+    requestPlay();
+  }
+
+  function adoptLibrary(sound: LibrarySound) {
+    if (sound.remote && !sound.soundtrackId) {
+      adoptOnline({
+        identifier: sound.remote.identifier,
+        title: sound.title,
+        artist: sound.artist,
+        file: sound.remote.file,
+        previewUrl: sound.uri,
+        hookMs: sound.hookMs,
+      });
+      return;
+    }
+    if (!sound.soundtrackId) {
+      adoptLocal({
+        uri: sound.uri,
+        title: sound.title,
+        artist: sound.artist,
+        fileName: sound.title,
+        mimeType: "audio/mpeg",
+        durationMs: sound.durationMs,
+        hookMs: sound.hookMs,
+      });
+      return;
+    }
+    setPreviewKey(null);
+    setLibrarySound(sound);
+    onLocalClip(null);
+    onSoundtrackId(sound.soundtrackId);
+    onStartMs(sound.hookMs);
+    setRecents(pushRecent(sound));
+    requestPlay();
+  }
+  adoptLibraryRef.current = adoptLibrary;
+
+  function soundSelected(sound: LibrarySound) {
+    if (sound.soundtrackId && soundtrackId === sound.soundtrackId) return true;
+    if (
+      sound.remote &&
+      soundtrackId === LOCAL_SOUNDTRACK_ID &&
+      localClip?.remote?.identifier === sound.remote.identifier &&
+      localClip.remote.file === sound.remote.file
+    ) {
+      return true;
+    }
+    return (
+      !sound.soundtrackId &&
+      !sound.remote &&
+      soundtrackId === LOCAL_SOUNDTRACK_ID &&
+      localClip?.uri === sound.uri
+    );
   }
 
   async function searchOnline() {
@@ -564,24 +836,9 @@ export function MusicStudio({
 
   async function downloadOnlineHit(hit: OnlineTrackHit) {
     setFetchingId(hit.identifier);
-    setPreviewKey(null);
     try {
-      const ext = hit.file.includes(".")
-        ? (hit.file.split(".").pop() ?? "mp3")
-        : "mp3";
-      const fileName = `ia-${hit.identifier.slice(0, 24)}.${ext}`;
-      const downloaded = await apiDownloadFile(
-        `/api/soundtracks/fetch?identifier=${encodeURIComponent(hit.identifier)}&file=${encodeURIComponent(hit.file)}`,
-        fileName,
-      );
-      adoptLocal({
-        uri: downloaded.uri,
-        title: hit.title,
-        fileName,
-        mimeType: downloaded.mimeType,
-        durationMs: MONTAGE_MAX_MS,
-      });
-      showToast("Son importé — coupe la minute voulue", "success");
+      adoptOnline(hit);
+      showToast("Extrait prêt — la minute part du passage choisi", "success");
     } catch (cause) {
       showToast(
         cause instanceof Error ? cause.message : "Téléchargement impossible",
@@ -642,19 +899,6 @@ export function MusicStudio({
     setPreviewKey(null);
   }
 
-  function pickCatalog(track: CatalogTrack) {
-    setPreviewKey(null);
-    if (soundtrackId === track.id) {
-      onLocalClip(null);
-      onSoundtrackId(null);
-      onStartMs(0);
-      return;
-    }
-    onLocalClip(null);
-    onSoundtrackId(track.id);
-    onStartMs(0);
-  }
-
   function toggleLocal() {
     if (!localClip) return;
     setPreviewKey(null);
@@ -665,24 +909,27 @@ export function MusicStudio({
     }
     onSoundtrackId(LOCAL_SOUNDTRACK_ID);
     onStartMs(0);
+    requestPlay();
   }
 
   return (
     <>
-      <Pressable style={styles.entry} onPress={() => setOpen(true)}>
-        <View style={styles.entryIcon}>
-          <Ionicons name="musical-notes" size={18} color={c.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.entryTitle}>Studio musique</Text>
-          <Text style={styles.entrySub} numberOfLines={1}>
-            {selectedTrack
-              ? selectedTrack.title
-              : "Son, coupe 1 min et animations"}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
-      </Pressable>
+      {hideEntry ? null : (
+        <Pressable style={styles.entry} onPress={() => setOpen(true)}>
+          <View style={styles.entryIcon}>
+            <Ionicons name="musical-notes" size={18} color={c.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.entryTitle}>Studio musique</Text>
+            <Text style={styles.entrySub} numberOfLines={1}>
+              {selectedTrack
+                ? selectedTrack.title
+                : "Son, coupe 1 min et animations"}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
+        </Pressable>
+      )}
 
       <Modal
         visible={open}
@@ -693,22 +940,57 @@ export function MusicStudio({
       >
         <View style={styles.frame}>
           <Pressable style={styles.backdrop} onPress={closeStudio} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View
+            style={[
+              styles.sheet,
+              storyChrome && styles.storySheet,
+              { paddingBottom: insets.bottom + 16 },
+            ]}
+          >
             <SheetReduce onPress={closeStudio} />
-            <View style={styles.head}>
-              <View style={styles.entryIcon}>
-                <Ionicons name="disc" size={18} color={c.primary} />
+            {storyChrome ? (
+              <View style={styles.storyTabs}>
+                {SOUND_TABS.map((tab) => (
+                  <Pressable
+                    key={tab}
+                    onPress={() => setSoundTab(tab)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: soundTab === tab }}
+                    style={styles.storyTabHit}
+                  >
+                    <Text
+                      style={[
+                        styles.storyTab,
+                        soundTab === tab && styles.storyTabOn,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                  </Pressable>
+                ))}
+                <Ionicons
+                  name="search"
+                  size={18}
+                  color="#FFFFFF"
+                  style={{ marginLeft: "auto" }}
+                />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sheetTitle}>Studio musique</Text>
-                <Text style={styles.hint}>
-                  Écoute, coupe 1 minute, anime tes images
-                </Text>
+            ) : (
+              <View style={styles.head}>
+                <View style={styles.entryIcon}>
+                  <Ionicons name="disc" size={18} color={c.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sheetTitle}>Studio musique</Text>
+                  <Text style={styles.hint}>
+                    Écoute, coupe 1 minute, anime tes images
+                  </Text>
+                </View>
+                <Pressable onPress={closeStudio} hitSlop={10}>
+                  <Ionicons name="close" size={20} color={c.text} />
+                </Pressable>
               </View>
-              <Pressable onPress={closeStudio} hitSlop={10}>
-                <Ionicons name="close" size={20} color={c.text} />
-              </Pressable>
-            </View>
+            )}
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -716,6 +998,180 @@ export function MusicStudio({
               showsVerticalScrollIndicator
               contentContainerStyle={styles.body}
             >
+              {storyChrome ? (
+                <View style={styles.searchCard}>
+                  {soundTab === "Pour toi" ? (
+                    <>
+                      <Text style={styles.entryTitle}>Pour toi</Text>
+                      <Text style={styles.hint}>
+                        Extraits déjà coupés, proposés pour ce produit.
+                      </Text>
+                      {suggesting && suggestions.length === 0 ? (
+                        <View style={styles.hit}>
+                          <ActivityIndicator color={c.primary} />
+                          <Text style={styles.hint}>
+                            Chargement des extraits…
+                          </Text>
+                        </View>
+                      ) : null}
+                      {!suggesting && suggestions.length === 0 ? (
+                        <Text style={styles.hint}>
+                          Aucune proposition pour le moment.
+                        </Text>
+                      ) : null}
+                      {suggestions.map((hit) => {
+                        const sound = libraryFromHit(hit);
+                        const on = soundSelected(sound);
+                        const fav = favorites.some(
+                          (item) => item.key === sound.key,
+                        );
+                        return (
+                          <View key={sound.key} style={styles.hit}>
+                            <Pressable
+                              onPress={() => adoptOnline(hit)}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: on }}
+                              style={styles.hitMain}
+                            >
+                              <View style={styles.hitPlay}>
+                                <Ionicons
+                                  name={on ? "checkmark" : "musical-notes"}
+                                  size={16}
+                                  color={c.primary}
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.hitTitle} numberOfLines={1}>
+                                  {hit.title}
+                                </Text>
+                                <Text
+                                  style={styles.hitArtist}
+                                  numberOfLines={1}
+                                >
+                                  {hit.artist} · extrait prêt
+                                </Text>
+                              </View>
+                            </Pressable>
+                            <Pressable
+                              onPress={() =>
+                                setFavorites(toggleFavorite(sound))
+                              }
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={
+                                fav
+                                  ? "Retirer des favoris"
+                                  : "Ajouter aux favoris"
+                              }
+                            >
+                              <Ionicons
+                                name={fav ? "heart" : "heart-outline"}
+                                size={20}
+                                color={fav ? c.primary : c.textMuted}
+                              />
+                            </Pressable>
+                          </View>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.entryTitle}>{soundTab}</Text>
+                      <Text style={styles.hint}>
+                        {soundTab === "Populaire"
+                          ? "Les sons les plus utilisés sur ShipShop."
+                          : soundTab === "Favoris"
+                            ? "Gardés sur cet appareil."
+                            : "Tes derniers sons, sur cet appareil."}
+                      </Text>
+                      {(soundTab === "Populaire"
+                        ? popular
+                        : soundTab === "Favoris"
+                          ? favorites
+                          : recents
+                      ).length === 0 ? (
+                        <Text style={styles.hint}>
+                          {soundTab === "Populaire"
+                            ? "Aucun son populaire en cache."
+                            : soundTab === "Favoris"
+                              ? "Touche le cœur pour garder un son ici."
+                              : "Tes derniers sons s’afficheront ici."}
+                        </Text>
+                      ) : null}
+                      {(soundTab === "Populaire"
+                        ? popular
+                        : soundTab === "Favoris"
+                          ? favorites
+                          : recents
+                      ).map((sound) => {
+                        const on = soundSelected(sound);
+                        const fav = favorites.some(
+                          (item) => item.key === sound.key,
+                        );
+                        return (
+                          <View
+                            key={sound.key}
+                            style={[
+                              styles.hit,
+                              on && {
+                                borderColor: c.primary,
+                                backgroundColor: `${c.primary}18`,
+                              },
+                            ]}
+                          >
+                            <Pressable
+                              onPress={() => adoptLibrary(sound)}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: on }}
+                              style={styles.hitMain}
+                            >
+                              <View style={styles.hitPlay}>
+                                <Ionicons
+                                  name={on ? "checkmark" : "musical-notes"}
+                                  size={16}
+                                  color={c.primary}
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.hitTitle} numberOfLines={1}>
+                                  {sound.title}
+                                </Text>
+                                <Text
+                                  style={styles.hitArtist}
+                                  numberOfLines={1}
+                                >
+                                  {sound.artist}
+                                  {sound.uses
+                                    ? ` · ${sound.uses} utilisation${sound.uses > 1 ? "s" : ""}`
+                                    : ""}
+                                </Text>
+                              </View>
+                            </Pressable>
+                            <Pressable
+                              onPress={() =>
+                                setFavorites(toggleFavorite(sound))
+                              }
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={
+                                fav
+                                  ? "Retirer des favoris"
+                                  : "Ajouter aux favoris"
+                              }
+                            >
+                              <Ionicons
+                                name={fav ? "heart" : "heart-outline"}
+                                size={20}
+                                color={fav ? c.primary : c.textMuted}
+                              />
+                            </Pressable>
+                          </View>
+                        );
+                      })}
+                    </>
+                  )}
+                </View>
+              ) : null}
               <View style={styles.searchCard}>
                 <View style={styles.searchHead}>
                   <View style={styles.globe}>
@@ -843,8 +1299,8 @@ export function MusicStudio({
                 </Text>
               </Pressable>
 
-              <View style={styles.chips}>
-                {localClip ? (
+              {localClip && !localClip.remote ? (
+                <View style={styles.chips}>
                   <Pressable
                     onPress={toggleLocal}
                     style={[
@@ -862,36 +1318,18 @@ export function MusicStudio({
                       {localClip.title}
                     </Text>
                   </Pressable>
-                ) : null}
-                {tracks.map((track) => (
-                  <Pressable
-                    key={track.id}
-                    onPress={() => pickCatalog(track)}
-                    style={[
-                      styles.chip,
-                      soundtrackId === track.id && styles.chipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        soundtrackId === track.id && styles.chipTextOn,
-                      ]}
-                    >
-                      {track.title}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+                </View>
+              ) : null}
 
               {previewUri && selectedTrack ? (
                 <ClipPreview
-                  key={`${selectedTrack.id}-${previewUri}`}
+                  key={`${selectedTrack.id}-${previewUri}-${playNonce}`}
                   uri={previewUri}
                   durationMs={selectedTrack.durationMs}
                   startMs={startMs}
                   onStartMs={onStartMs}
                   paused={Boolean(previewKey)}
+                  autoPlay={open}
                   onPlaying={setClipPlaying}
                   onDurationMs={(ms) => {
                     if (
@@ -929,14 +1367,33 @@ export function MusicStudio({
       </Modal>
     </>
   );
-}
+});
 
 export async function uploadLocalSoundtrack(
   clip: LocalSoundtrackClip,
   startMs: number,
 ) {
+  if (clip.remote) {
+    const posted = await api<{ soundtrack?: CatalogTrack; error?: string }>(
+      "/api/soundtracks/clip",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          identifier: clip.remote.identifier,
+          file: clip.remote.file,
+          startMs,
+          title: clip.title,
+          artist: clip.artist,
+        }),
+      },
+    );
+    if (!posted.soundtrack?.id) {
+      throw new Error(posted.error ?? "Extrait audio impossible");
+    }
+    return posted.soundtrack.id;
+  }
   const form = new FormData();
-  appendUploadFile(form, {
+  await appendUploadFile(form, {
     uri: clip.uri,
     fileName: clip.fileName,
     mimeType: clip.mimeType,
@@ -992,6 +1449,35 @@ function makeStyles(c: ThemeColors = colors) {
       backgroundColor: c.sheet,
       paddingHorizontal: 16,
       paddingTop: 8,
+    },
+    storySheet: {
+      backgroundColor: "#121212",
+      maxHeight: "78%",
+    },
+    storyTabs: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 4,
+      paddingBottom: 6,
+      marginBottom: 4,
+    },
+    storyTabHit: {
+      minHeight: 44,
+      justifyContent: "center",
+      paddingHorizontal: 6,
+    },
+    storyTab: {
+      color: "rgba(255,255,255,0.45)",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    storyTabOn: {
+      color: "#FFFFFF",
+      fontWeight: "800",
+      borderBottomWidth: 2,
+      borderBottomColor: "#FFFFFF",
+      paddingBottom: 4,
     },
     head: {
       flexDirection: "row",
@@ -1058,6 +1544,12 @@ function makeStyles(c: ThemeColors = colors) {
       paddingVertical: 8,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: "rgba(127,127,140,0.18)",
+    },
+    hitMain: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
     },
     hitPlay: {
       width: 36,

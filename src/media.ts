@@ -30,6 +30,19 @@ export function coverOf(images: string[] | null | undefined) {
   return playableMediaUrl(pick);
 }
 
+/** Image fixe pour le fil : photo, sinon la vignette .jpg de la vidéo. */
+export function stillOf(images: string[] | null | undefined) {
+  const list = mediaList(images);
+  const image = list.find((url) => !isVideoUrl(url));
+  if (image) return image;
+  const video = list.find((url) => isVideoUrl(url));
+  if (!video) return list[0] ?? null;
+  return video.replace(
+    /\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i,
+    ".jpg$2",
+  );
+}
+
 export function productHasAudio(product: {
   images?: string[] | null;
   soundtrack?: { audioUrl?: string | null } | null;

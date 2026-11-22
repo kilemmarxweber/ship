@@ -1,6 +1,6 @@
-import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
@@ -379,10 +379,7 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
           gap: 12,
         }}
       >
-        <Pressable onPress={() => safeBack()} style={styles.back}>
-          <Ionicons name="chevron-back" size={22} color={c.text} />
-          <Text style={[styles.backText, { color: c.text }]}>Retour</Text>
-        </Pressable>
+        <IconBackButton color={c.text} style={styles.back} />
         {request.images.length ? (
           <ScrollView
             horizontal
@@ -784,13 +781,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   retryText: { color: "#fff", fontWeight: "800" },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-  },
-  backText: { fontWeight: "700" },
+  back: { marginLeft: -6 },
   gallery: { width: "100%", borderRadius: 20, overflow: "hidden" },
   hero: { height: 210 },
   heroFallback: {

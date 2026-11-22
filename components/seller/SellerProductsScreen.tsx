@@ -1,4 +1,4 @@
-import { safeBack } from "@/src/nav";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
@@ -30,7 +30,6 @@ import { PagedMore } from "@/components/ui/PagedMore";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
-import { useT } from "@/src/i18n";
 import { coverOf } from "@/src/media";
 import {
     APP_CURRENCIES,
@@ -74,7 +73,6 @@ function parseCurrency(value?: string): AppCurrency {
 
 export function SellerProductsScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -317,13 +315,7 @@ export function SellerProductsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
       <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => safeBack()} style={styles.back}>
-          <Ionicons name="chevron-back" size={20} color={c.text} />
-          <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-            {t("back")}
-            {"\u00A0"}
-          </Text>
-        </Pressable>
+        <IconBackButton color={c.text} />
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: c.text }]}>

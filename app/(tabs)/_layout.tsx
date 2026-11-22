@@ -20,17 +20,13 @@ import { useCart } from "@/src/cart-store";
 import { compactCount } from "@/src/format";
 import { useInbox } from "@/src/inbox";
 import { useSession } from "@/src/session";
+import { useTabBarMetrics } from "@/src/tab-bar-metrics";
 import { colors } from "@/src/theme";
 
 const LOGO_ORANGE = colors.primary;
-const FAB_SIZE = 56;
-const GAP = 9;
-const HOLE_R = FAB_SIZE / 2 + GAP;
-const DISK_R = 280;
-const CY = 16;
-const BAR_BODY = 64;
 
 function PublishFab() {
+  const { fab, cy, plus } = useTabBarMetrics();
   const progress = useSharedValue(0);
 
   useEffect(() => {
@@ -80,38 +76,72 @@ function PublishFab() {
   }));
 
   return (
-    <Animated.View style={[styles.fab, fabStyle]}>
+    <Animated.View
+      style={[
+        styles.fab,
+        fabStyle,
+        {
+          width: fab,
+          height: fab,
+          borderRadius: fab / 2,
+          marginTop: cy - fab / 2,
+        },
+      ]}
+    >
       <Animated.View style={[styles.fabLayer, foxStyle]}>
         <Image
           source={require("@/assets/images/fox-emoji.jpg")}
-          style={styles.fabFox}
+          style={{
+            width: fab - 4,
+            height: fab - 4,
+            borderRadius: (fab - 4) / 2,
+          }}
           contentFit="cover"
         />
       </Animated.View>
       <Animated.View style={[styles.fabLayer, plusStyle]} pointerEvents="none">
-        <Ionicons name="add" size={30} color="#fff" />
+        <Ionicons name="add" size={plus} color="#fff" />
       </Animated.View>
     </Animated.View>
   );
 }
 
 function TabBarShape() {
-  const [barW, setBarW] = useState(0);
+  const { holeR, cy, radius } = useTabBarMetrics();
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const diskR =
+    box.w > 0
+      ? Math.ceil(Math.hypot(box.w / 2, Math.max(0, box.h - cy)) + 8)
+      : 0;
   return (
     <View
       pointerEvents="none"
-      style={styles.bar}
-      onLayout={(event) => setBarW(event.nativeEvent.layout.width)}
+      style={[
+        styles.bar,
+        { borderTopLeftRadius: radius, borderTopRightRadius: radius },
+      ]}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setBox((current) =>
+          current.w === width && current.h === height
+            ? current
+            : { w: width, h: height },
+        );
+      }}
     >
-      {barW > 0 ? (
+      {diskR > holeR ? (
         <View
-          style={[
-            styles.cut,
-            {
-              left: barW / 2 - DISK_R,
-              top: CY - DISK_R,
-            },
-          ]}
+          style={{
+            position: "absolute",
+            left: box.w / 2 - diskR,
+            top: cy - diskR,
+            width: diskR * 2,
+            height: diskR * 2,
+            borderRadius: diskR,
+            borderWidth: diskR - holeR,
+            borderColor: colors.tabBar,
+            backgroundColor: "transparent",
+          }}
         />
       ) : (
         <View style={styles.barFill} />
@@ -122,12 +152,13 @@ function TabBarShape() {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const metrics = useTabBarMetrics();
   const cartCount = useCart((state) => state.count);
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
   const inbox = useInbox();
   const messageBadge = inbox.data?.badge ?? 0;
-  const barHeight = BAR_BODY + insets.bottom;
+  const barHeight = metrics.barBody + insets.bottom;
 
   return (
     <Tabs
@@ -151,13 +182,13 @@ export default function TabLayout() {
           overflow: "visible",
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: metrics.label,
           fontWeight: "700",
           includeFontPadding: false,
-          marginTop: 2,
+          marginTop: Math.round(2 * metrics.scale),
         },
         tabBarItemStyle: {
-          paddingTop: 10,
+          paddingTop: metrics.padTop,
           justifyContent: "flex-start",
           overflow: "visible",
         },
@@ -170,7 +201,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
-              size={24}
+              size={metrics.icon}
               color={typeof color === "string" ? color : "#9AA0A6"}
             />
           ),
@@ -183,7 +214,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "compass" : "compass-outline"}
-              size={24}
+              size={metrics.icon}
               color={typeof color === "string" ? color : "#9AA0A6"}
             />
           ),
@@ -200,7 +231,7 @@ export default function TabLayout() {
             overflow: "visible",
           },
           tabBarLabel: () => null,
-          tabBarIcon: () => <PublishFab />,
+          tabBarIcon: () => null,
           tabBarButton: (props) => (
             <Pressable
               accessibilityRole="button"
@@ -214,7 +245,7 @@ export default function TabLayout() {
               }}
               style={[props.style, styles.fabHit]}
             >
-              {props.children}
+              <PublishFab />
             </Pressable>
           ),
         }}
@@ -228,13 +259,13 @@ export default function TabLayout() {
           tabBarBadgeStyle: {
             backgroundColor: colors.buyStart,
             color: "#fff",
-            fontSize: 10,
+            fontSize: metrics.badge,
             fontWeight: "800",
           },
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "chatbubble" : "chatbubble-outline"}
-              size={24}
+              size={metrics.icon}
               color={typeof color === "string" ? color : "#9AA0A6"}
             />
           ),
@@ -248,13 +279,13 @@ export default function TabLayout() {
           tabBarBadgeStyle: {
             backgroundColor: colors.buyStart,
             color: "#fff",
-            fontSize: 10,
+            fontSize: metrics.badge,
             fontWeight: "800",
           },
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "cart" : "cart-outline"}
-              size={24}
+              size={metrics.icon}
               color={typeof color === "string" ? color : "#9AA0A6"}
             />
           ),
@@ -268,29 +299,16 @@ const styles = StyleSheet.create({
   bar: {
     flex: 1,
     overflow: "hidden",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
   },
   barFill: { flex: 1, backgroundColor: colors.tabBar },
-  cut: {
-    position: "absolute",
-    width: DISK_R * 2,
-    height: DISK_R * 2,
-    borderRadius: DISK_R,
-    borderWidth: DISK_R - HOLE_R,
-    borderColor: colors.tabBar,
-    backgroundColor: "transparent",
-  },
   fabHit: {
+    width: "100%",
     overflow: "visible",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "flex-start",
   },
   fab: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    marginTop: CY - FAB_SIZE / 2,
     backgroundColor: "#fff",
     borderWidth: 2,
     borderColor: LOGO_ORANGE,
@@ -307,10 +325,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-  },
-  fabFox: {
-    width: FAB_SIZE - 4,
-    height: FAB_SIZE - 4,
-    borderRadius: (FAB_SIZE - 4) / 2,
   },
 });

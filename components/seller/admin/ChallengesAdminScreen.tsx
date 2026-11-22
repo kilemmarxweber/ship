@@ -1,5 +1,4 @@
-import { safeBack } from "@/src/nav";
-import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useState } from "react";
@@ -23,7 +22,6 @@ import {
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PagedMore } from "@/components/ui/PagedMore";
 import { api, apiOrigin, mediaUrl } from "@/src/api";
-import { useT } from "@/src/i18n";
 import { priceToCents, sanitizePriceInput } from "@/src/product-options";
 import { useSession } from "@/src/session";
 import { categories, HAIRLINE } from "@/src/theme";
@@ -109,7 +107,6 @@ function focusOf(row: ChallengeRow): Focus {
 
 export function ChallengesAdminScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -564,499 +561,500 @@ export function ChallengesAdminScreen() {
 
   return (
     <>
-    <ScrollView
-      style={[styles.wrap, { backgroundColor: c.background }]}
-      contentContainerStyle={{
-        paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + 32,
-        paddingHorizontal: 16,
-        gap: 12,
-      }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
-      <View>
-        <Text style={[styles.title, { color: c.text }]}>Challenges</Text>
-        <Text style={[styles.lead, { color: c.textMuted }]}>
-          Missions feed / Découvrir — produit boutique, aperçu ou libre.
-        </Text>
-      </View>
-
-      {!token ? (
-        <Pressable
-          style={[styles.primary, { backgroundColor: c.primary }]}
-          onPress={openAuth}
-        >
-          <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
-            Se connecter
+      <ScrollView
+        style={[styles.wrap, { backgroundColor: c.background }]}
+        contentContainerStyle={{
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 32,
+          paddingHorizontal: 16,
+          gap: 12,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <IconBackButton color={c.text} />
+        <View>
+          <Text style={[styles.title, { color: c.text }]}>Challenges</Text>
+          <Text style={[styles.lead, { color: c.textMuted }]}>
+            Missions feed / Découvrir — produit boutique, aperçu ou libre.
           </Text>
-        </Pressable>
-      ) : q.isLoading ? (
-        <ActivityIndicator color={c.primary} />
-      ) : q.isError ? (
-        <Text
-          style={{
-            color: c.textMuted,
-            textAlign: "center",
-            paddingVertical: 24,
-          }}
-        >
-          Réservé à l’owner ShipShop.
-        </Text>
-      ) : (
-        <>
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: c.card, borderColor: HAIRLINE },
-            ]}
-          >
-            <View style={styles.guestToggle}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text
-                  style={[styles.section, { color: c.text, marginBottom: 0 }]}
-                >
-                  Activer les challenges
-                </Text>
-                <Text
-                  style={{ color: c.textMuted, fontSize: 12, lineHeight: 16 }}
-                >
-                  Affiche uniquement les challenges publiés ici. Pas de
-                  catalogue auto ni à la mise en ligne produit.
-                </Text>
-              </View>
-              <Switch
-                value={challengesEnabled}
-                disabled={busy}
-                onValueChange={(next) => void toggleChallengesEnabled(next)}
-                trackColor={{
-                  false: "rgba(127,127,140,0.35)",
-                  true: c.primary,
-                }}
-                thumbColor="#fff"
-              />
-            </View>
-          </View>
+        </View>
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: c.card, borderColor: HAIRLINE },
-            ]}
+        {!token ? (
+          <Pressable
+            style={[styles.primary, { backgroundColor: c.primary }]}
+            onPress={openAuth}
           >
-            <Text style={[styles.section, { color: c.text }]}>
-              {editingId ? "Modifier le challenge" : "Nouveau challenge"}
+            <Text style={[styles.primaryText, { color: c.primaryForeground }]}>
+              Se connecter
             </Text>
-            {catalog.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ flexDirection: "row", gap: 6 }}>
-                  {catalog.slice(0, 8).map((item) => (
-                    <Pressable
-                      key={`${item.title}-${item.category}`}
-                      onPress={() => fillFromCatalog(item)}
-                      style={[styles.chip, { borderColor: HAIRLINE }]}
-                    >
-                      <Text
-                        style={{ color: c.textMuted, fontSize: 11 }}
-                        numberOfLines={1}
-                      >
-                        {item.title}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            ) : null}
-            <Pressable
-              disabled={busy || !challengesEnabled}
-              onPress={() => void seedCatalog()}
+          </Pressable>
+        ) : q.isLoading ? (
+          <ActivityIndicator color={c.primary} />
+        ) : q.isError ? (
+          <Text
+            style={{
+              color: c.textMuted,
+              textAlign: "center",
+              paddingVertical: 24,
+            }}
+          >
+            Réservé à l’owner ShipShop.
+          </Text>
+        ) : (
+          <>
+            <View
               style={[
-                styles.chip,
-                {
-                  alignSelf: "flex-start",
-                  borderColor: HAIRLINE,
-                  opacity: challengesEnabled ? 1 : 0.45,
-                },
+                styles.card,
+                { backgroundColor: c.card, borderColor: HAIRLINE },
               ]}
             >
-              <Text
-                style={{ color: c.primary, fontWeight: "700", fontSize: 12 }}
-              >
-                Sync catalogue du jour
-              </Text>
-            </Pressable>
-
-            <Text style={[styles.label, { color: c.textMuted }]}>Ancrage</Text>
-            <View style={styles.actions}>
-              {FOCUS_OPTIONS.map((opt) => {
-                const on = focus === opt.id;
-                return (
-                  <Pressable
-                    key={opt.id}
-                    onPress={() => {
-                      setFocus(opt.id);
-                      if (opt.id !== "catalog") setProduct(null);
-                    }}
-                    style={[
-                      styles.focusBtn,
-                      on
-                        ? { backgroundColor: c.primary }
-                        : { backgroundColor: "rgba(127,127,140,0.14)" },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        color: on ? c.primaryForeground : c.textMuted,
-                        fontWeight: "800",
-                        fontSize: 11,
-                      }}
-                    >
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={{ color: c.textMuted, fontSize: 11 }}>
-              {FOCUS_OPTIONS.find((o) => o.id === focus)?.hint}
-            </Text>
-
-            <Text style={[styles.label, { color: c.textMuted }]}>
-              Event billet (optionnel)
-            </Text>
-            <Text style={{ color: c.textMuted, fontSize: 11 }}>
-              « Je relève » ouvre la fiche Event pour acheter un billet
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pressable
-                  onPress={() => setEventId(null)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: !eventId
-                        ? c.primary
-                        : "rgba(127,127,140,0.12)",
-                    },
-                  ]}
-                >
+              <View style={styles.guestToggle}>
+                <View style={{ flex: 1, gap: 2 }}>
                   <Text
-                    style={{
-                      color: !eventId ? c.primaryForeground : c.textMuted,
-                      fontWeight: "700",
-                      fontSize: 11,
-                    }}
+                    style={[styles.section, { color: c.text, marginBottom: 0 }]}
                   >
-                    Aucun
+                    Activer les challenges
                   </Text>
-                </Pressable>
-                {eventOptions.map((event) => {
-                  const on = eventId === event.id;
+                  <Text
+                    style={{ color: c.textMuted, fontSize: 12, lineHeight: 16 }}
+                  >
+                    Affiche uniquement les challenges publiés ici. Pas de
+                    catalogue auto ni à la mise en ligne produit.
+                  </Text>
+                </View>
+                <Switch
+                  value={challengesEnabled}
+                  disabled={busy}
+                  onValueChange={(next) => void toggleChallengesEnabled(next)}
+                  trackColor={{
+                    false: "rgba(127,127,140,0.35)",
+                    true: c.primary,
+                  }}
+                  thumbColor="#fff"
+                />
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: c.card, borderColor: HAIRLINE },
+              ]}
+            >
+              <Text style={[styles.section, { color: c.text }]}>
+                {editingId ? "Modifier le challenge" : "Nouveau challenge"}
+              </Text>
+              {catalog.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    {catalog.slice(0, 8).map((item) => (
+                      <Pressable
+                        key={`${item.title}-${item.category}`}
+                        onPress={() => fillFromCatalog(item)}
+                        style={[styles.chip, { borderColor: HAIRLINE }]}
+                      >
+                        <Text
+                          style={{ color: c.textMuted, fontSize: 11 }}
+                          numberOfLines={1}
+                        >
+                          {item.title}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              ) : null}
+              <Pressable
+                disabled={busy || !challengesEnabled}
+                onPress={() => void seedCatalog()}
+                style={[
+                  styles.chip,
+                  {
+                    alignSelf: "flex-start",
+                    borderColor: HAIRLINE,
+                    opacity: challengesEnabled ? 1 : 0.45,
+                  },
+                ]}
+              >
+                <Text
+                  style={{ color: c.primary, fontWeight: "700", fontSize: 12 }}
+                >
+                  Sync catalogue du jour
+                </Text>
+              </Pressable>
+
+              <Text style={[styles.label, { color: c.textMuted }]}>
+                Ancrage
+              </Text>
+              <View style={styles.actions}>
+                {FOCUS_OPTIONS.map((opt) => {
+                  const on = focus === opt.id;
                   return (
                     <Pressable
-                      key={event.id}
-                      onPress={() => setEventId(event.id)}
+                      key={opt.id}
+                      onPress={() => {
+                        setFocus(opt.id);
+                        if (opt.id !== "catalog") setProduct(null);
+                      }}
                       style={[
-                        styles.chip,
-                        {
-                          backgroundColor: on
-                            ? c.emerald
-                            : "rgba(127,127,140,0.12)",
-                          maxWidth: 180,
-                        },
+                        styles.focusBtn,
+                        on
+                          ? { backgroundColor: c.primary }
+                          : { backgroundColor: "rgba(127,127,140,0.14)" },
                       ]}
                     >
                       <Text
                         style={{
-                          color: on ? "#04140E" : c.text,
-                          fontWeight: "700",
+                          color: on ? c.primaryForeground : c.textMuted,
+                          fontWeight: "800",
                           fontSize: 11,
                         }}
-                        numberOfLines={1}
                       >
-                        {event.status && event.status !== "ON_SALE"
-                          ? `${event.title} · ${event.status}`
-                          : event.title}
+                        {opt.label}
                       </Text>
                     </Pressable>
                   );
                 })}
               </View>
-            </ScrollView>
-            {eventOptions.length === 0 ? (
               <Text style={{ color: c.textMuted, fontSize: 11 }}>
-                {eventsQ.isError || q.isError
-                  ? "Events introuvables — vérifie l’accès owner/admin."
-                  : eventsQ.isLoading || q.isLoading
-                    ? "Chargement des events…"
-                    : `Aucun event — crée-en un dans Billets / Events.\nAPI: ${apiOrigin()}`}
+                {FOCUS_OPTIONS.find((o) => o.id === focus)?.hint}
               </Text>
-            ) : null}
 
-            {focus === "catalog" ? (
-              <AdminProductPicker
-                selected={product}
-                onSelect={(p) => {
-                  setProduct(p);
-                  if (!title.trim())
-                    setTitle(`Challenge · ${p.title}`.slice(0, 120));
-                  if (!body.trim()) {
-                    const desc = (p.description ?? "").trim();
-                    setBody(
-                      desc
-                        ? `Découvre « ${p.title} » — ${desc.slice(0, 220)}`.slice(
-                            0,
-                            400,
-                          )
-                        : `Découvre « ${p.title} », like et commente ton avis.`,
-                    );
-                  }
-                  if (p.category && categories.includes(p.category as never)) {
-                    setCategory(p.category as (typeof categories)[number]);
-                  }
-                }}
-                onClear={() => setProduct(null)}
-              />
-            ) : null}
-
-            {focus === "teaser" ? (
-              <View style={{ gap: 8 }}>
-                <TextInput
-                  value={teaserTitle}
-                  onChangeText={setTeaserTitle}
-                  placeholder="Nom produit hors catalogue"
-                  placeholderTextColor={c.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: c.text,
-                      backgroundColor: "rgba(127,127,140,0.12)",
-                    },
-                  ]}
-                />
-                <TextInput
-                  value={teaserShop}
-                  onChangeText={setTeaserShop}
-                  placeholder="Boutique (optionnel)"
-                  placeholderTextColor={c.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: c.text,
-                      backgroundColor: "rgba(127,127,140,0.12)",
-                    },
-                  ]}
-                />
-                <TextInput
-                  value={teaserPrice}
-                  onChangeText={(v) => setTeaserPrice(sanitizePriceInput(v))}
-                  keyboardType="decimal-pad"
-                  placeholder="Prix USD"
-                  placeholderTextColor={c.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: c.text,
-                      backgroundColor: "rgba(127,127,140,0.12)",
-                    },
-                  ]}
-                />
-                <TextInput
-                  value={teaserNote}
-                  onChangeText={setTeaserNote}
-                  placeholder="Note"
-                  placeholderTextColor={c.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: c.text,
-                      backgroundColor: "rgba(127,127,140,0.12)",
-                    },
-                  ]}
-                />
-                <MediaStrip
-                  urls={teaserImage}
-                  onChange={setTeaserImage}
-                  max={1}
-                  kind="images"
-                  busy={mediaBusy}
-                  setBusy={setMediaBusy}
-                />
-              </View>
-            ) : null}
-
-            <Text style={[styles.label, { color: c.textMuted }]}>Titre</Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              maxLength={120}
-              style={[
-                styles.input,
-                { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
-              ]}
-            />
-            <Text style={[styles.label, { color: c.textMuted }]}>Consigne</Text>
-            <TextInput
-              value={body}
-              onChangeText={setBody}
-              multiline
-              maxLength={400}
-              style={[
-                styles.input,
-                styles.area,
-                { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
-              ]}
-            />
-            <Text style={[styles.label, { color: c.textMuted }]}>
-              Catégorie
-            </Text>
-            <View style={styles.actions}>
-              {categories.map((item) => {
-                const on = category === item;
-                return (
+              <Text style={[styles.label, { color: c.textMuted }]}>
+                Event billet (optionnel)
+              </Text>
+              <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                « Je relève » ouvre la fiche Event pour acheter un billet
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: "row", gap: 6 }}>
                   <Pressable
-                    key={item}
-                    onPress={() => setCategory(item)}
+                    onPress={() => setEventId(null)}
                     style={[
                       styles.chip,
-                      on
-                        ? { backgroundColor: c.primary }
-                        : { backgroundColor: "rgba(127,127,140,0.14)" },
+                      {
+                        backgroundColor: !eventId
+                          ? c.primary
+                          : "rgba(127,127,140,0.12)",
+                      },
                     ]}
                   >
                     <Text
                       style={{
-                        color: on ? c.primaryForeground : c.textMuted,
+                        color: !eventId ? c.primaryForeground : c.textMuted,
                         fontWeight: "700",
                         fontSize: 11,
                       }}
                     >
-                      {item}
+                      Aucun
                     </Text>
                   </Pressable>
-                );
-              })}
-            </View>
-            <View style={{ flexDirection: "row", gap: 8 }}>
+                  {eventOptions.map((event) => {
+                    const on = eventId === event.id;
+                    return (
+                      <Pressable
+                        key={event.id}
+                        onPress={() => setEventId(event.id)}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: on
+                              ? c.emerald
+                              : "rgba(127,127,140,0.12)",
+                            maxWidth: 180,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: on ? "#04140E" : c.text,
+                            fontWeight: "700",
+                            fontSize: 11,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {event.status && event.status !== "ON_SALE"
+                            ? `${event.title} · ${event.status}`
+                            : event.title}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              {eventOptions.length === 0 ? (
+                <Text style={{ color: c.textMuted, fontSize: 11 }}>
+                  {eventsQ.isError || q.isError
+                    ? "Events introuvables — vérifie l’accès owner/admin."
+                    : eventsQ.isLoading || q.isLoading
+                      ? "Chargement des events…"
+                      : `Aucun event — crée-en un dans Billets / Events.\nAPI: ${apiOrigin()}`}
+                </Text>
+              ) : null}
+
+              {focus === "catalog" ? (
+                <AdminProductPicker
+                  selected={product}
+                  onSelect={(p) => {
+                    setProduct(p);
+                    if (!title.trim())
+                      setTitle(`Challenge · ${p.title}`.slice(0, 120));
+                    if (!body.trim()) {
+                      const desc = (p.description ?? "").trim();
+                      setBody(
+                        desc
+                          ? `Découvre « ${p.title} » — ${desc.slice(0, 220)}`.slice(
+                              0,
+                              400,
+                            )
+                          : `Découvre « ${p.title} », like et commente ton avis.`,
+                      );
+                    }
+                    if (
+                      p.category &&
+                      categories.includes(p.category as never)
+                    ) {
+                      setCategory(p.category as (typeof categories)[number]);
+                    }
+                  }}
+                  onClear={() => setProduct(null)}
+                />
+              ) : null}
+
+              {focus === "teaser" ? (
+                <View style={{ gap: 8 }}>
+                  <TextInput
+                    value={teaserTitle}
+                    onChangeText={setTeaserTitle}
+                    placeholder="Nom produit hors catalogue"
+                    placeholderTextColor={c.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={teaserShop}
+                    onChangeText={setTeaserShop}
+                    placeholder="Boutique (optionnel)"
+                    placeholderTextColor={c.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={teaserPrice}
+                    onChangeText={(v) => setTeaserPrice(sanitizePriceInput(v))}
+                    keyboardType="decimal-pad"
+                    placeholder="Prix USD"
+                    placeholderTextColor={c.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={teaserNote}
+                    onChangeText={setTeaserNote}
+                    placeholder="Note"
+                    placeholderTextColor={c.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                  <MediaStrip
+                    urls={teaserImage}
+                    onChange={setTeaserImage}
+                    max={1}
+                    kind="images"
+                    busy={mediaBusy}
+                    setBusy={setMediaBusy}
+                  />
+                </View>
+              ) : null}
+
+              <Text style={[styles.label, { color: c.textMuted }]}>Titre</Text>
               <TextInput
-                value={city}
-                onChangeText={setCity}
-                placeholder="Ville"
-                placeholderTextColor={c.textMuted}
+                value={title}
+                onChangeText={setTitle}
+                maxLength={120}
                 style={[
                   styles.input,
-                  {
-                    flex: 1,
-                    color: c.text,
-                    backgroundColor: "rgba(127,127,140,0.12)",
-                  },
+                  { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
                 ]}
               />
-              {!editingId ? (
+              <Text style={[styles.label, { color: c.textMuted }]}>
+                Consigne
+              </Text>
+              <TextInput
+                value={body}
+                onChangeText={setBody}
+                multiline
+                maxLength={400}
+                style={[
+                  styles.input,
+                  styles.area,
+                  { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
+                ]}
+              />
+              <Text style={[styles.label, { color: c.textMuted }]}>
+                Catégorie
+              </Text>
+              <View style={styles.actions}>
+                {categories.map((item) => {
+                  const on = category === item;
+                  return (
+                    <Pressable
+                      key={item}
+                      onPress={() => setCategory(item)}
+                      style={[
+                        styles.chip,
+                        on
+                          ? { backgroundColor: c.primary }
+                          : { backgroundColor: "rgba(127,127,140,0.14)" },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: on ? c.primaryForeground : c.textMuted,
+                          fontWeight: "700",
+                          fontSize: 11,
+                        }}
+                      >
+                        {item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
-                  value={hours}
-                  onChangeText={setHours}
-                  keyboardType="number-pad"
-                  placeholder="Heures"
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="Ville"
                   placeholderTextColor={c.textMuted}
                   style={[
                     styles.input,
                     {
-                      width: 90,
+                      flex: 1,
                       color: c.text,
                       backgroundColor: "rgba(127,127,140,0.12)",
                     },
                   ]}
                 />
-              ) : null}
-            </View>
-            <Text style={[styles.label, { color: c.textMuted }]}>
-              Spotlight (optionnel)
-            </Text>
-            <MediaStrip
-              urls={spotlight}
-              onChange={setSpotlight}
-              max={1}
-              kind="mixed"
-              busy={mediaBusy}
-              setBusy={setMediaBusy}
-            />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {editingId ? (
+                {!editingId ? (
+                  <TextInput
+                    value={hours}
+                    onChangeText={setHours}
+                    keyboardType="number-pad"
+                    placeholder="Heures"
+                    placeholderTextColor={c.textMuted}
+                    style={[
+                      styles.input,
+                      {
+                        width: 90,
+                        color: c.text,
+                        backgroundColor: "rgba(127,127,140,0.12)",
+                      },
+                    ]}
+                  />
+                ) : null}
+              </View>
+              <Text style={[styles.label, { color: c.textMuted }]}>
+                Spotlight (optionnel)
+              </Text>
+              <MediaStrip
+                urls={spotlight}
+                onChange={setSpotlight}
+                max={1}
+                kind="mixed"
+                busy={mediaBusy}
+                setBusy={setMediaBusy}
+              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {editingId ? (
+                  <Pressable
+                    onPress={resetForm}
+                    style={[
+                      styles.primary,
+                      { flex: 1, borderColor: HAIRLINE, borderWidth: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.primaryText, { color: c.text }]}>
+                      Annuler
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
-                  onPress={resetForm}
+                  disabled={busy || mediaBusy}
+                  onPress={() => void saveChallenge()}
                   style={[
                     styles.primary,
-                    { flex: 1, borderColor: HAIRLINE, borderWidth: 1 },
+                    {
+                      flex: 1,
+                      backgroundColor: c.primary,
+                      opacity: busy || mediaBusy ? 0.5 : 1,
+                    },
                   ]}
                 >
-                  <Text style={[styles.primaryText, { color: c.text }]}>
-                    Annuler
+                  <Text
+                    style={[styles.primaryText, { color: c.primaryForeground }]}
+                  >
+                    {busy ? "…" : editingId ? "Enregistrer" : "Publier"}
                   </Text>
                 </Pressable>
-              ) : null}
-              <Pressable
-                disabled={busy || mediaBusy}
-                onPress={() => void saveChallenge()}
-                style={[
-                  styles.primary,
-                  {
-                    flex: 1,
-                    backgroundColor: c.primary,
-                    opacity: busy || mediaBusy ? 0.5 : 1,
-                  },
-                ]}
-              >
-                <Text
-                  style={[styles.primaryText, { color: c.primaryForeground }]}
-                >
-                  {busy ? "…" : editingId ? "Enregistrer" : "Publier"}
-                </Text>
-              </Pressable>
+              </View>
             </View>
-          </View>
 
-          <Text style={[styles.section, { color: c.text }]}>
-            Programmés · feed ({active.length})
-          </Text>
-          {pagedActive.visible.map((row) => renderRow(row))}
-          <PagedMore
-            hasMore={pagedActive.hasMore}
-            remaining={pagedActive.remaining}
-            onMore={pagedActive.more}
-          />
+            <Text style={[styles.section, { color: c.text }]}>
+              Programmés · feed ({active.length})
+            </Text>
+            {pagedActive.visible.map((row) => renderRow(row))}
+            <PagedMore
+              hasMore={pagedActive.hasMore}
+              remaining={pagedActive.remaining}
+              onMore={pagedActive.more}
+            />
 
-          <Text style={[styles.section, { color: c.text }]}>
-            Récents ({recent.length})
-          </Text>
-          {pagedRecent.visible.map((row) => renderRow(row, true))}
-          <PagedMore
-            hasMore={pagedRecent.hasMore}
-            remaining={pagedRecent.remaining}
-            onMore={pagedRecent.more}
-          />
-        </>
-      )}
-    </ScrollView>
-    <ConfirmDialog
-      open={Boolean(pendingDeleteId)}
-      title="Supprimer ce challenge ?"
-      message="Cette action est définitive. Le challenge disparaîtra du feed et de Découvrir."
-      confirmLabel="Supprimer"
-      cancelLabel="Annuler"
-      destructive
-      busy={deleting}
-      onCancel={() => {
-        if (!deleting) setPendingDeleteId(null);
-      }}
-      onConfirm={() => void confirmRemoveChallenge()}
-    />
+            <Text style={[styles.section, { color: c.text }]}>
+              Récents ({recent.length})
+            </Text>
+            {pagedRecent.visible.map((row) => renderRow(row, true))}
+            <PagedMore
+              hasMore={pagedRecent.hasMore}
+              remaining={pagedRecent.remaining}
+              onMore={pagedRecent.more}
+            />
+          </>
+        )}
+      </ScrollView>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteId)}
+        title="Supprimer ce challenge ?"
+        message="Cette action est définitive. Le challenge disparaîtra du feed et de Découvrir."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setPendingDeleteId(null);
+        }}
+        onConfirm={() => void confirmRemoveChallenge()}
+      />
     </>
   );
 }

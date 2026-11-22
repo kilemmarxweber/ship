@@ -1,4 +1,3 @@
-import { safeBack } from "@/src/nav";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
@@ -19,6 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
+import { ShopQrButton } from "@/components/shop/ShopQrButton";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api, apiOrigin } from "@/src/api";
 import { trackCisEvent } from "@/src/cis/events";
 import { compactCount, formatMoney } from "@/src/format";
@@ -343,10 +344,7 @@ export function ShopPublicScreen() {
           },
         ]}
       >
-        <Pressable onPress={() => safeBack()} style={ui.back} hitSlop={8}>
-          <Ionicons name="chevron-back" size={22} color={c.text} />
-          <Text style={[ui.backText, { color: c.text }]}>Retour</Text>
-        </Pressable>
+        <IconBackButton color={c.text} />
       </View>
 
       {shopQ.isPending && slug ? (
@@ -602,6 +600,11 @@ export function ShopPublicScreen() {
                   >
                     <Ionicons name="share-outline" size={18} color={c.text} />
                   </Pressable>
+                  <ShopQrButton
+                    shopUrl={shopUrl}
+                    shopName={shop.name}
+                    style={ui.iconBtn}
+                  />
                   <Pressable
                     style={[
                       ui.iconBtn,
@@ -807,8 +810,6 @@ const ui = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  back: { flexDirection: "row", alignItems: "center", minHeight: 44 },
-  backText: { fontWeight: "700", fontSize: 16, marginLeft: 4 },
   empty: { textAlign: "center", marginTop: 40 },
   offlineState: { alignItems: "center", padding: 24, gap: 8 },
   retryBtn: { paddingHorizontal: 12, paddingVertical: 8 },

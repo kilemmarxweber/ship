@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
 import { useState } from "react";
 import {
     ActivityIndicator,
@@ -23,7 +23,6 @@ import {
     INFLUENCER_FOLLOWERS,
     type GrowthBadge,
 } from "@/src/growth";
-import { useT } from "@/src/i18n";
 import { useSession } from "@/src/session";
 import { HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
@@ -55,7 +54,6 @@ type LiveRow = {
 
 export function CreatorStudioScreen() {
   const insets = useSafeAreaInsets();
-  const t = useT();
   const c = useColors();
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
@@ -140,13 +138,7 @@ export function CreatorStudioScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable onPress={() => safeBack()} style={styles.back}>
-        <Ionicons name="chevron-back" size={20} color={c.text} />
-        <Text style={[styles.backText, { color: c.text }]} numberOfLines={1}>
-          {t("back")}
-          {"\u00A0"}
-        </Text>
-      </Pressable>
+      <IconBackButton color={c.text} />
 
       <View>
         <Text style={[styles.title, { color: c.text }]}>Studio créateur</Text>

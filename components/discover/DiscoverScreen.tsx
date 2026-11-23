@@ -13,7 +13,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     useWindowDimensions,
     View,
 } from "react-native";
@@ -22,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DiscoverCard } from "@/components/discover/DiscoverCard";
 import { DiscoverEventCard } from "@/components/discover/DiscoverEventCard";
 import { BuySheet } from "@/components/feed/Sheets";
+import { SearchField } from "@/components/ui/SearchField";
 import { api, mediaUrl } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
 import { convertCents, eventFxRates } from "@/src/fx";
@@ -478,16 +478,12 @@ export function DiscoverScreen() {
     <View style={{ paddingTop: insets.top + 8 }}>
       <View>
         <Text style={styles.hero}>Découvrir</Text>
-        <View style={styles.search}>
-          <Ionicons name="search" size={18} color="rgba(255,255,255,0.55)" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Rechercher un produit, vendeur…"
-            placeholderTextColor="rgba(255,255,255,0.45)"
-            style={styles.searchInput}
-          />
-        </View>
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Rechercher un produit, vendeur…"
+          style={styles.search}
+        />
       </View>
 
       {!searching && challenge ? (
@@ -858,17 +854,8 @@ const styles = StyleSheet.create({
   search: {
     marginHorizontal: 16,
     marginBottom: 16,
-    height: 48,
-    borderRadius: 999,
-    backgroundColor: "#22222C",
-    borderWidth: 1,
-    borderColor: "#30303B",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    gap: 8,
+    minHeight: 44,
   },
-  searchInput: { flex: 1, color: "#fff", fontSize: 16 },
   challengeCard: {
     marginHorizontal: 16,
     marginBottom: 16,

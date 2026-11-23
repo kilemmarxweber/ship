@@ -12,7 +12,6 @@ import {
     Share,
     StyleSheet,
     Text,
-    TextInput,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ShopQrButton } from "@/components/shop/ShopQrButton";
 import { IconBackButton } from "@/components/ui/IconBackButton";
+import { SearchField } from "@/components/ui/SearchField";
 import { api, apiOrigin } from "@/src/api";
 import { trackCisEvent } from "@/src/cis/events";
 import { compactCount, formatMoney } from "@/src/format";
@@ -702,32 +702,11 @@ export function ShopPublicScreen() {
                   </View>
                 ) : null}
 
-                <View
-                  style={[
-                    ui.searchBox,
-                    { backgroundColor: c.card, borderColor: HAIRLINE },
-                  ]}
-                >
-                  <Ionicons name="search" size={18} color={c.textMuted} />
-                  <TextInput
-                    value={q}
-                    onChangeText={setQ}
-                    placeholder="Rechercher un produit..."
-                    placeholderTextColor={c.textMuted}
-                    style={[ui.searchInput, { color: c.text }]}
-                    returnKeyType="search"
-                    clearButtonMode="while-editing"
-                  />
-                  {q ? (
-                    <Pressable onPress={() => setQ("")} hitSlop={8}>
-                      <Ionicons
-                        name="close-circle"
-                        size={18}
-                        color={c.textMuted}
-                      />
-                    </Pressable>
-                  ) : null}
-                </View>
+                <SearchField
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="Rechercher un produit..."
+                />
 
                 <ScrollView
                   horizontal
@@ -884,21 +863,6 @@ const ui = StyleSheet.create({
   addressRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   addressText: { flex: 1, fontSize: 13, fontWeight: "600", lineHeight: 18 },
   mapsLink: { fontSize: 12, fontWeight: "800" },
-  searchBox: {
-    height: 44,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
-    minHeight: 40,
-  },
   chips: { gap: 8, paddingRight: 8 },
   chip: {
     borderRadius: 999,

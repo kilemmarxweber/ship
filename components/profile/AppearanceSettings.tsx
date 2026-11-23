@@ -142,8 +142,8 @@ export function AppearanceSettings() {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 14,
     gap: 8,
   },
@@ -153,11 +153,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 8 },
   lang: {
     flex: 1,
+    minHeight: 44,
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   langName: {
     fontWeight: "800",

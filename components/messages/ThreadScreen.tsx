@@ -649,6 +649,9 @@ export function ThreadScreen({ id }: { id: string }) {
               {
                 backgroundColor: dark ? "#1C1C1E" : "#F2F2F7",
                 color: dark ? "#fff" : c.text,
+                ...(Platform.OS === "web"
+                  ? ({ outlineStyle: "none", outlineWidth: 0 } as object)
+                  : null),
               },
             ]}
             multiline

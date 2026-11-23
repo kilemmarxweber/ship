@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PagedMore } from "@/components/ui/PagedMore";
+import { SearchField } from "@/components/ui/SearchField";
 import { api } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { safeBack } from "@/src/nav";
@@ -427,9 +428,13 @@ export function VendorsAdminScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable accessibilityLabel="Retour" onPress={() => safeBack()} style={styles.back} hitSlop={8}>
+        <Pressable
+          accessibilityLabel="Retour"
+          onPress={() => safeBack()}
+          style={styles.back}
+          hitSlop={8}
+        >
           <Ionicons name="chevron-back" size={20} color={c.text} />
-          
         </Pressable>
 
         <View>
@@ -517,7 +522,7 @@ export function VendorsAdminScreen() {
               })}
             </View>
 
-            <TextInput
+            <SearchField
               value={q}
               onChangeText={setQ}
               placeholder={
@@ -525,15 +530,6 @@ export function VendorsAdminScreen() {
                   ? "Filtrer boutique, vendeur, email…"
                   : "Filtrer client, email, téléphone…"
               }
-              placeholderTextColor={c.textMuted}
-              style={[
-                styles.search,
-                {
-                  color: c.text,
-                  backgroundColor: c.card,
-                  borderColor: HAIRLINE,
-                },
-              ]}
             />
 
             {tab === "vendors" ? (

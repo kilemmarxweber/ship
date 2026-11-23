@@ -94,6 +94,13 @@ export function bucketLabel(bucket: WalletBucket) {
   return "À dépenser";
 }
 
-export function withdrawFeePct(bucket: WalletBucket) {
-  return bucket === "VENDOR" ? 0 : 5;
+export function withdrawFeePct(
+  bucket: WalletBucket,
+  withdrawFeePctValue = 5,
+) {
+  return bucket === "VENDOR" ? 0 : withdrawFeePctValue;
+}
+
+export function depositFeeCents(grossCents: number, depositFeePct = 5) {
+  return Math.floor(Math.max(0, grossCents) * depositFeePct / 100);
 }

@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { IconBackButton } from "@/components/ui/IconBackButton";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
@@ -140,9 +140,18 @@ type PlatformFees = {
     saleUsdCents: number;
     shippingUsdCents: number;
     withdrawalUsdCents: number;
+    depositUsdCents?: number;
+    transferExternalUsdCents?: number;
+    ticketUsdCents?: number;
+    adsUsdCents?: number;
     totalUsdCents: number;
     saleCount: number;
     shippingCount: number;
+  };
+  totals?: {
+    netUsdCents: number;
+    cinetPayCostUsdCents: number;
+    partnerShareUsdCents: number;
   };
   fees: {
     id: string;
@@ -414,6 +423,20 @@ export function SellerReportsScreen() {
                   <Text style={[styles.section, { color: c.text }]}>
                     Gains ShipShop (ledger)
                   </Text>
+                  <Pressable
+                    onPress={() => router.push("/shops/admin/revenue")}
+                    style={{ marginBottom: 4 }}
+                  >
+                    <Text
+                      style={{
+                        color: c.primary,
+                        fontWeight: "700",
+                        fontSize: 12,
+                      }}
+                    >
+                      Rapport complet jour / mois / année →
+                    </Text>
+                  </Pressable>
                   <View style={styles.kpiGrid}>
                     <Text style={[styles.meta, { color: c.textMuted }]}>
                       Commission ventes × {platformQ.data.summary.saleCount}
@@ -426,7 +449,8 @@ export function SellerReportsScreen() {
                       </Text>
                     </Text>
                     <Text style={[styles.meta, { color: c.textMuted }]}>
-                      Livraisons 0,50 × {platformQ.data.summary.shippingCount}
+                      Livraisons (part SS) ×{" "}
+                      {platformQ.data.summary.shippingCount}
                       {"\n"}
                       <Text style={[styles.strong, { color: c.text }]}>
                         {formatMoney(
@@ -436,19 +460,21 @@ export function SellerReportsScreen() {
                       </Text>
                     </Text>
                     <Text style={[styles.meta, { color: c.textMuted }]}>
-                      Retraits 5 %{"\n"}
+                      Retraits / versements{"\n"}
                       <Text style={[styles.strong, { color: c.text }]}>
                         {formatMoney(
-                          platformQ.data.summary.withdrawalUsdCents,
+                          (platformQ.data.summary.withdrawalUsdCents ?? 0) +
+                            (platformQ.data.summary.depositUsdCents ?? 0),
                           "USD",
                         )}
                       </Text>
                     </Text>
                     <Text style={[styles.meta, { color: c.textMuted }]}>
-                      Total USD{"\n"}
+                      Net ShipShop{"\n"}
                       <Text style={[styles.strong, { color: c.emerald }]}>
                         {formatMoney(
-                          platformQ.data.summary.totalUsdCents,
+                          platformQ.data.totals?.netUsdCents ??
+                            platformQ.data.summary.totalUsdCents,
                           "USD",
                         )}
                       </Text>

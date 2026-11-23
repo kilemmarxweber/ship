@@ -21,6 +21,10 @@ import {
     paymentIdempotencyKey,
 } from "@/src/pay-idempotency";
 import { composePhone, isValidContactPhone, splitPhone } from "@/src/phone";
+import {
+    DEFAULT_PUBLIC_FEES,
+    type PublicFeeSettings,
+} from "@/src/platform-fees";
 import { APP_CURRENCIES, type AppCurrency } from "@/src/product-options";
 import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
@@ -29,6 +33,7 @@ import {
     RAIL_PROVIDERS,
     WALLET_BUCKETS,
     bucketLabel,
+    depositFeeCents,
     emptyPots,
     parseWalletCurrency,
     providerLabel,
@@ -77,6 +82,7 @@ type WalletPayload = {
   transactions?: WalletTxn[];
   contacts?: { provider: RailProvider; phone: string }[];
   accountPhone?: string | null;
+  fees?: PublicFeeSettings;
 };
 
 export function WalletScreen() {
@@ -99,6 +105,7 @@ export function WalletScreen() {
     walletQuery.data?.pots?.USD ??
     emptyPots();
   const txns = walletQuery.data?.transactions ?? [];
+  const fees = walletQuery.data?.fees ?? DEFAULT_PUBLIC_FEES;
   const contactsFromApi = useMemo(() => {
     const next: Record<RailProvider, string> = {
       MPESA: "",
@@ -333,12 +340,29 @@ export function WalletScreen() {
   }
 
   const withdrawGross = moneyCents(withdrawAmount);
+  const activeWithdrawPct =
+    payoutTo === "other" ? fees.transferExternalFeePct : fees.withdrawFeePct;
+  const activeCinetPct =
+    payoutTo === "other"
+      ? fees.transferExternalCinetPayPct
+      : fees.withdrawCinetPayPct;
   const withdrawFee =
     withdrawGross == null
       ? 0
-      : Math.floor((withdrawGross * withdrawFeePct(bucket)) / 100);
+      : Math.floor(
+          (withdrawGross * withdrawFeePct(bucket, activeWithdrawPct)) / 100,
+        );
   const withdrawNet =
     withdrawGross == null ? 0 : Math.max(0, withdrawGross - withdrawFee);
+  const depositGross = moneyCents(amount);
+  const depositFee =
+    depositGross == null || payFromBalance
+      ? payFromBalance && depositGross != null
+        ? depositFeeCents(depositGross, fees.transferInternalFeePct)
+        : 0
+      : depositFeeCents(depositGross, fees.depositFeePct);
+  const depositCredit =
+    depositGross == null ? 0 : Math.max(0, depositGross - depositFee);
 
   async function withdraw() {
     if (payoutTo === "other" && !otherPhone.trim()) {
@@ -383,9 +407,11 @@ export function WalletScreen() {
       return;
     }
     setBusy(true);
-    const fee = Math.floor((gross * withdrawFeePct(bucket)) / 100);
+    const feePct =
+      payoutTo === "other" ? fees.transferExternalFeePct : fees.withdrawFeePct;
+    const fee = Math.floor((gross * withdrawFeePct(bucket, feePct)) / 100);
     const net = gross - fee;
-    const intent = `withdraw:${bucket}:${gross}:${displayCurrency}:${e164}`;
+    const intent = `withdraw:${bucket}:${gross}:${displayCurrency}:${e164}:${payoutTo}`;
     try {
       const key = await paymentIdempotencyKey(intent);
       const json = await apiPayment<WithdrawResult>("/api/wallet/withdraw", {
@@ -398,6 +424,7 @@ export function WalletScreen() {
           currency: displayCurrency,
           provider,
           phone: e164,
+          purpose: payoutTo === "other" ? "TRANSFER_EXTERNAL" : "WITHDRAW",
           idempotencyKey: key,
         }),
       });
@@ -486,7 +513,7 @@ export function WalletScreen() {
                     {formatMoney(pots[item], displayCurrency)}
                   </Text>
                   <Text style={styles.potFee}>
-                    retrait {withdrawFeePct(item)} %
+                    retrait {withdrawFeePct(item, fees.withdrawFeePct)} %
                   </Text>
                 </Pressable>
               ))}
@@ -504,10 +531,10 @@ export function WalletScreen() {
               {minCashLabel(displayCurrency)}, sans conversion. Disponible{" "}
               {formatMoney(pots[bucket], displayCurrency)}
               {withdrawGross != null && withdrawGross > 0
-                ? `. Frais ${formatMoney(withdrawFee, displayCurrency)}. Tu reçois ${formatMoney(withdrawNet, displayCurrency)}.`
+                ? `. Frais ${activeWithdrawPct} % (${formatMoney(withdrawFee, displayCurrency)}, dont CinetPay ${activeCinetPct} %). Tu reçois ${formatMoney(withdrawNet, displayCurrency)}.`
                 : "."}{" "}
               {payoutTo === "other"
-                ? "Le transfert part vers le numéro saisi plus bas."
+                ? "Transfert hors ShipShop via CinetPay — facturé comme un retrait."
                 : "CinetPay envoie cette somme sur ton numéro."}
             </Text>
           </View>
@@ -654,8 +681,8 @@ export function WalletScreen() {
               </Pressable>
               <Text style={styles.hint}>
                 {payFromBalance
-                  ? "ShipShop débite ton solde et crédite cette personne."
-                  : "CinetPay débite ton numéro et crédite cette personne."}
+                  ? `Transfert interne ShipShop${fees.transferInternalFeePct > 0 ? ` · frais ${fees.transferInternalFeePct} %` : " · 0 %"}.`
+                  : `CinetPay débite ton numéro · frais versement ${fees.depositFeePct} % (CinetPay ${fees.depositCinetPayPct} %).`}
               </Text>
             </>
           ) : null}
@@ -685,6 +712,25 @@ export function WalletScreen() {
               </Pressable>
             ))}
           </View>
+          {depositGross != null && depositGross > 0 && !payFromBalance ? (
+            <Text style={styles.hint}>
+              Tu paies {formatMoney(depositGross, currency)}. Crédit net{" "}
+              {formatMoney(depositCredit, currency)} après frais{" "}
+              {fees.depositFeePct} % (CinetPay {fees.depositCinetPayPct} %).
+            </Text>
+          ) : null}
+          {depositGross != null &&
+          depositGross > 0 &&
+          payFromBalance &&
+          topUpFor === "someone" ? (
+            <Text style={styles.hint}>
+              Débit {formatMoney(depositGross, currency)}
+              {depositFee > 0
+                ? ` · crédit ${formatMoney(depositCredit, currency)} après ${fees.transferInternalFeePct} %`
+                : " · transfert interne sans frais"}
+              .
+            </Text>
+          ) : null}
           {ussdHint ? <Text style={styles.ussd}>{ussdHint}</Text> : null}
           <Pressable
             style={[styles.primary, busy && { opacity: 0.6 }]}

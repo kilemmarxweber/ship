@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PagedMore } from "@/components/ui/PagedMore";
+import { SearchField } from "@/components/ui/SearchField";
 import { api, mediaUrl } from "@/src/api";
 import { DEFAULT_FX_CDF } from "@/src/product-options";
 import { useSession } from "@/src/session";
@@ -480,21 +481,11 @@ export function SellerShopsScreen() {
             </View>
 
             {shops.length > 1 ? (
-              <View
-                style={[
-                  styles.search,
-                  { backgroundColor: c.card, borderColor: HAIRLINE },
-                ]}
-              >
-                <Ionicons name="search" size={16} color={c.textMuted} />
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Rechercher une boutique"
-                  placeholderTextColor={c.textMuted}
-                  style={{ flex: 1, color: c.text, paddingVertical: 0 }}
-                />
-              </View>
+              <SearchField
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Rechercher une boutique"
+              />
             ) : null}
 
             {pagedShops.visible.map((shop) => {

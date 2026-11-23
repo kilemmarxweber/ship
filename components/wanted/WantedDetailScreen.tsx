@@ -1,6 +1,6 @@
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { IconBackButton } from "@/components/ui/IconBackButton";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
@@ -22,6 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ParcelMap } from "@/components/orders/ParcelMap";
+import { SearchField } from "@/components/ui/SearchField";
 import { SheetReduce } from "@/components/ui/SheetReduce";
 import { api, ApiError, apiPayment, mediaUrl } from "@/src/api";
 import {
@@ -630,23 +631,13 @@ export function WantedDetailScreen({ requestId }: { requestId: string }) {
               </View>
             ) : pickingCountry ? (
               <View style={{ gap: 8 }}>
-                <View
-                  style={[
-                    styles.input,
-                    styles.phoneField,
-                    { borderColor: c.textMuted },
-                  ]}
-                >
-                  <Ionicons name="search" size={16} color={c.textMuted} />
-                  <TextInput
-                    value={countryQuery}
-                    onChangeText={setCountryQuery}
-                    placeholder="Pays ou indicatif"
-                    placeholderTextColor={c.textMuted}
-                    style={[styles.phoneInput, { color: c.text }]}
-                    autoFocus
-                  />
-                </View>
+                <SearchField
+                  value={countryQuery}
+                  onChangeText={setCountryQuery}
+                  placeholder="Pays ou indicatif"
+                  autoFocus
+                  autoCapitalize="words"
+                />
                 <FlatList
                   data={filteredCountries}
                   keyExtractor={(item) => item.iso + item.dial}

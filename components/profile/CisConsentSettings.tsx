@@ -15,11 +15,12 @@ import { useColors } from "@/src/use-colors";
 export function CisConsentSettings() {
   const c = useColors();
   const token = useSession((state) => state.token);
-  const [consent, setConsent] = useState<LocalCisConsent | null>(null);
+  const [consent, setConsent] = useState<LocalCisConsent | null>(() =>
+    getLocalCisConsent(),
+  );
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setConsent(getLocalCisConsent());
     if (!token) return;
     void fetchRemoteCisConsent().then(() => {
       setConsent(getLocalCisConsent());
@@ -84,46 +85,49 @@ export function CisConsentSettings() {
       <View style={styles.row}>
         <Pressable
           disabled={busy}
+          accessibilityRole="button"
           onPress={() => void choose("accepted")}
           style={[
             styles.btn,
             {
-              backgroundColor:
-                status === "accepted" ? c.emerald : "transparent",
-              borderColor: "rgba(127,127,140,0.35)",
+              backgroundColor: c.emerald,
+              borderColor: c.emerald,
+              opacity: busy ? 0.6 : 1,
             },
           ]}
         >
-          <Text
-            style={{
-              color: status === "accepted" ? "#fff" : c.text,
-              fontWeight: "600",
-              fontSize: 13,
-            }}
-          >
-            Accepter
-          </Text>
+          <Text style={styles.acceptText}>Accepter</Text>
         </Pressable>
         <Pressable
           disabled={busy}
+          accessibilityRole="button"
           onPress={() => void choose("refused")}
-          style={[styles.btn, { borderColor: "rgba(127,127,140,0.35)" }]}
+          style={[
+            styles.btn,
+            {
+              backgroundColor: "rgba(127,127,140,0.12)",
+              borderColor: "rgba(127,127,140,0.35)",
+              opacity: busy ? 0.6 : 1,
+            },
+          ]}
         >
-          <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>
-            Refuser
-          </Text>
+          <Text style={[styles.ghostText, { color: c.text }]}>Refuser</Text>
         </Pressable>
-        {status === "accepted" ? (
-          <Pressable
-            disabled={busy}
-            onPress={() => void choose("withdrawn")}
-            style={[styles.btn, { borderColor: "rgba(127,127,140,0.35)" }]}
-          >
-            <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>
-              Retirer
-            </Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          disabled={busy}
+          accessibilityRole="button"
+          onPress={() => void choose("withdrawn")}
+          style={[
+            styles.btn,
+            {
+              backgroundColor: "rgba(127,127,140,0.12)",
+              borderColor: "rgba(127,127,140,0.35)",
+              opacity: busy ? 0.6 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.ghostText, { color: c.text }]}>Retirer</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -132,19 +136,30 @@ export function CisConsentSettings() {
 const styles = StyleSheet.create({
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     gap: 8,
-    marginBottom: 12,
   },
-  title: { fontSize: 16, fontWeight: "700" },
+  title: { fontSize: 16, fontWeight: "800" },
   hint: { fontSize: 13, lineHeight: 18 },
-  status: { fontSize: 13, fontWeight: "600", marginTop: 2 },
+  status: { fontSize: 13, fontWeight: "700", marginTop: 2 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   btn: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 12,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  acceptText: {
+    color: "#04281c",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  ghostText: {
+    fontWeight: "700",
+    fontSize: 13,
   },
 });

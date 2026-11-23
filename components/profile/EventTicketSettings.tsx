@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { EventPoster } from "@/components/events/EventPoster";
+import { SearchField } from "@/components/ui/SearchField";
 import { api, apiUpload, mediaUrl } from "@/src/api";
 import { EVENT_POSTERS, eventPosterUrl } from "@/src/event-poster";
 import { formatMoney } from "@/src/format";
@@ -590,21 +591,13 @@ export function EventTicketSettings() {
             </View>
           ) : null}
 
-          <View
-            style={[
-              styles.search,
-              { backgroundColor: "rgba(127,127,140,0.12)" },
-            ]}
-          >
-            <Ionicons name="search" size={16} color={c.textMuted} />
-            <TextInput
-              value={organizerName}
-              onChangeText={setOrganizerName}
-              placeholder={isOrg ? "Nom de l’organisation" : "Nom de l’artiste"}
-              placeholderTextColor={c.textMuted}
-              style={[styles.searchInput, { color: c.text }]}
-            />
-          </View>
+          <SearchField
+            value={organizerName}
+            onChangeText={setOrganizerName}
+            placeholder={isOrg ? "Nom de l’organisation" : "Nom de l’artiste"}
+            icon="search"
+            autoCapitalize="words"
+          />
           {userHits.map((hit) => (
             <Pressable
               key={hit.id}

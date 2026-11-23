@@ -1,14 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
-import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { SearchField } from "@/components/ui/SearchField";
 import { useColors } from "@/src/use-colors";
 
 export type ShopPickerShop = {
@@ -92,22 +86,13 @@ export function ShopPicker({
             },
           ]}
         >
-          <View
-            style={[
-              styles.search,
-              { backgroundColor: "rgba(127,127,140,0.12)" },
-            ]}
-          >
-            <Ionicons name="search" size={16} color={c.textMuted} />
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Rechercher une boutique"
-              placeholderTextColor={c.textMuted}
-              autoFocus
-              style={[styles.searchInput, { color: c.text }]}
-            />
-          </View>
+          <SearchField
+            value={q}
+            onChangeText={setQ}
+            placeholder="Rechercher une boutique"
+            autoFocus
+            style={{ margin: 8 }}
+          />
           <ScrollView
             style={styles.list}
             nestedScrollEnabled
@@ -199,16 +184,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     maxHeight: 280,
   },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    margin: 8,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 40,
-  },
-  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
   list: { maxHeight: 220 },
   option: {
     minHeight: 44,

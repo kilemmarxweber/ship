@@ -1,11 +1,16 @@
-import { Ionicons } from "@expo/vector-icons";
 import { IconBackButton } from "@/components/ui/IconBackButton";
+import { safeBack } from "@/src/nav";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
-import { safeBack } from "@/src/nav";
-import { useEffect, useState } from "react";
+import {
+    useEffect,
+    useState,
+    type ComponentProps,
+    type ReactNode,
+} from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -22,12 +27,13 @@ import { AppearanceSettings } from "@/components/profile/AppearanceSettings";
 import { CisConsentSettings } from "@/components/profile/CisConsentSettings";
 import { EventTicketSettings } from "@/components/profile/EventTicketSettings";
 import { FlashPubSettings } from "@/components/profile/FlashPubSettings";
+import { ProfileMenuRow } from "@/components/profile/ProfileMenuRow";
 import { ShopHoursSettings } from "@/components/profile/ShopHoursSettings";
 import { MediaStrip } from "@/components/publish/MediaStrip";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { badgeKey, badgeLabel, type GrowthBadge } from "@/src/growth";
-import { useT } from "@/src/i18n";
+import { useT, type MsgKey } from "@/src/i18n";
 import { useMe } from "@/src/me";
 import { usePrefs } from "@/src/prefs";
 import { useRequireSession } from "@/src/require-session";
@@ -40,6 +46,31 @@ import {
     walletCents,
     type WalletBalances,
 } from "@/src/wallet";
+
+type SellerLink = {
+  href: Href;
+  label: string;
+  hint?: string;
+  icon: ComponentProps<typeof Ionicons>["name"];
+};
+
+function SellerSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  const c = useColors();
+  return (
+    <View style={styles.sellerSection}>
+      <Text style={[styles.sellerSectionTitle, { color: c.textMuted }]}>
+        {title}
+      </Text>
+      <View style={styles.sellerSectionBody}>{children}</View>
+    </View>
+  );
+}
 
 type ProfileUser = {
   name: string;
@@ -379,6 +410,8 @@ export function ProfileScreen() {
                 return (
                   <Pressable
                     key={key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
                     onPress={() => setMode(key)}
                     style={[
                       styles.modeBtn,
@@ -404,7 +437,7 @@ export function ProfileScreen() {
                 style={[styles.tile, { backgroundColor: c.card }]}
                 onPress={() => router.push("/tickets" as Href)}
               >
-                <Ionicons name="qr-code-outline" size={20} color={c.emerald} />
+                <Ionicons name="qr-code-outline" size={20} color="#2DD4BF" />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
                   {t("myTickets")}
                 </Text>
@@ -442,7 +475,7 @@ export function ProfileScreen() {
                 <Ionicons
                   name="shield-checkmark-outline"
                   size={20}
-                  color={isPro ? c.emerald : c.textMuted}
+                  color={isPro ? "#3B82F6" : c.textMuted}
                 />
                 <Text style={[styles.tileTitle, { color: c.text }]}>
                   Vérification
@@ -457,138 +490,214 @@ export function ProfileScreen() {
                         : "KYC Business"}
                 </Text>
               </Pressable>
-              <Pressable
-                style={[styles.tile, { backgroundColor: c.card }]}
-                onPress={() => router.push("/community" as Href)}
-              >
-                <Ionicons name="trophy-outline" size={20} color="#FBBF24" />
+            </View>
+
+            <Pressable
+              style={[styles.missionCard, { backgroundColor: c.card }]}
+              onPress={() => router.push("/community" as Href)}
+            >
+              <Ionicons name="trophy-outline" size={22} color="#FBBF24" />
+              <View style={{ flex: 1, gap: 2 }}>
                 <Text style={[styles.tileTitle, { color: c.text }]}>
                   {t("missions")}
                 </Text>
                 <Text style={[styles.tileMeta, { color: c.textMuted }]}>
                   {t("missionsHint")}
                 </Text>
-              </Pressable>
-            </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={c.primary} />
+            </Pressable>
 
             {mode === "seller" ? (
-              <View style={{ gap: 8 }}>
-                {(
-                  [
-                    ["/seller/products", t("myProducts"), "pricetag-outline"],
-                    ["/shops/orders", t("shopOrders"), "receipt-outline"],
-                    ["/community", t("community"), "trophy-outline"],
-                    ["/creator", t("creator"), "color-wand-outline"],
-                    ["/live", t("lives"), "radio-outline"],
-                    ["/seller/reports", t("reports"), "bar-chart-outline"],
-                    ["/courier", t("courier"), "bicycle-outline"],
+              <View style={styles.sellerStack}>
+                <SellerSection title={t("sellerHub")}>
+                  {(
                     [
-                      "/shops/contacts",
-                      "Contacts (acheteurs, abonnés, invités)",
-                      "people-outline",
-                    ],
-                    ...(isOwner
-                      ? ([
-                          [
-                            "/shops/messaging",
-                            "Messages / Config Klambo / SMS / Infobip",
-                            "chatbubbles-outline",
-                          ],
-                          [
-                            "/shops/admin/products",
-                            "Modération produits (tout)",
-                            "shield-outline",
-                          ],
-                          [
-                            "/shops/admin/vendors",
-                            "Vendeurs & clients",
-                            "people-circle-outline",
-                          ],
-                          [
-                            "/shops/admin/ledger",
-                            "Ledger paiements",
-                            "cash-outline",
-                          ],
-                          [
-                            "/shops/admin/attention",
-                            "KPI attention",
-                            "pulse-outline",
-                          ],
-                          [
-                            "/shops/admin/campaigns",
-                            "Stories partenaires",
-                            "images-outline",
-                          ],
-                          [
-                            "/shops/admin/challenges",
-                            "Challenges",
-                            "flag-outline",
-                          ],
-                          [
-                            "/shops/admin/expansion",
-                            "Playbook expansion",
-                            "map-outline",
-                          ],
-                          [
-                            "/shops/admin/content",
-                            "Contenu (Système / Sanity)",
-                            "document-text-outline",
-                          ],
-                          [
-                            "/shops/kyc",
-                            "Revue KYC",
-                            "shield-checkmark-outline",
-                          ],
-                          [
-                            "/shops/admin/moderation",
-                            "Modération NSFW",
-                            "eye-off-outline",
-                          ],
-                        ] as const)
-                      : []),
-                    [
-                      "/shops",
-                      isOwner ? "Toutes les boutiques" : t("shops"),
-                      "storefront-outline",
-                    ],
-                    ["/publish?mode=sell", t("publish"), "add-circle-outline"],
-                    ["/publish?mode=onboard", t("onboard"), "business-outline"],
-                  ] as const
-                ).map(([href, label, icon]) => (
-                  <Pressable
-                    key={`${href}-${label}`}
-                    android_ripple={{ color: `${c.primary}33` }}
-                    style={({ pressed }) => [
-                      styles.legalRow,
                       {
-                        backgroundColor: pressed
-                          ? `${c.primary}18`
-                          : c.card,
-                        borderColor: pressed ? `${c.primary}66` : "transparent",
-                        borderWidth: 1,
+                        href: "/seller/products",
+                        label: t("myProducts"),
+                        hint: t("myProductsHint"),
+                        icon: "pricetag-outline",
                       },
-                    ]}
-                    onPress={() => router.push(href as Href)}
-                  >
-                    <Ionicons
-                      name={icon}
-                      size={18}
-                      color={c.primary}
+                      {
+                        href: "/shops/orders",
+                        label: t("shopOrders"),
+                        hint: t("shopOrdersHint"),
+                        icon: "receipt-outline",
+                      },
+                      {
+                        href: "/shops/contacts",
+                        label: t("contacts"),
+                        hint: t("contactsHint"),
+                        icon: "people-outline",
+                      },
+                      {
+                        href: "/seller/reports",
+                        label: t("reports"),
+                        hint: t("reportsHint"),
+                        icon: "bar-chart-outline",
+                      },
+                      {
+                        href: "/shops",
+                        label: isOwner ? t("shopsAll") : t("shops"),
+                        hint: "Gérer boutiques et équipe",
+                        icon: "storefront-outline",
+                      },
+                      {
+                        href: "/publish?mode=sell",
+                        label: t("publish"),
+                        hint: "Ajouter un article en vente",
+                        icon: "add-circle-outline",
+                      },
+                      {
+                        href: "/publish?mode=onboard",
+                        label: t("onboard"),
+                        hint: "Ouvrir une nouvelle boutique",
+                        icon: "business-outline",
+                      },
+                    ] as SellerLink[]
+                  ).map((item) => (
+                    <ProfileMenuRow
+                      key={`${item.href}-${item.label}`}
+                      icon={item.icon}
+                      label={item.label}
+                      hint={item.hint}
+                      onPress={() => router.push(item.href)}
                     />
-                    <Text style={[styles.legalLabel, { color: c.text }]}>
-                      {label}
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color={c.primary}
+                  ))}
+                </SellerSection>
+
+                <SellerSection title={t("sellerCreate")}>
+                  {(
+                    [
+                      {
+                        href: "/community",
+                        label: t("community"),
+                        hint: t("communityHint"),
+                        icon: "trophy-outline",
+                      },
+                      {
+                        href: "/creator",
+                        label: t("creator"),
+                        hint: t("creatorHint"),
+                        icon: "color-wand-outline",
+                      },
+                      {
+                        href: "/live",
+                        label: t("lives"),
+                        hint: t("livesHint"),
+                        icon: "radio-outline",
+                      },
+                    ] as SellerLink[]
+                  ).map((item) => (
+                    <ProfileMenuRow
+                      key={`${item.href}-${item.label}`}
+                      icon={item.icon}
+                      label={item.label}
+                      hint={item.hint}
+                      onPress={() => router.push(item.href)}
                     />
-                  </Pressable>
-                ))}
+                  ))}
+                </SellerSection>
+
+                {isOwner ? (
+                  <SellerSection title={t("sellerAdmin")}>
+                    {(
+                      [
+                        {
+                          href: "/shops/messaging",
+                          label: "Messagerie & SMS",
+                          hint: "Klambo, Infobip, templates",
+                          icon: "chatbubbles-outline",
+                        },
+                        {
+                          href: "/shops/admin/products",
+                          label: "Modération produits",
+                          hint: "Revue de tout le catalogue",
+                          icon: "shield-outline",
+                        },
+                        {
+                          href: "/shops/admin/vendors",
+                          label: "Vendeurs & clients",
+                          hint: "Comptes et rôles",
+                          icon: "people-circle-outline",
+                        },
+                        {
+                          href: "/shops/admin/ledger",
+                          label: "Paiements",
+                          hint: "Ledger et mouvements",
+                          icon: "cash-outline",
+                        },
+                        {
+                          href: "/shops/admin/revenue",
+                          label: "Bénéfices plateforme",
+                          hint: "Jour, mois, année · entrées / sorties",
+                          icon: "trending-up-outline",
+                        },
+                        {
+                          href: "/shops/admin/fee-settings",
+                          label: "Frais & pourcentages",
+                          hint: "ShipShop, CinetPay, livraison",
+                          icon: "options-outline",
+                        },
+                        {
+                          href: "/shops/admin/attention",
+                          label: "KPI attention",
+                          hint: "Performance feed et pubs",
+                          icon: "pulse-outline",
+                        },
+                        {
+                          href: "/shops/admin/campaigns",
+                          label: "Stories partenaires",
+                          hint: "Campagnes et placements",
+                          icon: "images-outline",
+                        },
+                        {
+                          href: "/shops/admin/challenges",
+                          label: "Challenges",
+                          hint: "Défis et récompenses",
+                          icon: "flag-outline",
+                        },
+                        {
+                          href: "/shops/admin/expansion",
+                          label: "Expansion",
+                          hint: "Playbook territoires",
+                          icon: "map-outline",
+                        },
+                        {
+                          href: "/shops/admin/content",
+                          label: "Contenu CMS",
+                          hint: "Système et Sanity",
+                          icon: "document-text-outline",
+                        },
+                        {
+                          href: "/shops/kyc",
+                          label: "Revue KYC",
+                          hint: "Dossiers vendeurs",
+                          icon: "shield-checkmark-outline",
+                        },
+                        {
+                          href: "/shops/admin/moderation",
+                          label: "Modération contenu",
+                          hint: "Filtres NSFW et signalements",
+                          icon: "eye-off-outline",
+                        },
+                      ] as SellerLink[]
+                    ).map((item) => (
+                      <ProfileMenuRow
+                        key={`${item.href}-${item.label}`}
+                        icon={item.icon}
+                        label={item.label}
+                        hint={item.hint}
+                        onPress={() => router.push(item.href)}
+                      />
+                    ))}
+                  </SellerSection>
+                ) : null}
+
                 {!isSeller ? (
                   <Text style={[styles.lead, { color: c.textMuted }]}>
-                    Publie un article ou crée une boutique pour activer l’espace
-                    Business.
+                    {t("sellerEmpty")}
                   </Text>
                 ) : null}
               </View>
@@ -606,29 +715,22 @@ export function ProfileScreen() {
         <Text style={[styles.section, { color: c.text }]}>{t("settings")}</Text>
         {(
           [
-            ["/legal/confidentialite", t("privacy"), "shield-outline"],
-            ["/legal/cgu", t("terms"), "document-text-outline"],
-            ["/legal/aide", t("helpVendor"), "help-circle-outline"],
-            ["/legal/shiprewards", t("shiprewards"), "gift-outline"],
-          ] as const
-        ).map(([href, label, icon]) => (
-          <Pressable
+            ["/legal/confidentialite", "privacy", "shield-outline"],
+            ["/legal/cgu", "terms", "document-text-outline"],
+            ["/legal/aide", "helpVendor", "help-circle-outline"],
+            ["/legal/shiprewards", "shiprewards", "gift-outline"],
+          ] as const satisfies readonly [
+            string,
+            MsgKey,
+            ComponentProps<typeof Ionicons>["name"],
+          ][]
+        ).map(([href, key, icon]) => (
+          <ProfileMenuRow
             key={href}
-            android_ripple={{ color: `${c.primary}33` }}
-            style={({ pressed }) => [
-              styles.legalRow,
-              {
-                backgroundColor: pressed ? `${c.primary}18` : c.card,
-                borderColor: pressed ? `${c.primary}66` : "transparent",
-                borderWidth: 1,
-              },
-            ]}
+            icon={icon}
+            label={t(key)}
             onPress={() => router.push(href as Href)}
-          >
-            <Ionicons name={icon} size={18} color={c.primary} />
-            <Text style={[styles.legalLabel, { color: c.text }]}>{label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={c.primary} />
-          </Pressable>
+          />
         ))}
       </ScrollView>
       <Modal
@@ -847,16 +949,24 @@ const styles = StyleSheet.create({
   },
   tileTitle: { color: "#fff", fontWeight: "800" },
   tileMeta: { fontSize: 12 },
-  legalRow: {
+  missionCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    gap: 12,
+    borderRadius: 18,
+    padding: 14,
+    minHeight: 64,
   },
-  legalLabel: { color: "#fff", fontWeight: "700", flex: 1 },
+  sellerStack: { gap: 16 },
+  sellerSection: { gap: 8 },
+  sellerSectionTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    paddingHorizontal: 2,
+  },
+  sellerSectionBody: { gap: 8 },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   badge: {
     flexDirection: "row",
@@ -880,10 +990,12 @@ const styles = StyleSheet.create({
   },
   modeBtn: {
     flex: 1,
+    minHeight: 44,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 10,
     alignItems: "center",
+    justifyContent: "center",
   },
   modeText: {
     fontWeight: "800",

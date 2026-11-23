@@ -7,10 +7,10 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     View,
 } from "react-native";
 
+import { SearchField } from "@/components/ui/SearchField";
 import { api, mediaUrl } from "@/src/api";
 import { formatMoney } from "@/src/format";
 import { HAIRLINE } from "@/src/theme";
@@ -124,16 +124,11 @@ export function AdminProductPicker({
             { borderColor: HAIRLINE, backgroundColor: c.sheet },
           ]}
         >
-          <TextInput
+          <SearchField
             value={q}
             onChangeText={setQ}
             placeholder="Rechercher…"
-            placeholderTextColor={c.textMuted}
             autoFocus
-            style={[
-              styles.input,
-              { color: c.text, backgroundColor: "rgba(127,127,140,0.12)" },
-            ]}
           />
           {loading ? (
             <ActivityIndicator

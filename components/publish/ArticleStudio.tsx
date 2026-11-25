@@ -5,12 +5,21 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
     View,
 } from "react-native";
+import Animated, {
+    Extrapolation,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
+    type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ShopPicker } from "@/components/profile/ShopPicker";
@@ -20,14 +29,20 @@ import {
     MusicStudio,
     type MusicStudioHandle,
 } from "@/components/publish/MusicStudio";
+import { ProductFiltersScreen } from "@/components/publish/ProductFiltersScreen";
 import {
     ProductImageEditorSheet,
     type MontageMedia,
     type MontageSave,
 } from "@/components/publish/ProductImageEditorSheet";
+import {
+    PublishCameraScreen,
+    type PublishCameraModeId,
+} from "@/components/publish/PublishCameraScreen";
 import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import { VIDEO_STYLE_MODELS, type VideoStyleModel } from "@/src/image-style";
 import { pickBrowseFiles } from "@/src/pick-media";
+import type { ProductFilterSelection } from "@/src/product-filters";
 import {
     encodeSlideMotion,
     LOCAL_SOUNDTRACK_ID,
@@ -45,6 +60,189 @@ type StudioShop = {
   currency?: string;
   logoUrl?: string | null;
 };
+
+type EmptyCaptureMode =
+  | "video-15"
+  | "video-30"
+  | "video-60"
+  | "upload"
+  | "photo";
+
+const EMPTY_CAPTURE_MODES: {
+  id: EmptyCaptureMode;
+  label: string;
+}[] = [
+  { id: "video-60", label: "60s" },
+  { id: "video-30", label: "30s" },
+  { id: "video-15", label: "15s" },
+  { id: "upload", label: "+" },
+  { id: "photo", label: "photo" },
+];
+
+const EMPTY_MODE_W = 78;
+/** Départ centré sur + upload (60s → 30s → 15s → + → photo). */
+const EMPTY_START_INDEX = EMPTY_CAPTURE_MODES.findIndex(
+  (m) => m.id === "upload",
+);
+const EMPTY_MODE_PAD = Math.max(
+  0,
+  (Dimensions.get("window").width - EMPTY_MODE_W) / 2,
+);
+
+function EmptyCaptureChip({
+  item,
+  index,
+  scrollX,
+  busy,
+  onPress,
+}: {
+  item: (typeof EMPTY_CAPTURE_MODES)[number];
+  index: number;
+  scrollX: SharedValue<number>;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  const anim = useAnimatedStyle(() => {
+    const center = index * EMPTY_MODE_W;
+    const dist = Math.abs(scrollX.value - center);
+    const isUpload = item.id === "upload";
+    const scale = interpolate(
+      dist,
+      [0, EMPTY_MODE_W, EMPTY_MODE_W * 2],
+      [isUpload ? 1.18 : 1.06, 0.88, 0.78],
+      Extrapolation.CLAMP,
+    );
+    const opacity = interpolate(
+      dist,
+      [0, EMPTY_MODE_W * 0.55, EMPTY_MODE_W * 1.4],
+      [1, isUpload ? 0.55 : 0.38, isUpload ? 0.28 : 0.22],
+      Extrapolation.CLAMP,
+    );
+    return { transform: [{ scale }], opacity };
+  });
+
+  const upload = item.id === "upload";
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.emptyModeItem}
+      accessibilityLabel={
+        upload
+          ? "Importer photos ou vidéos"
+          : item.id === "photo"
+            ? "Caméra photo"
+            : `Caméra vidéo ${item.label}`
+      }
+    >
+      <Animated.View
+        style={[
+          upload ? styles.emptyIcon : styles.modeChip,
+          upload ? null : item.id === "photo" && styles.modeChipPhoto,
+          anim,
+        ]}
+      >
+        {upload ? (
+          busy ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Ionicons name="add" size={36} color="#FFFFFF" />
+          )
+        ) : (
+          <Text
+            style={[
+              styles.modeChipText,
+              item.id === "photo" && styles.modeChipTextPhoto,
+            ]}
+          >
+            {item.label}
+          </Text>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function EmptyCaptureStrip({
+  busy,
+  onSelect,
+}: {
+  busy: boolean;
+  onSelect: (mode: EmptyCaptureMode) => void;
+}) {
+  const listRef =
+    useRef<Animated.FlatList<(typeof EMPTY_CAPTURE_MODES)[number]>>(null);
+  const scrollX = useSharedValue(EMPTY_START_INDEX * EMPTY_MODE_W);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+    },
+  });
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      listRef.current?.scrollToOffset({
+        offset: EMPTY_START_INDEX * EMPTY_MODE_W,
+        animated: false,
+      });
+      scrollX.value = EMPTY_START_INDEX * EMPTY_MODE_W;
+    }, 30);
+    return () => clearTimeout(t);
+  }, [scrollX]);
+
+  function snapToNearest(x: number) {
+    const index = Math.round(x / EMPTY_MODE_W);
+    const clamped = Math.max(
+      0,
+      Math.min(EMPTY_CAPTURE_MODES.length - 1, index),
+    );
+    listRef.current?.scrollToOffset({
+      offset: clamped * EMPTY_MODE_W,
+      animated: true,
+    });
+    scrollX.value = clamped * EMPTY_MODE_W;
+  }
+
+  return (
+    <Animated.FlatList
+      ref={listRef}
+      horizontal
+      data={EMPTY_CAPTURE_MODES}
+      keyExtractor={(item) => item.id}
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={EMPTY_MODE_W}
+      decelerationRate="fast"
+      disableIntervalMomentum
+      bounces={false}
+      style={styles.modeScroll}
+      contentContainerStyle={{ paddingHorizontal: EMPTY_MODE_PAD }}
+      onScroll={onScroll}
+      onMomentumScrollEnd={(e) => snapToNearest(e.nativeEvent.contentOffset.x)}
+      scrollEventThrottle={16}
+      getItemLayout={(_, index) => ({
+        length: EMPTY_MODE_W,
+        offset: EMPTY_MODE_W * index,
+        index,
+      })}
+      renderItem={({ item, index }) => (
+        <EmptyCaptureChip
+          item={item}
+          index={index}
+          scrollX={scrollX}
+          busy={busy}
+          onPress={() => {
+            listRef.current?.scrollToOffset({
+              offset: index * EMPTY_MODE_W,
+              animated: true,
+            });
+            scrollX.value = index * EMPTY_MODE_W;
+            onSelect(item.id);
+          }}
+        />
+      )}
+    />
+  );
+}
 
 async function optimizeStill(uri: string): Promise<string> {
   try {
@@ -161,6 +359,11 @@ export function ArticleStudio({
   const [musicOpen, setMusicOpen] = useState(false);
   const bottomPad = tabBar.barBody + Math.max(insets.bottom, 8) + 10;
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterSelection, setFilterSelection] =
+    useState<ProductFilterSelection | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<PublishCameraModeId>("photo");
   const [shopOpen, setShopOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
@@ -237,30 +440,74 @@ export function ArticleStudio({
     [onImages, setMediaBusy],
   );
 
-  async function addMedia(kind: "mixed" | "videos" = "mixed") {
+  /** + = upload · 15s/30s/60s/photo = ouvre caméra TikTok */
+  async function captureMedia(
+    mode: "upload" | "video-60" | "video-30" | "video-15" | "photo",
+  ) {
     if (mediaBusy) {
       showToast("Patiente, le média se charge encore.", "info");
       return;
     }
     if (images.length >= 12) return;
-    setMediaBusy(true);
-    try {
-      const assets = await pickBrowseFiles({
-        kind,
-        limit: Math.max(1, 12 - images.length),
-      });
-      if (!assets.length) {
+
+    if (mode === "upload") {
+      const limit = Math.max(1, 12 - images.length);
+      setMediaBusy(true);
+      try {
+        const picked = await pickBrowseFiles({ kind: "mixed", limit });
+        if (!picked.length) {
+          setMediaBusy(false);
+          return;
+        }
+        await ingest(picked);
+      } catch (cause) {
         setMediaBusy(false);
-        return;
+        showToast(
+          cause instanceof Error ? cause.message : "Import impossible",
+          "error",
+        );
       }
-      await ingest(assets);
-    } catch (cause) {
-      setMediaBusy(false);
-      showToast(
-        cause instanceof Error ? cause.message : "Import impossible",
-        "error",
-      );
+      return;
     }
+
+    const nextMode: PublishCameraModeId =
+      mode === "photo"
+        ? "photo"
+        : mode === "video-15"
+          ? "15s"
+          : mode === "video-30"
+            ? "30s"
+            : "60s";
+    setCameraMode(nextMode);
+    setCameraOpen(true);
+  }
+
+  async function addMedia(kind: "mixed" | "videos" = "mixed") {
+    if (kind === "videos") {
+      await captureMedia("video-60");
+      return;
+    }
+    await captureMedia("upload");
+  }
+
+  async function onCameraCaptured(asset: {
+    uri: string;
+    fileName: string;
+    mimeType: string;
+  }) {
+    setCameraOpen(false);
+    if (images.length >= 12) return;
+    const video = asset.mimeType.startsWith("video/");
+    await ingest([
+      {
+        uri: asset.uri,
+        width: 0,
+        height: 0,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        type: video ? "video" : "image",
+      } as ImagePickerAsset,
+    ]);
   }
 
   function clearSound() {
@@ -282,8 +529,14 @@ export function ArticleStudio({
     switch (id) {
       case "layout":
       case "frames":
-      case "filters":
         setTemplatesOpen(true);
+        break;
+      case "filters":
+        if (!images.length) {
+          showToast("Ajoute d’abord une photo ou vidéo", "info");
+          return;
+        }
+        setFiltersOpen(true);
         break;
       case "video":
         void addMedia("videos");
@@ -304,6 +557,12 @@ export function ArticleStudio({
       default:
         break;
     }
+  }
+
+  function captureFilterVideo() {
+    setFiltersOpen(false);
+    setCameraMode("60s");
+    setCameraOpen(true);
   }
 
   async function handleMontageSave(result: MontageSave) {
@@ -373,15 +632,13 @@ export function ArticleStudio({
             />
           )
         ) : (
-          <Pressable style={styles.empty} onPress={() => void addMedia()}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="add" size={36} color="#FFFFFF" />
-            </View>
+          <View style={styles.empty}>
             <Text style={styles.emptyTitle}>Ajoute des photos ou vidéos</Text>
-            <Text style={styles.emptySub}>
-              Jusqu’à 12 médias — touche + pour importer
-            </Text>
-          </Pressable>
+            <EmptyCaptureStrip
+              busy={mediaBusy}
+              onSelect={(mode) => void captureMedia(mode)}
+            />
+          </View>
         )}
       </View>
 
@@ -517,7 +774,7 @@ export function ArticleStudio({
 
                 {images.length < 12 ? (
                   <Pressable
-                    onPress={() => void addMedia()}
+                    onPress={() => void captureMedia("upload")}
                     style={styles.thumbSlot}
                     accessibilityLabel="Ajouter un média"
                   >
@@ -629,6 +886,43 @@ export function ArticleStudio({
         title="Traitement..."
         subtitle="Reste sur cet écran pour terminer le traitement"
       />
+
+      {filtersOpen && activeUrl ? (
+        <View style={styles.filtersOverlay}>
+          <ProductFiltersScreen
+            productImageUrl={activeUrl}
+            productTitle={
+              filterSelection?.category === "beaute"
+                ? "Makeup look"
+                : "T-shirt Oversize"
+            }
+            productCategory="mode haut"
+            onClose={() => setFiltersOpen(false)}
+            onApply={setFilterSelection}
+            onNewVideo={captureFilterVideo}
+          />
+        </View>
+      ) : null}
+
+      {cameraOpen ? (
+        <View style={styles.filtersOverlay}>
+          <PublishCameraScreen
+            key={cameraMode}
+            initialMode={cameraMode}
+            onClose={() => setCameraOpen(false)}
+            onCaptured={(asset) => void onCameraCaptured(asset)}
+            onOpenSound={() => {
+              setCameraOpen(false);
+              setMusicOpen(true);
+            }}
+            onTexte={() => {
+              setCameraOpen(false);
+              if (images.length) setEditing(true);
+              else showToast("Capture d’abord une photo", "info");
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -636,6 +930,11 @@ export function ArticleStudio({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000000" },
   canvas: { ...StyleSheet.absoluteFill, backgroundColor: "#000000" },
+  filtersOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    backgroundColor: "#000000",
+  },
   overlay: { flex: 1, justifyContent: "space-between" },
   topBar: {
     flexDirection: "row",
@@ -782,27 +1081,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    paddingHorizontal: 32,
+    paddingHorizontal: 16,
+  },
+  modeScroll: { flexGrow: 0, width: "100%", height: 88 },
+  emptyModeItem: {
+    width: EMPTY_MODE_W,
+    height: 88,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
   },
+  modeChip: {
+    minWidth: 56,
+    height: 56,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeChipPhoto: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  modeChipText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  modeChipTextPhoto: { color: "#FFFFFF", fontSize: 13 },
   emptyTitle: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "800",
     textAlign: "center",
-  },
-  emptySub: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 18,
+    marginBottom: 4,
   },
 });

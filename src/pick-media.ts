@@ -1,8 +1,10 @@
-import { AppState, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 
 import type { ImagePickerAsset } from "expo-image-picker";
 
 export type PickKind = "images" | "videos" | "mixed";
+export type CameraPickKind = "images" | "videos";
+export type MediaSourceChoice = "camera-photo" | "camera-video" | "import";
 
 type Picker = typeof import("expo-image-picker");
 
@@ -235,13 +237,145 @@ export async function pickBrowseFiles(opts: { kind: PickKind; limit: number }) {
       mimeType: mime,
       fileSize: file.size ?? undefined,
       type: mime.startsWith("video/") ? "video" : "image",
-      file: file.file,
+      file: (file.file ?? undefined) as ImagePickerAsset["file"],
     });
   }
   if (!assets.length) {
     throw new Error("Choisis une photo ou une vidéo.");
   }
   return assets;
+}
+
+async function ensureCameraPermission(ImagePicker: Picker) {
+  const current = await ImagePicker.getCameraPermissionsAsync();
+  if (current.granted) return;
+  const asked = await ImagePicker.requestCameraPermissionsAsync();
+  if (!asked.granted) {
+    throw new Error("Autorise la caméra pour prendre une photo ou une vidéo.");
+  }
+}
+
+async function ensureMicForVideo() {
+  try {
+    const Audio = await import("expo-audio");
+    const current = await Audio.getRecordingPermissionsAsync();
+    if (current.granted) return;
+    const asked = await Audio.requestRecordingPermissionsAsync();
+    if (!asked.granted) {
+      throw new Error("Autorise le micro pour filmer une vidéo.");
+    }
+  } catch (cause) {
+    if (cause instanceof Error && cause.message.startsWith("Autorise")) {
+      throw cause;
+    }
+    // Module audio indisponible : la caméra système demandera le micro.
+  }
+}
+
+function cameraFileMeta(kind: CameraPickKind) {
+  if (kind === "videos") {
+    return { fileName: "camera.mp4", mimeType: "video/mp4" as const };
+  }
+  return { fileName: "camera.jpg", mimeType: "image/jpeg" as const };
+}
+
+/** Capture caméra (photo ou vidéo). Noms stables pour l’upload. */
+export async function pickFromCamera(opts: {
+  kind: CameraPickKind;
+  facing?: "back" | "front";
+  /** Durée max vidéo caméra (15 / 30 / 60). Défaut 60. */
+  videoMaxDuration?: number;
+}) {
+  const ImagePicker = await imagePicker();
+  if (typeof ImagePicker.launchCameraAsync !== "function") {
+    throw new Error("La caméra sera active après le build de développement.");
+  }
+  await ensureCameraPermission(ImagePicker);
+  if (opts.kind === "videos") await ensureMicForVideo();
+
+  const meta = cameraFileMeta(opts.kind);
+  const facing = opts.facing ?? "back";
+  const maxSeconds = Math.min(
+    60,
+    Math.max(1, Math.round(opts.videoMaxDuration ?? 60)),
+  );
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: [...mediaTypesOf(opts.kind)],
+    quality: 0.85,
+    videoMaxDuration: maxSeconds,
+    cameraType:
+      facing === "front"
+        ? ImagePicker.CameraType.front
+        : ImagePicker.CameraType.back,
+  });
+
+  let assets = assetsFromUnknown(result);
+  if (!assets.length && Platform.OS === "android") {
+    assets = await consumePendingPickedMedia();
+  }
+  if (!assets.length) return [];
+
+  const settled = await settlePickedFiles(
+    assets.map((asset) => ({
+      ...asset,
+      fileName: asset.fileName || meta.fileName,
+      mimeType:
+        mimeOf(asset.fileName || meta.fileName, asset.mimeType) ||
+        meta.mimeType,
+    })),
+  );
+  return settled.slice(0, 1).map((asset) => ({
+    ...asset,
+    fileName: meta.fileName,
+    mimeType: mimeOf(meta.fileName, asset.mimeType) || meta.mimeType,
+    type: opts.kind === "videos" ? ("video" as const) : ("image" as const),
+  }));
+}
+
+/** Choix Caméra photo / Caméra vidéo / Import (ActionSheet système). */
+export function promptMediaSource(opts: {
+  allowPhoto?: boolean;
+  allowVideo?: boolean;
+  title?: string;
+  photoLabel?: string;
+  videoLabel?: string;
+  importLabel?: string;
+  cancelLabel?: string;
+}): Promise<MediaSourceChoice | null> {
+  const allowPhoto = opts.allowPhoto !== false;
+  const allowVideo = opts.allowVideo !== false;
+  return new Promise((resolve) => {
+    const buttons: {
+      text: string;
+      style?: "cancel" | "destructive" | "default";
+      onPress?: () => void;
+    }[] = [];
+    if (allowPhoto) {
+      buttons.push({
+        text: opts.photoLabel ?? "Prendre une photo",
+        onPress: () => resolve("camera-photo"),
+      });
+    }
+    if (allowVideo) {
+      buttons.push({
+        text: opts.videoLabel ?? "Filmer une vidéo",
+        onPress: () => resolve("camera-video"),
+      });
+    }
+    buttons.push({
+      text: opts.importLabel ?? "Importer (galerie / fichiers)",
+      onPress: () => resolve("import"),
+    });
+    buttons.push({
+      text: opts.cancelLabel ?? "Annuler",
+      style: "cancel",
+      onPress: () => resolve(null),
+    });
+    Alert.alert(opts.title ?? "Ajouter un média", undefined, buttons, {
+      cancelable: true,
+      onDismiss: () => resolve(null),
+    });
+  });
 }
 
 export function subscribePendingPickedMedia(

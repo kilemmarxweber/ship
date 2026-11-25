@@ -46,6 +46,7 @@ export function guessUploadMeta(asset: UploadAsset) {
   let ext = extFrom(asset.fileName ?? "") || extFrom(fromUri);
   let type = (asset.mimeType ?? "").toLowerCase().trim();
   if (type === "image/jpg") type = "image/jpeg";
+  // Blobs caméra : souvent vide ou application/octet-stream.
   if (
     !type ||
     type === "image" ||
@@ -73,7 +74,15 @@ export function guessUploadMeta(asset: UploadAsset) {
     else ext = "jpg";
   }
   const given = asset.fileName?.trim() ?? "";
-  const name = given && extFrom(given) ? given : `media.${ext}`;
+  const stableCamera =
+    /^camera\.(jpe?g|png|mp4|mov|webm)$/i.test(given) ||
+    /^camera\.(jpe?g|png|mp4|mov|webm)$/i.test(fromUri.split("/").pop() ?? "");
+  const name =
+    given && extFrom(given)
+      ? given
+      : stableCamera
+        ? `camera.${ext}`
+        : `media.${ext}`;
   return { name, type };
 }
 

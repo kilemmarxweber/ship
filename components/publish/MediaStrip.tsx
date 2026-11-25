@@ -17,9 +17,12 @@ import {
 } from "@/components/publish/ProductImageEditorSheet";
 import { ProductImagePreviewSheet } from "@/components/publish/ProductImagePreviewSheet";
 import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
+import { useT } from "@/src/i18n";
 import {
     pickBrowseFiles,
+    pickFromCamera,
     pickMediaLibrary,
+    promptMediaSource,
     subscribePendingPickedMedia,
     type PickKind,
 } from "@/src/pick-media";
@@ -95,6 +98,7 @@ export function MediaStrip({
   shopLogoUrl?: string | null;
 }) {
   const c = useColors();
+  const t = useT();
   const urlsRef = useRef(urls);
   const ingestRef = useRef<(assets: ImagePickerAsset[]) => Promise<void>>(
     async () => undefined,
@@ -221,11 +225,30 @@ export function MediaStrip({
       return;
     }
     if (urls.length >= max && max !== 1) return;
+
+    const allowPhoto = kind !== "videos";
+    const allowVideo = kind !== "images";
+    const source = await promptMediaSource({
+      allowPhoto,
+      allowVideo,
+      title: t("mediaSourceTitle"),
+      photoLabel: t("mediaSourcePhoto"),
+      videoLabel: t("mediaSourceVideo"),
+      importLabel: t("mediaSourceImport"),
+      cancelLabel: t("mediaSourceCancel"),
+    });
+    if (!source) return;
+
     setPhase("picking");
     setBusy(true);
     try {
       const limit = max === 1 ? 1 : Math.max(1, max - urls.length);
-      const assets = await pickBrowseFiles({ kind, limit });
+      const assets =
+        source === "camera-photo"
+          ? await pickFromCamera({ kind: "images" })
+          : source === "camera-video"
+            ? await pickFromCamera({ kind: "videos" })
+            : await pickBrowseFiles({ kind, limit });
       if (!assets.length) {
         setBusy(false);
         setPhase("idle");
@@ -370,15 +393,15 @@ export function MediaStrip({
           ]}
           onPress={() => void add()}
           disabled={full}
-          accessibilityLabel={`Parcourir ${browseLabel}`}
+          accessibilityLabel={t("addMedia")}
         >
           {locked ? (
             <ActivityIndicator color={c.primary} />
           ) : (
-            <Ionicons name="folder-open-outline" size={24} color={c.text} />
+            <Ionicons name="camera-outline" size={24} color={c.text} />
           )}
           <Text style={[styles.addText, { color: c.text }]}>
-            {locked ? "Chargement…" : replace ? "Remplacer" : "Parcourir"}
+            {locked ? "Chargement…" : replace ? "Remplacer" : t("addMedia")}
           </Text>
           {locked ? null : (
             <Text style={[styles.addHint, { color: c.muted }]}>

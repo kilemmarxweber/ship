@@ -358,8 +358,8 @@ export function SellerProductsScreen() {
             <Ionicons name="add" size={16} color={c.primaryForeground} />
             <Text style={[styles.addText, { color: c.primaryForeground }]}>
               Créer
-            </Text>
-          </Pressable>
+          </Text>
+        </Pressable>
         </View>
       </View>
 
@@ -411,7 +411,7 @@ export function SellerProductsScreen() {
                       : { backgroundColor: "rgba(127,127,140,0.14)" },
                   ]}
                 >
-                  <Text
+            <Text
                     style={[
                       styles.tabText,
                       { color: on ? c.primaryForeground : c.textMuted },
@@ -433,40 +433,40 @@ export function SellerProductsScreen() {
               <Pressable onPress={() => router.push("/publish")}>
                 <Text style={{ color: c.primary, fontWeight: "800" }}>
                   créer
-                </Text>
+            </Text>
               </Pressable>
             </View>
           ) : (
             <>
               {paged.visible.map((item) => {
-                const cover = mediaUrl(coverOf(item.images));
-                return (
-                  <View
+            const cover = mediaUrl(coverOf(item.images));
+            return (
+              <View
                     key={item.id}
-                    style={[
-                      styles.row,
+                style={[
+                  styles.row,
                       { backgroundColor: c.card, borderColor: HAIRLINE },
-                    ]}
-                  >
+                ]}
+              >
                     <View style={styles.rowTop}>
-                      {cover ? (
-                        <Image
-                          source={{ uri: cover }}
-                          style={styles.thumb}
-                          contentFit="cover"
-                        />
-                      ) : (
+                {cover ? (
+                  <Image
+                    source={{ uri: cover }}
+                    style={styles.thumb}
+                    contentFit="cover"
+                  />
+                ) : (
                         <View
                           style={[styles.thumb, { backgroundColor: "#222" }]}
                         />
-                      )}
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <Text
-                          style={[styles.name, { color: c.text }]}
-                          numberOfLines={1}
-                        >
-                          {item.title}
-                        </Text>
+                )}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text
+                    style={[styles.name, { color: c.text }]}
+                    numberOfLines={1}
+                  >
+                    {item.title}
+                  </Text>
                         <Text style={{ color: c.textMuted, fontSize: 12 }}>
                           {formatMoney(item.priceCents, item.currency)} · stock{" "}
                           {item.quantity ?? 0} ·{" "}

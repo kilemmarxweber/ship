@@ -1,7 +1,7 @@
 import {
-    onlineManager,
-    QueryClient,
-    QueryClientProvider,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
 } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -31,7 +31,7 @@ initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
-/** Temps mini pour lire « from Klambocore » après le paint React. */
+/** Temps mini pour lire « From Klambocore » après le paint React. */
 const BRAND_HOLD_MS = 900;
 
 onlineManager.setOnline(false);

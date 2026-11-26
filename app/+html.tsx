@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 // do not have access to the DOM or browser APIs.
 export default function Root({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="fr">
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -26,19 +26,61 @@ export default function Root({ children }: { children: ReactNode }) {
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
-      <body>{children}</body>
+      <body>
+        {/* First paint système (avant React) : From Klambocore en bas. */}
+        <div id="shipshop-boot-splash" aria-label="From Klambocore">
+          <p className="boot-credit">From Klambocore</p>
+        </div>
+        {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function () {
+  function hideBoot() {
+    var el = document.getElementById('shipshop-boot-splash');
+    if (!el || el.getAttribute('data-hidden') === '1') return;
+    el.setAttribute('data-hidden', '1');
+  }
+  window.__shipshopHideBootSplash = hideBoot;
+  // Laisse place au LaunchSplash React dès qu’il est peint.
+  setTimeout(hideBoot, 1200);
+  setTimeout(hideBoot, 4000);
+})();`,
+          }}
+        />
+      </body>
     </html>
   );
 }
 
 const responsiveBackground = `
-body {
-  background-color: #fff;
+html, body {
+  height: 100%;
+  margin: 0;
+  background-color: #0A0A0F;
 }
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #000;
-  }
+#shipshop-boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #0A0A0F;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+#shipshop-boot-splash[data-hidden="1"] {
+  opacity: 0;
+  visibility: hidden;
+}
+#shipshop-boot-splash .boot-credit {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: max(28px, env(safe-area-inset-bottom, 0px) + 24px);
+  margin: 0;
+  text-align: center;
+  color: rgba(255,255,255,0.72);
+  font: 600 16px/1.2 system-ui, -apple-system, Segoe UI, sans-serif;
+  letter-spacing: 0.4px;
 }
 /* Match comments composer: no browser outline on hover/focus for text fields */
 input,

@@ -17,6 +17,11 @@ export function LaunchSplash({ onPaint }: { onPaint: () => void }) {
       onLayout={() => {
         if (painted.current) return;
         painted.current = true;
+        if (typeof window !== "undefined") {
+          (
+            window as Window & { __shipshopHideBootSplash?: () => void }
+          ).__shipshopHideBootSplash?.();
+        }
         onPaint();
       }}
     >
@@ -28,10 +33,10 @@ export function LaunchSplash({ onPaint }: { onPaint: () => void }) {
       />
       <View
         style={[styles.brand, { bottom: Math.max(28, insets.bottom + 24) }]}
-        accessibilityLabel="from Klambocore"
+        accessibilityLabel="From Klambocore"
       >
         <Text style={styles.credit} numberOfLines={1} adjustsFontSizeToFit>
-          from Klambocore
+          From Klambocore
         </Text>
       </View>
     </View>

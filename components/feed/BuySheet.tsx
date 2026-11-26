@@ -25,12 +25,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ProductWallImage } from "@/components/media/ProductWallImage";
 import { ToastHost } from "@/components/Toast";
-import { api, apiOrigin, mediaUrl } from "@/src/api";
+import { api, apiOrigin, isVideoUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
 import { cartQueryKey } from "@/src/cart-store";
 import { colorHex, isLightColor } from "@/src/color";
 import { compactCount, formatMoney } from "@/src/format";
+import { mediaList } from "@/src/media";
 import { saveCartLine } from "@/src/offline/writes";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
@@ -38,6 +40,26 @@ import { productInStock, productStock, stockLabel } from "@/src/stock";
 import { showToast } from "@/src/toast";
 import type { Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
+
+function productImageGallery(images: string[] | null | undefined) {
+  const all = mediaList(images);
+  const photos = all.filter((url) => !isVideoUrl(url));
+  if (photos.length) return photos;
+  // Produit vidéo seule : affiche la vignette jpg si possible.
+  return all
+    .map((url) =>
+      isVideoUrl(url)
+        ? url.replace(/\.(mp4|webm|mov|m4v|mkv|avi|3gp)(\?|$)/i, ".jpg$2")
+        : url,
+    )
+    .filter((url, index, list) => url && list.indexOf(url) === index);
+}
+
+function mediaPagerLabel(current: number, total: number) {
+  if (total <= 0) return "0 / 0";
+  const safe = Math.min(Math.max(1, current), total);
+  return `${safe} / ${total}`;
+}
 
 type BuySheetProps = {
   product: Product | null;
@@ -65,16 +87,15 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
   const compact = windowHeight < 720;
   const panelRadius = compact ? 22 : 28;
 
-  const gallery = useMemo(() => {
-    if (!product) return [] as string[];
-    const stills = product.images.filter(
-      (url) => !/\.(mp4|webm|mov)/i.test(url),
-    );
-    const urls = (stills.length ? stills : product.images)
-      .map((url) => mediaUrl(url) ?? url)
-      .filter(Boolean);
-    return urls.length ? urls : [""];
-  }, [product]);
+  const gallery = useMemo(
+    () => (product ? productImageGallery(product.images) : []),
+    [product],
+  );
+  const imageTotal = gallery.length;
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageCurrent =
+    imageTotal > 0 ? Math.min(imageIndex + 1, imageTotal) : 0;
+  const pagerLabel = mediaPagerLabel(imageCurrent, imageTotal);
 
   const initialStock = product ? productStock(product) : 0;
   const [size, setSize] = useState<string | null>(product?.sizes[0] ?? null);
@@ -84,7 +105,6 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
   const [soldCount, setSoldCount] = useState(product?.soldCount ?? 0);
   const [pending, setPending] = useState(false);
   const [buying, setBuying] = useState(false);
-  const [imageIndex, setImageIndex] = useState(0);
   const [liked, setLiked] = useState(Boolean(product?.likedByMe));
   const [likesCount, setLikesCount] = useState(product?.likesCount ?? 0);
   const [heroH, setHeroH] = useState(Math.round(windowHeight * 0.55));
@@ -241,18 +261,22 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
     });
   }
 
+  function pageFromOffset(x: number) {
+    if (imageTotal <= 0) return 0;
+    return Math.max(
+      0,
+      Math.min(imageTotal - 1, Math.round(x / Math.max(1, windowWidth))),
+    );
+  }
+
   function onGalleryScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const x = e.nativeEvent.contentOffset.x;
-    const next = Math.round(x / Math.max(1, windowWidth));
-    if (next !== imageIndex && next >= 0 && next < gallery.length) {
-      setImageIndex(next);
-    }
+    const next = pageFromOffset(e.nativeEvent.contentOffset.x);
+    if (next !== imageIndex) setImageIndex(next);
   }
 
   function onZoomScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const x = e.nativeEvent.contentOffset.x;
-    const next = Math.round(x / Math.max(1, windowWidth));
-    if (next !== zoomIndex && next >= 0 && next < gallery.length) {
+    const next = pageFromOffset(e.nativeEvent.contentOffset.x);
+    if (next !== zoomIndex) {
       setZoomIndex(next);
       setImageIndex(next);
       galleryRef.current?.scrollToIndex({ index: next, animated: false });
@@ -292,44 +316,46 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
             if (h > 0 && h !== heroH) setHeroH(h);
           }}
         >
-          <FlatList
-            ref={galleryRef}
-            data={gallery}
-            keyExtractor={(uri, i) => `${uri}-${i}`}
-            horizontal
-            pagingEnabled
-            style={StyleSheet.absoluteFill}
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onGalleryScroll}
-            getItemLayout={(_, index) => ({
-              length: windowWidth,
-              offset: windowWidth * index,
-              index,
-            })}
-            renderItem={({ item, index }) => (
-              <Pressable
-                onPress={() => openZoom(index)}
-                accessibilityLabel="Agrandir l'image"
-                style={{ width: windowWidth, height: heroH }}
-              >
-                {item ? (
-                  <Image
-                    source={{ uri: item }}
+          {imageTotal > 0 ? (
+            <FlatList
+              ref={galleryRef}
+              data={gallery}
+              keyExtractor={(uri, i) => `${uri}-${i}`}
+              horizontal
+              pagingEnabled
+              style={StyleSheet.absoluteFill}
+              showsHorizontalScrollIndicator={false}
+              onScroll={onGalleryScroll}
+              onMomentumScrollEnd={onGalleryScroll}
+              scrollEventThrottle={16}
+              getItemLayout={(_, index) => ({
+                length: windowWidth,
+                offset: windowWidth * index,
+                index,
+              })}
+              renderItem={({ item, index }) => (
+                <Pressable
+                  onPress={() => openZoom(index)}
+                  accessibilityLabel={`Image ${index + 1} sur ${imageTotal}`}
+                  style={{ width: windowWidth, height: heroH }}
+                >
+                  <ProductWallImage
+                    uri={item}
                     style={{ width: windowWidth, height: heroH }}
-                    contentFit="cover"
+                    recyclingKey={`buy-${item}`}
                   />
-                ) : (
-                  <View
-                    style={{
-                      width: windowWidth,
-                      height: heroH,
-                      backgroundColor: c.card,
-                    }}
-                  />
-                )}
-              </Pressable>
-            )}
-          />
+                </Pressable>
+              )}
+            />
+          ) : (
+            <View
+              style={{
+                width: windowWidth,
+                height: heroH,
+                backgroundColor: c.card,
+              }}
+            />
+          )}
 
           <View
             pointerEvents="box-none"
@@ -372,25 +398,33 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
             </View>
           </View>
 
-          <View style={styles.pagerWrap} pointerEvents="none">
-            <View style={styles.segments}>
-              {gallery.map((_, i) => (
-                <View
-                  key={`seg-${i}`}
-                  style={[
-                    styles.segment,
-                    i === imageIndex ? styles.segmentOn : styles.segmentOff,
-                    { flex: 1 },
-                  ]}
-                />
-              ))}
+          {imageTotal > 0 ? (
+            <View style={styles.pagerWrap} pointerEvents="none">
+              {imageTotal > 1 ? (
+                <View style={styles.segments}>
+                  {gallery.map((_, i) => (
+                    <View
+                      key={`seg-${i}`}
+                      style={[
+                        styles.segment,
+                        i === imageIndex ? styles.segmentOn : styles.segmentOff,
+                        { flex: 1 },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ) : null}
+              <View style={styles.pagerPill}>
+                <Text
+                  style={styles.pagerText}
+                  numberOfLines={1}
+                  accessibilityLabel={`Image ${pagerLabel}`}
+                >
+                  {pagerLabel}
+                </Text>
+              </View>
             </View>
-            <View style={styles.pagerPill}>
-              <Text style={styles.pagerText}>
-                {`${imageIndex + 1}/${gallery.length}`}
-              </Text>
-            </View>
-          </View>
+          ) : null}
         </View>
 
         <View
@@ -602,7 +636,10 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
               <Ionicons name="close" size={22} color="#fff" />
             </Pressable>
             <Text style={styles.zoomCount}>
-              {zoomIndex + 1}/{gallery.length}
+              {mediaPagerLabel(
+                imageTotal > 0 ? Math.min(zoomIndex + 1, imageTotal) : 0,
+                imageTotal,
+              )}
             </Text>
             <Text style={styles.zoomHint}>Pince ou double-tap</Text>
           </View>
@@ -785,19 +822,21 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: "#fff", height: 3.5 },
   segmentOff: { backgroundColor: "rgba(255,255,255,0.35)" },
   pagerPill: {
-    backgroundColor: "rgba(0,0,0,0.62)",
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 999,
-    minWidth: 52,
+    minWidth: 64,
     alignItems: "center",
+    justifyContent: "center",
   },
   pagerText: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0.8,
     includeFontPadding: false,
+    textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
   panel: {
@@ -935,8 +974,10 @@ const styles = StyleSheet.create({
   },
   zoomCount: {
     color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    fontWeight: "800",
+    fontSize: 15,
+    letterSpacing: 0.8,
+    includeFontPadding: false,
     fontVariant: ["tabular-nums"],
   },
   zoomHint: {

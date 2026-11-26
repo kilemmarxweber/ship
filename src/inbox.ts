@@ -1,8 +1,8 @@
 import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/src/api";
-import { commentsSnapKey, inboxQueryKey } from "@/src/offline/keys";
 import { snapshotGet } from "@/src/offline/db";
+import { commentsSnapKey, inboxQueryKey } from "@/src/offline/keys";
 import { useSession } from "@/src/session";
 import type { CommentItem } from "@/src/types";
 
@@ -76,6 +76,29 @@ function totals(conversations: InboxConversation[], unreadComments: number) {
   };
 }
 
+/** Empêche un refetch serveur de restaurer un compteur déjà lu localement. */
+const recentlySeen = new Map<string, number>();
+const SEEN_TTL_MS = 90_000;
+
+function rememberSeen(conversationId: string) {
+  recentlySeen.set(conversationId, Date.now());
+}
+
+function applySeenShield(list: InboxConversation[]) {
+  const now = Date.now();
+  for (const [id, at] of recentlySeen) {
+    if (now - at > SEEN_TTL_MS) recentlySeen.delete(id);
+  }
+  return list.map((row) => {
+    if (!recentlySeen.has(row.id)) return row;
+    if ((row.unreadCount ?? 0) === 0) {
+      recentlySeen.delete(row.id);
+      return row;
+    }
+    return { ...row, unreadCount: 0 };
+  });
+}
+
 export async function fetchInbox(): Promise<InboxSnapshot> {
   const [conv, summary] = await Promise.all([
     api<{ conversations?: InboxConversation[] }>("/api/conversations"),
@@ -83,7 +106,7 @@ export async function fetchInbox(): Promise<InboxSnapshot> {
       "/api/inbox/summary",
     ).catch(() => ({ unreadComments: 0, comments: [] })),
   ]);
-  const conversations = sortInbox(conv.conversations ?? []);
+  const conversations = sortInbox(applySeenShield(conv.conversations ?? []));
   const unreadComments = summary.unreadComments ?? 0;
   const snapshot = {
     conversations,
@@ -116,19 +139,46 @@ export function markConversationSeenLocal(
   token: string | null,
   conversationId: string,
 ) {
+  rememberSeen(conversationId);
   queryClient.setQueryData<InboxSnapshot>(inboxQueryKey(token), (current) => {
     if (!current) return current;
     const conversations = current.conversations.map((row) => {
       if (row.id !== conversationId) return row;
-      if (row.urgentPending) return row;
+      if ((row.unreadCount ?? 0) === 0) return row;
       return { ...row, unreadCount: 0 };
     });
-    return {
+    const next = {
       ...current,
       conversations,
       ...totals(conversations, current.unreadComments),
     };
+    void import("@/src/offline/persist").then(({ persistInbox }) => {
+      persistInbox(token, next);
+    });
+    return next;
   });
+}
+
+/** Marque lu côté API (best-effort) puis rafraîchit l’inbox sans remonter le compteur. */
+export async function markConversationRead(
+  queryClient: ReturnType<typeof useQueryClient>,
+  token: string | null,
+  conversationId: string,
+) {
+  markConversationSeenLocal(queryClient, token, conversationId);
+  try {
+    await api(`/api/conversations/${conversationId}/read`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  } catch {
+    try {
+      await api(`/api/conversations/${conversationId}`, { method: "GET" });
+    } catch {
+      // Offline / endpoint absent : le shield local garde le décompte.
+    }
+  }
+  await queryClient.invalidateQueries({ queryKey: inboxQueryKey(token) });
 }
 
 export function markCommentsReadLocal(

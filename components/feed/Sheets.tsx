@@ -4,31 +4,30 @@ import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
+    ActivityIndicator,
+    FlatList,
     Keyboard,
     KeyboardAvoidingView,
     Linking,
-  Modal,
+    Modal,
     Platform,
-  Pressable,
+    Pressable,
     ScrollView,
     Share,
-  StyleSheet,
-  Text,
-  TextInput,
-    useWindowDimensions,
-  View,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ToastHost } from "@/components/Toast";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ShopQrButton } from "@/components/shop/ShopQrButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Face } from "@/components/ui/Face";
+import { IconBackButton } from "@/components/ui/IconBackButton";
 import { SheetReduce } from "@/components/ui/SheetReduce";
-import { api, apiOrigin, mediaUrl } from "@/src/api";
+import { api, apiOrigin } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
 import { useMe } from "@/src/me";
 import { coverOf } from "@/src/media";
@@ -38,7 +37,7 @@ import { persistComments } from "@/src/offline/persist";
 import { requestOrQueue } from "@/src/offline/writes";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
-import { colors } from "@/src/theme";
+import { colors, HAIRLINE } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { CommentItem, Product, ShopCard } from "@/src/types";
 import { useColors } from "@/src/use-colors";
@@ -84,7 +83,7 @@ export function CommentsSheet({
     <Modal
       visible={Boolean(product)}
       animationType="slide"
-      transparent
+      presentationStyle="fullScreen"
       statusBarTranslucent
       onRequestClose={onClose}
     >
@@ -113,7 +112,6 @@ function CommentsBody({
   onDeleted?: (productId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
   const c = useColors();
   const dark = usePrefs((state) => state.theme) !== "light";
   const token = useSession((state) => state.token);
@@ -303,153 +301,179 @@ function CommentsBody({
   }
 
   const ready = Boolean(body.trim());
+  const dockPad = keyboard > 0 ? 8 : Math.max(12, insets.bottom + 8);
 
   return (
     <KeyboardAvoidingView
-      style={styles.frame}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={0}
+      style={[
+        styles.commentsRoot,
+        {
+          paddingTop: insets.top + 4,
+          backgroundColor: c.background,
+        },
+      ]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: c.background,
-            height: Math.max(320, Math.round(height * 0.74) - keyboard),
-            paddingBottom: Math.max(12, insets.bottom + 8),
-          },
-        ]}
-      >
-        <SheetReduce
-          onPress={onClose}
-          color={dark ? "rgba(255,255,255,0.28)" : "rgba(15,15,22,0.22)"}
-        />
-        <Text style={[styles.title, { color: c.text }]}>Commentaires</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <FlatList
-          ref={listRef}
-          data={items}
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          style={{ flex: 1 }}
-          contentContainerStyle={{ gap: 10, paddingBottom: 8, flexGrow: 1 }}
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: false })
-          }
-          renderItem={({ item }) => {
-            const mark = reaction[item.id];
-            return (
-              <View
-                style={[
-                  styles.commentCard,
-                  {
-                    backgroundColor: c.card,
-                    boxShadow: dark
-                      ? "0 1px 2px rgba(0,0,0,0.45)"
-                      : "0 1px 3px rgba(15,15,22,0.08)",
-                  },
-                ]}
-              >
-                <Face uri={item.user.image} name={item.user.name} size={36} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text
-                    style={[styles.commentName, { color: c.text }]}
-                    numberOfLines={1}
-                  >
-                    {item.user.name}
+      <View style={styles.commentsHeader}>
+        <IconBackButton color={c.text} onPress={onClose} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.commentsTitle, { color: c.text }]}>
+            Commentaires
+          </Text>
+          <Text
+            style={[styles.commentsSub, { color: c.textMuted }]}
+            numberOfLines={1}
+          >
+            {product.title}
+          </Text>
+        </View>
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <FlatList
+        ref={listRef}
+        data={items}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.commentsList}
+        onContentSizeChange={() =>
+          listRef.current?.scrollToEnd({ animated: false })
+        }
+        renderItem={({ item }) => {
+          const mark = reaction[item.id];
+          return (
+            <View
+              style={[
+                styles.commentCard,
+                {
+                  backgroundColor: c.card,
+                  boxShadow: dark
+                    ? "0 1px 2px rgba(0,0,0,0.45)"
+                    : "0 1px 3px rgba(15,15,22,0.08)",
+                },
+              ]}
+            >
+              <Face uri={item.user.image} name={item.user.name} size={36} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  style={[styles.commentName, { color: c.text }]}
+                  numberOfLines={1}
+                >
+                  {item.user.name}
+                </Text>
+                <Text
+                  selectable
+                  style={[styles.commentBody, { color: c.text }]}
+                >
+                  {item.body}
+                </Text>
+                <View style={styles.commentMeta}>
+                  <Text style={[styles.commentTime, { color: c.textMuted }]}>
+                    {commentAge(item.createdAt)}
                   </Text>
-                  <Text
-                    selectable
-                    style={[styles.commentBody, { color: c.text }]}
+                  <Pressable
+                    onPress={() => reply(item.user.name)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Répondre à ${item.user.name}`}
+                    hitSlop={8}
                   >
-              {item.body}
-                  </Text>
-                  <View style={styles.commentMeta}>
-                    <Text style={[styles.commentTime, { color: c.textMuted }]}>
-                      {commentAge(item.createdAt)}
+                    <Text style={[styles.commentReply, { color: c.textMuted }]}>
+                      Répondre
                     </Text>
-                    <Pressable
-                      onPress={() => reply(item.user.name)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Répondre à ${item.user.name}`}
-                      hitSlop={8}
-                    >
-                      <Text
-                        style={[styles.commentReply, { color: c.textMuted }]}
-                      >
-                        Répondre
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View style={styles.commentActs}>
-                  <Pressable
-                    onPress={() => toggleReaction(item.id, "up")}
-                    accessibilityRole="button"
-                    accessibilityLabel="J'aime"
-                    accessibilityState={{ selected: mark === "up" }}
-                    hitSlop={6}
-                    style={styles.commentIcon}
-                  >
-                    <Ionicons
-                      name={mark === "up" ? "heart" : "heart-outline"}
-                      size={18}
-                      color={mark === "up" ? c.live : c.textMuted}
-                    />
                   </Pressable>
+                </View>
+              </View>
+              <View style={styles.commentActs}>
+                <Pressable
+                  onPress={() => toggleReaction(item.id, "up")}
+                  accessibilityRole="button"
+                  accessibilityLabel="J'aime"
+                  accessibilityState={{ selected: mark === "up" }}
+                  hitSlop={6}
+                  style={styles.commentIcon}
+                >
+                  <Ionicons
+                    name={mark === "up" ? "heart" : "heart-outline"}
+                    size={18}
+                    color={mark === "up" ? c.live : c.textMuted}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => toggleReaction(item.id, "down")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Je n'aime pas"
+                  accessibilityState={{ selected: mark === "down" }}
+                  hitSlop={6}
+                  style={styles.commentIcon}
+                >
+                  <Ionicons
+                    name={
+                      mark === "down" ? "thumbs-down" : "thumbs-down-outline"
+                    }
+                    size={18}
+                    color={c.textMuted}
+                  />
+                </Pressable>
+                {canDelete(item) ? (
                   <Pressable
-                    onPress={() => toggleReaction(item.id, "down")}
-                    accessibilityRole="button"
-                    accessibilityLabel="Je n'aime pas"
-                    accessibilityState={{ selected: mark === "down" }}
+                    onPress={() => setCommentToDelete(item)}
                     hitSlop={6}
                     style={styles.commentIcon}
+                    accessibilityLabel="Retirer le commentaire"
                   >
                     <Ionicons
-                      name={
-                        mark === "down" ? "thumbs-down" : "thumbs-down-outline"
-                      }
-                      size={18}
+                      name="trash-outline"
+                      size={16}
                       color={c.textMuted}
                     />
                   </Pressable>
-                  {canDelete(item) ? (
-                    <Pressable
-                      onPress={() => setCommentToDelete(item)}
-                      hitSlop={6}
-                      style={styles.commentIcon}
-                      accessibilityLabel="Retirer le commentaire"
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={16}
-                        color={c.textMuted}
-                      />
-                    </Pressable>
-                  ) : null}
-                </View>
+                ) : null}
               </View>
-            );
-          }}
-          ListEmptyComponent={
-            <Text style={[styles.empty, { color: c.textMuted }]}>
-              Aucun commentaire
-            </Text>
-          }
-        />
-        {replyName ? (
-          <Text style={[styles.replyHint, { color: c.textMuted }]}>
-            Réponse à {replyName}
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          <Text style={[styles.empty, { color: c.textMuted }]}>
+            Aucun commentaire
           </Text>
+        }
+      />
+
+      <View
+        style={[
+          styles.composerDock,
+          {
+            paddingBottom: dockPad,
+            borderTopColor: dark ? "rgba(255,255,255,0.08)" : HAIRLINE,
+            backgroundColor: c.background,
+          },
+        ]}
+      >
+        {replyName ? (
+          <View style={styles.replyBar}>
+            <Text
+              style={[styles.replyHint, { color: c.textMuted, flex: 1 }]}
+              numberOfLines={1}
+            >
+              Réponse à {replyName}
+            </Text>
+            <Pressable
+              onPress={() => {
+                setReplyName(null);
+                setBody((current) => current.replace(/^@\S+\s+/, ""));
+              }}
+              hitSlop={8}
+              accessibilityLabel="Annuler la réponse"
+            >
+              <Ionicons name="close" size={16} color={c.textMuted} />
+            </Pressable>
+          </View>
         ) : null}
-        <View
-          style={[
-            styles.composerRow,
-            keyboard > 0 ? { marginBottom: 4 } : null,
-          ]}
-        >
+        <View style={styles.composerRow}>
           <Face uri={myImage} name={myName} size={30} />
           <TextInput
             ref={inputRef}
@@ -483,6 +507,7 @@ function CommentsBody({
           </Pressable>
         </View>
       </View>
+
       <ConfirmDialog
         open={Boolean(commentToDelete)}
         title="Retirer ce commentaire ?"
@@ -502,17 +527,19 @@ export { BuySheet } from "@/components/feed/BuySheet";
 const styles = StyleSheet.create({
   frame: { flex: 1, justifyContent: "flex-end" },
   backdrop: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 18,
-    gap: 10,
+  commentsRoot: { flex: 1, paddingHorizontal: 12 },
+  commentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
   },
-  title: { fontSize: 20, fontWeight: "700", color: "#fff" },
+  commentsTitle: { fontSize: 17, fontWeight: "700" },
+  commentsSub: { fontWeight: "500", fontSize: 12, marginTop: 1 },
+  commentsList: { gap: 10, paddingBottom: 8, flexGrow: 1 },
   commentCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -544,6 +571,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   replyHint: { fontSize: 12, fontWeight: "600" },
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  composerDock: {
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   composerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   composerInput: {
     flex: 1,
@@ -565,7 +602,7 @@ const styles = StyleSheet.create({
   },
   empty: { color: colors.muted, paddingVertical: 12 },
   sendText: { color: "#04281c", fontWeight: "800" },
-  error: { color: "#ff8a8a" },
+  error: { color: "#ff8a8a", paddingHorizontal: 4 },
   ok: { color: colors.emerald, fontWeight: "700" },
   cover: { width: 72, height: 72, borderRadius: 12 },
   price: { fontSize: 18, fontWeight: "800", color: colors.emerald },
@@ -764,17 +801,23 @@ const shopProfileStyles = StyleSheet.create({
   moreProductsText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   follow: {
     width: "100%",
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: 999,
     backgroundColor: colors.buyEnd,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    overflow: "visible",
   },
   followOff: { backgroundColor: "#DC2626" },
   followText: {
     color: "#fff",
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: 15,
+    letterSpacing: 0.2,
+    includeFontPadding: false,
+    textAlign: "center",
     flexShrink: 0,
   },
   error: { color: "#ff9c9c", fontSize: 12, textAlign: "center" },
@@ -1256,9 +1299,13 @@ function ShopProfileBody({
             accessibilityRole="button"
             accessibilityLabel={followed ? "Ne plus suivre" : "Suivre"}
           >
-            <Text style={shopProfileStyles.followText}>
-              {followed ? "Ne plus suivre" : "Suivre"}
-              {"\u00A0"}
+            <Text
+              style={shopProfileStyles.followText}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {followed ? "Ne\u00A0plus\u00A0suivre" : "Suivre"}
             </Text>
           </Pressable>
         </ScrollView>

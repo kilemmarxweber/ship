@@ -242,17 +242,8 @@ function EmptyCaptureStrip({
 }
 
 async function optimizeStill(uri: string): Promise<string> {
-  try {
-    const ImageManipulator = await import("expo-image-manipulator");
-    const result = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 1600 } }],
-      { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
-    );
-    return result.uri || uri;
-  } catch {
-    return uri;
-  }
+  const { normalizeProductWallStill } = await import("@/src/product-wall-image");
+  return normalizeProductWallStill(uri);
 }
 
 async function uploadAsset(asset: {

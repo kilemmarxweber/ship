@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ProductWallImage } from "@/components/media/ProductWallImage";
 import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api, isVideoUrl, mediaUrl } from "@/src/api";
 import { parseCart } from "@/src/cart";
@@ -160,10 +161,10 @@ export default function PublishedProductScreen() {
           >
             <View style={ui.hero}>
               {cover ? (
-                <Image
-                  source={{ uri: mediaUrl(cover) ?? cover }}
+                <ProductWallImage
+                  uri={mediaUrl(cover) ?? cover}
                   style={ui.cover}
-                  contentFit="cover"
+                  recyclingKey={`product-hero-${cover}`}
                 />
               ) : (
                 <View style={[ui.cover, { backgroundColor: c.sheet }]} />
@@ -187,10 +188,11 @@ export default function PublishedProductScreen() {
                   const on = (activeUri ?? gallery[0]) === uri;
                   return (
                     <Pressable key={uri} onPress={() => setActiveUri(uri)}>
-                      <Image
-                        source={{ uri }}
+                      <ProductWallImage
+                        uri={uri}
                         style={[ui.galleryThumb, on && ui.galleryThumbOn]}
-                        contentFit="cover"
+                        blurBackdrop={false}
+                        recyclingKey={`product-thumb-${uri}`}
                       />
                     </Pressable>
                   );

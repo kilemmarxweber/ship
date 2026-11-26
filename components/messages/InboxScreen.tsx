@@ -3,7 +3,7 @@ import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
@@ -19,6 +19,7 @@ import { compactCount } from "@/src/format";
 import {
     conversationAvatar,
     conversationTitle,
+    markConversationSeenLocal,
     removeConversationLocal,
     useInbox,
     type InboxConversation,
@@ -28,6 +29,8 @@ import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 
+type InboxFilter = "all" | "unread" | "read";
+
 function timeLabel(iso?: string) {
   if (!iso) return "";
   const date = new Date(iso);
@@ -36,6 +39,10 @@ function timeLabel(iso?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function isUnread(row: InboxConversation) {
+  return (row.unreadCount ?? 0) > 0 || Boolean(row.urgentPending);
 }
 
 function Avatar({ uri, name }: { uri: string | null; name: string }) {
@@ -63,13 +70,27 @@ export function InboxScreen() {
   const me = useMe();
   const inbox = useInbox();
   const myId = me.data?.id;
-  const rows = inbox.data?.conversations ?? [];
+  const rows = useMemo(
+    () => inbox.data?.conversations ?? [],
+    [inbox.data?.conversations],
+  );
   const roles = me.data?.roles ?? [];
   const isPlatformAdmin = roles.includes("ADMIN") || roles.includes("OWNER");
   const [target, setTarget] = useState<InboxConversation | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [filter, setFilter] = useState<InboxFilter>("all");
 
-  const unread = inbox.data?.unreadMessages ?? 0;
+  const unreadMessages = inbox.data?.unreadMessages ?? 0;
+  const unreadThreads = useMemo(
+    () => rows.filter((row) => isUnread(row)).length,
+    [rows],
+  );
+  const readThreads = Math.max(0, rows.length - unreadThreads);
+  const filteredRows = useMemo(() => {
+    if (filter === "unread") return rows.filter((row) => isUnread(row));
+    if (filter === "read") return rows.filter((row) => !isUnread(row));
+    return rows;
+  }, [filter, rows]);
 
   async function confirmDelete() {
     if (!target || !token) return;
@@ -99,10 +120,10 @@ export function InboxScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.title}>Messages</Text>
-          {unread > 0 ? (
+          {unreadMessages > 0 ? (
             <View style={styles.countPill}>
               <Text style={styles.countText}>
-                {unread > 9 ? "9+" : compactCount(unread)}
+                {unreadMessages > 9 ? "9+" : compactCount(unreadMessages)}
               </Text>
             </View>
           ) : null}
@@ -117,8 +138,41 @@ export function InboxScreen() {
         </Pressable>
       </View>
       <Text style={styles.lead}>
-        Conversations protégées — les urgences restent non lues jusqu’à réponse.
+        {unreadMessages > 0
+          ? `${compactCount(unreadMessages)} non lu${unreadMessages > 1 ? "s" : ""} · ${compactCount(readThreads)} lu${readThreads > 1 ? "s" : ""}`
+          : rows.length > 0
+            ? `${compactCount(readThreads)} conversation${readThreads > 1 ? "s" : ""} lue${readThreads > 1 ? "s" : ""}`
+            : "Conversations protégées — les urgences restent non lues jusqu’à réponse."}
       </Text>
+      {token && rows.length > 0 ? (
+        <View style={styles.filterRow}>
+          {(
+            [
+              { id: "all", label: "Tous", count: rows.length },
+              { id: "unread", label: "Non lus", count: unreadThreads },
+              { id: "read", label: "Lus", count: readThreads },
+            ] as const
+          ).map((tab) => {
+            const on = filter === tab.id;
+            return (
+              <Pressable
+                key={tab.id}
+                onPress={() => setFilter(tab.id)}
+                style={[styles.filterTab, on && styles.filterTabOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+              >
+                <Text style={[styles.filterText, on && styles.filterTextOn]}>
+                  {tab.label}
+                </Text>
+                <Text style={[styles.filterCount, on && styles.filterCountOn]}>
+                  {compactCount(tab.count)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       {!token ? (
         <View style={styles.guestCenter}>
           <Ionicons name="chatbubbles-outline" size={40} color={colors.muted} />
@@ -138,9 +192,24 @@ export function InboxScreen() {
           <Ionicons name="chatbubbles-outline" size={36} color={colors.muted} />
           <Text style={styles.empty}>Aucune conversation pour l’instant.</Text>
         </View>
+      ) : filteredRows.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons
+            name={
+              filter === "unread" ? "mail-open-outline" : "chatbubbles-outline"
+            }
+            size={36}
+            color={colors.muted}
+          />
+          <Text style={styles.empty}>
+            {filter === "unread"
+              ? "Aucun message non lu."
+              : "Aucune conversation lue."}
+          </Text>
+        </View>
       ) : (
         <FlashList
-          data={rows}
+          data={filteredRows}
           style={{ flex: 1 }}
           contentContainerStyle={styles.list}
           keyExtractor={(item) => item.id}
@@ -154,6 +223,10 @@ export function InboxScreen() {
                 isPlatformAdmin
               }
               onDelete={setTarget}
+              onOpen={(row) => {
+                markConversationSeenLocal(queryClient, token, row.id);
+                router.push(`/messages/${row.id}` as Href);
+              }}
             />
           )}
         />
@@ -175,16 +248,20 @@ function ThreadRow({
   myId,
   canDelete,
   onDelete,
+  onOpen,
 }: {
   item: InboxConversation;
   myId?: string | null;
   canDelete: boolean;
   onDelete: (item: InboxConversation) => void;
+  onOpen: (item: InboxConversation) => void;
 }) {
   const title = conversationTitle(item, myId);
   const last = item.messages[0];
-  const unread = (item.unreadCount ?? 0) > 0;
+  const unreadCount = item.unreadCount ?? 0;
+  const unread = unreadCount > 0;
   const urgent = Boolean(item.urgentPending);
+  const badgeLabel = unreadCount > 99 ? "99+" : compactCount(unreadCount);
   return (
     <View
       style={[
@@ -193,15 +270,16 @@ function ThreadRow({
         unread && !urgent && styles.rowUnread,
       ]}
     >
-      <Pressable
-        onPress={() => router.push(`/messages/${item.id}` as Href)}
-        style={styles.rowMain}
-      >
-        <View>
+      <Pressable onPress={() => onOpen(item)} style={styles.rowMain}>
+        <View style={styles.avatarWrap}>
           <Avatar uri={conversationAvatar(item, myId)} name={title} />
           {urgent ? (
             <View style={styles.urgentDot}>
               <Ionicons name="warning" size={10} color="#111" />
+            </View>
+          ) : unread ? (
+            <View style={styles.avatarBadge}>
+              <Text style={styles.avatarBadgeText}>{badgeLabel}</Text>
             </View>
           ) : null}
         </View>
@@ -216,12 +294,8 @@ function ThreadRow({
             <View style={styles.meta}>
               <Text style={styles.time}>{timeLabel(last?.createdAt)}</Text>
               {unread ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {(item.unreadCount ?? 0) > 9
-                      ? "9+"
-                      : compactCount(item.unreadCount ?? 0)}
-                  </Text>
+                <View style={styles.rowBadge}>
+                  <Text style={styles.rowBadgeText}>{badgeLabel}</Text>
                 </View>
               ) : null}
             </View>
@@ -300,7 +374,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  lead: { color: colors.muted, fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  lead: { color: colors.muted, fontSize: 13, lineHeight: 20, marginBottom: 12 },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  filterTab: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(127,127,140,0.22)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  filterTabOn: {
+    backgroundColor: "rgba(16,185,129,0.16)",
+    borderColor: "rgba(16,185,129,0.45)",
+  },
+  filterText: {
+    color: "rgba(255,255,255,0.72)",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  filterTextOn: { color: "#fff" },
+  filterCount: {
+    color: colors.muted,
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  filterCountOn: { color: colors.emerald },
   center: { gap: 12, marginTop: 24 },
   guestCenter: {
     flex: 1,
@@ -349,20 +457,66 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245,158,11,0.35)",
   },
   rowUnread: { borderWidth: 1, borderColor: "rgba(255,77,141,0.35)" },
-  avatar: { width: 56, height: 68, borderRadius: 10, backgroundColor: "#222" },
+  avatarWrap: { position: "relative" },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#222",
+  },
   avatarFallback: {
-    width: 56,
-    height: 68,
-    borderRadius: 10,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.buyStart,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarLetter: { color: "#fff", fontWeight: "800", fontSize: 18 },
+  avatarBadge: {
+    position: "absolute",
+    right: -6,
+    top: -6,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    backgroundColor: "#FF2D55",
+    borderWidth: 2.5,
+    borderColor: "#0B0B0F",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 4,
+    shadowColor: "#FF2D55",
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  avatarBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 13,
+  },
+  rowBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: "#FF2D55",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+  },
   urgentDot: {
     position: "absolute",
-    right: -4,
-    top: -4,
+    right: -2,
+    top: -2,
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -375,16 +529,6 @@ const styles = StyleSheet.create({
   nameUnread: { fontWeight: "800" },
   meta: { flexDirection: "row", alignItems: "center", gap: 6 },
   time: { color: colors.muted, fontSize: 11 },
-  badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
-    backgroundColor: colors.buyStart,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
   ctx: { color: colors.emerald, fontWeight: "700", fontSize: 12, marginTop: 2 },
   preview: { color: colors.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
   previewUrgent: { color: "#fcd34d", fontWeight: "700" },

@@ -21,11 +21,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Face } from "@/components/ui/Face";
 import { IconBackButton } from "@/components/ui/IconBackButton";
 import { api } from "@/src/api";
-import {
-    inboxQueryKey,
-    markConversationSeenLocal,
-    removeConversationLocal,
-} from "@/src/inbox";
+import { markConversationRead, removeConversationLocal } from "@/src/inbox";
 import { useMe } from "@/src/me";
 import { snapshotGet } from "@/src/offline/db";
 import { threadSnapKey } from "@/src/offline/keys";
@@ -190,8 +186,8 @@ export function ThreadScreen({ id }: { id: string }) {
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
-      markConversationSeenLocal(queryClient, token, id);
-      void queryClient.invalidateQueries({ queryKey: inboxQueryKey(token) });
+      // Décompte immédiat avatar / « Non lus », puis sync serveur.
+      void markConversationRead(queryClient, token, id);
       const focusTimer = setTimeout(() => inputRef.current?.focus(), 280);
       const scrollTimer = setTimeout(
         () => scrollRef.current?.scrollToEnd({ animated: false }),
@@ -284,8 +280,7 @@ export function ThreadScreen({ id }: { id: string }) {
             : current,
       );
       setMessageToDelete(null);
-      markConversationSeenLocal(queryClient, token, id);
-      await queryClient.invalidateQueries({ queryKey: inboxQueryKey(token) });
+      await markConversationRead(queryClient, token, id);
       await thread.refetch();
       setLocalMessages(null);
       showToast("Message supprimé", "success");
@@ -355,8 +350,7 @@ export function ThreadScreen({ id }: { id: string }) {
         ...(localMessages ?? remoteMessages).filter((row) => row.id !== tempId),
         result.data.message,
       ]);
-      markConversationSeenLocal(queryClient, token, id);
-      await queryClient.invalidateQueries({ queryKey: inboxQueryKey(token) });
+      await markConversationRead(queryClient, token, id);
       await thread.refetch();
       setLocalMessages(null);
     } catch (cause) {

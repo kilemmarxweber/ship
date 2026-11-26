@@ -1,43 +1,44 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
+    useInfiniteQuery,
+    useQuery,
+    useQueryClient,
 } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useIsFocused, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  Share,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
+    ActivityIndicator,
+    Pressable,
+    Share,
+    StyleSheet,
+    Text,
+    useWindowDimensions,
+    View,
+    type NativeScrollEvent,
+    type NativeSyntheticEvent,
 } from "react-native";
 import Animated, {
-  Easing,
-  FadeOut,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  ZoomIn,
+    Easing,
+    FadeOut,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+    ZoomIn,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ReelGallery } from "@/components/feed/ReelGallery";
 import { ReelCover, ReelSoundtrack } from "@/components/feed/ReelVideo";
+import { ProductWallImage } from "@/components/media/ProductWallImage";
 import {
-  BuySheet,
-  CommentsSheet,
-  ShopProfileSheet,
+    BuySheet,
+    CommentsSheet,
+    ShopProfileSheet,
 } from "@/components/feed/Sheets";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ChallengeCard } from "@/components/growth/ChallengeCard";
@@ -45,9 +46,9 @@ import { NotificationsSheet } from "@/components/inbox/NotificationsSheet";
 import { WantedHomePane } from "@/components/wanted/WantedHomePane";
 import { api, ApiError, apiOrigin, isVideoUrl, mediaUrl } from "@/src/api";
 import {
-  emptyWeaveMemory,
-  weaveChallenges,
-  type MixedRow,
+    emptyWeaveMemory,
+    weaveChallenges,
+    type MixedRow,
 } from "@/src/challenge-place";
 import { trackCisEvent } from "@/src/cis/events";
 import { colorHex } from "@/src/color";
@@ -61,10 +62,10 @@ import { feedQueryKey } from "@/src/offline/keys";
 import { useOnline } from "@/src/offline/network";
 import { persistFeed } from "@/src/offline/persist";
 import {
-  flattenUniqueProducts,
-  isLocalFeedCursor,
-  normalizeFeedPage,
-  safeNextCursor,
+    flattenUniqueProducts,
+    isLocalFeedCursor,
+    normalizeFeedPage,
+    safeNextCursor,
 } from "@/src/product-normalize";
 import { useSession } from "@/src/session";
 import { stockAlertColor, stockFraction } from "@/src/stock";
@@ -73,9 +74,9 @@ import { showToast } from "@/src/toast";
 import type { FeedPage, GrowthSurface, LiveTeaser, Product } from "@/src/types";
 import { useColors } from "@/src/use-colors";
 import {
-  fetchWantedFeed,
-  useWantedOfferSync,
-  WANTED_FEED_KEY,
+    fetchWantedFeed,
+    useWantedOfferSync,
+    WANTED_FEED_KEY,
 } from "@/src/wanted";
 
 type FeedTab = "foryou" | "following" | "search";
@@ -1149,10 +1150,11 @@ export function FeedScreen() {
                   </View>
                   <View style={[styles.card, { bottom: bottom + 8 }]}>
                     {coverOf(item.images) ? (
-                      <Image
-                        source={{ uri: coverOf(item.images) ?? undefined }}
+                      <ProductWallImage
+                        uri={coverOf(item.images)!}
                         style={styles.thumb}
-                        contentFit="cover"
+                        blurBackdrop={false}
+                        recyclingKey={`feed-thumb-${item.id}`}
                       />
                     ) : (
                       <View style={styles.thumb} />
@@ -1327,13 +1329,10 @@ export function FeedScreen() {
                         styles.bellBadge,
                         inboxUrgent && styles.bellBadgeUrgent,
                       ]}
+                      accessibilityLabel={`${compactCount(inboxBadge)} notification${inboxBadge > 1 ? "s" : ""} en attente`}
                     >
                       <Text style={styles.bellBadgeText}>
-                        {inboxUrgent
-                          ? "!"
-                          : inboxBadge > 9
-                            ? "9+"
-                            : compactCount(inboxBadge)}
+                        {inboxBadge > 9 ? "9+" : compactCount(inboxBadge)}
                       </Text>
                     </View>
                   ) : null}

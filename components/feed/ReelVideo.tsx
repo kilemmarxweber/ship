@@ -4,6 +4,8 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { PRODUCT_WALL_RATIO, wallNeedsContain } from "@/src/product-wall-image";
+
 function bindPlayer(
   player: ReturnType<typeof useVideoPlayer>,
   playing: boolean,
@@ -98,34 +100,51 @@ function cacheRatio(uri: string, ratio: number) {
   ratioCache.set(uri, ratio);
 }
 
+/**
+ * Affiche le produit entier sur le mur.
+ * Les photos plus larges que 9:16 (studio, 4:5, paysage) passent en `contain`
+ * avec fond flou — plus de coupe gauche/droite.
+ */
 export function ReelCover({ uri }: { uri: string }) {
-  const ratio = ratioCache.get(uri) ?? null;
-  const wide = ratio !== null && ratio > 1;
+  const [measured, setMeasured] = useState<{
+    uri: string;
+    ratio: number;
+  } | null>(null);
+  const ratio =
+    measured?.uri === uri ? measured.ratio : (ratioCache.get(uri) ?? null);
+
+  // Tant que le ratio est inconnu → contain (évite une coupe G/D au 1er paint).
+  const letterbox =
+    ratio === null || wallNeedsContain(ratio, 1, PRODUCT_WALL_RATIO);
 
   return (
-    <View style={styles.videoLayer} pointerEvents="none">
-      {wide ? (
+    <View style={[styles.videoLayer, styles.wallCanvas]} pointerEvents="none">
+      {letterbox ? (
         <Image
           source={{ uri }}
           style={styles.mediaPhoto}
           contentFit="cover"
           contentPosition="center"
-          blurRadius={36}
+          blurRadius={40}
           cachePolicy="memory-disk"
-          recyclingKey={`${uri}-wide-bg`}
+          recyclingKey={`${uri}-wall-bg`}
         />
       ) : null}
       <Image
         source={{ uri }}
         style={styles.mediaPhoto}
-        contentFit={wide ? "contain" : "cover"}
-        contentPosition={wide ? "center" : "top"}
+        contentFit={letterbox ? "contain" : "cover"}
+        contentPosition="center"
         cachePolicy="memory-disk"
         recyclingKey={uri}
         onLoad={(event) => {
           const nextW = event.source.width;
           const nextH = event.source.height;
-          if (nextW > 0 && nextH > 0) cacheRatio(uri, nextW / nextH);
+          if (nextW > 0 && nextH > 0) {
+            const next = nextW / nextH;
+            cacheRatio(uri, next);
+            setMeasured({ uri, ratio: next });
+          }
         }}
       />
     </View>
@@ -184,6 +203,9 @@ const styles = StyleSheet.create({
   videoLayer: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "transparent",
+  },
+  wallCanvas: {
+    backgroundColor: "#0E0E14",
   },
   hiddenUntilFrame: {
     opacity: 0,

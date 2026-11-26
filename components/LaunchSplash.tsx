@@ -30,8 +30,9 @@ export function LaunchSplash({ onPaint }: { onPaint: () => void }) {
         style={[styles.brand, { bottom: Math.max(28, insets.bottom + 24) }]}
         accessibilityLabel="from Klambocore"
       >
-        <Text style={styles.from}>from</Text>
-        <Text style={styles.name}>Klambocore</Text>
+        <Text style={styles.credit} numberOfLines={1} adjustsFontSizeToFit>
+          from Klambocore
+        </Text>
       </View>
     </View>
   );
@@ -47,23 +48,16 @@ const styles = StyleSheet.create({
   },
   brand: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: 24,
+    right: 24,
     alignItems: "center",
-    gap: 4,
   },
-  from: {
-    color: "rgba(255,255,255,0.45)",
-    fontSize: 13,
-    fontWeight: "500",
-    letterSpacing: 0.2,
-    includeFontPadding: false,
-  },
-  name: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+  credit: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.4,
+    textAlign: "center",
     includeFontPadding: false,
   },
 });

@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ProductWallImage } from "@/components/media/ProductWallImage";
 import {
     ShopPicker,
     type ShopPickerShop,
@@ -450,10 +451,11 @@ export function SellerProductsScreen() {
               >
                     <View style={styles.rowTop}>
                 {cover ? (
-                  <Image
-                    source={{ uri: cover }}
+                  <ProductWallImage
+                    uri={cover}
                     style={styles.thumb}
-                    contentFit="cover"
+                    blurBackdrop={false}
+                    recyclingKey={`seller-${cover}`}
                   />
                 ) : (
                         <View

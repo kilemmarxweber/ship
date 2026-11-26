@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
 import { LaunchSplash } from "@/components/LaunchSplash";
+import { ProductWallCaptureHost } from "@/components/media/ProductWallCaptureHost";
 import { ToastHost } from "@/components/Toast";
 import { api } from "@/src/api";
 import { useCart } from "@/src/cart-store";
@@ -192,6 +193,7 @@ function RootLayout() {
         </Stack>
         <AuthSheet />
         <ToastHost />
+        <ProductWallCaptureHost />
         {showLaunch ? <LaunchSplash onPaint={onLaunchPaint} /> : null}
       </QueryClientProvider>
     </GestureHandlerRootView>

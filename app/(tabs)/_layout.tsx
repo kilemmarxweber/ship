@@ -157,7 +157,7 @@ export default function TabLayout() {
   const token = useSession((state) => state.token);
   const openAuth = useSession((state) => state.openAuth);
   const inbox = useInbox();
-  const messageBadge = inbox.data?.badge ?? 0;
+  const messageBadge = inbox.data?.unreadMessages ?? 0;
   const barHeight = metrics.barBody + insets.bottom;
 
   return (

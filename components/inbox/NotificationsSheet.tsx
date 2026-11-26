@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, type Href } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
     Modal,
     Pressable,
@@ -24,6 +24,7 @@ import {
     conversationTitle,
     inboxQueryKey,
     markCommentsReadLocal,
+    markConversationSeenLocal,
     removeCommentLocal,
     useInbox,
     type InboxComment,
@@ -34,6 +35,12 @@ import { useSession } from "@/src/session";
 import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { Product } from "@/src/types";
+
+type MessageFilter = "all" | "unread";
+
+function conversationIsUnread(row: InboxConversation) {
+  return (row.unreadCount ?? 0) > 0 || Boolean(row.urgentPending);
+}
 
 function productFromInboxComment(row: InboxComment): Product {
   return {
@@ -69,14 +76,30 @@ export function NotificationsSheet({
   const me = useMe();
   const inbox = useInbox();
   const [tab, setTab] = useState<"messages" | "comments">("messages");
+  const [messageFilter, setMessageFilter] = useState<MessageFilter>("all");
   const [commentTarget, setCommentTarget] = useState<InboxComment | null>(null);
   const [deletingComment, setDeletingComment] = useState(false);
   const [commentProduct, setCommentProduct] = useState<Product | null>(null);
   const myId = me.data?.id;
-  const conversations = inbox.data?.conversations ?? [];
+  const conversations = useMemo(
+    () => inbox.data?.conversations ?? [],
+    [inbox.data?.conversations],
+  );
   const comments = inbox.data?.comments ?? [];
   const unreadMessages = inbox.data?.unreadMessages ?? 0;
   const unreadComments = inbox.data?.unreadComments ?? 0;
+  const unreadThreads = useMemo(
+    () => conversations.filter((row) => conversationIsUnread(row)).length,
+    [conversations],
+  );
+  const readThreads = Math.max(0, conversations.length - unreadThreads);
+  const visibleConversations = useMemo(() => {
+    const list =
+      messageFilter === "unread"
+        ? conversations.filter((row) => conversationIsUnread(row))
+        : conversations;
+    return list.slice(0, 12);
+  }, [conversations, messageFilter]);
   const roles = me.data?.roles ?? [];
   const isPlatformAdmin = roles.includes("ADMIN") || roles.includes("OWNER");
 
@@ -121,6 +144,8 @@ export function NotificationsSheet({
   }
 
   function openThread(id: string) {
+    // Décompte immédiat sur avatar + carte « Non lus » avant navigation.
+    markConversationSeenLocal(queryClient, token, id);
     onClose();
     // Pose la liste messages sous la conversation (retour ≠ accueil).
     router.navigate("/messages" as Href);
@@ -162,7 +187,9 @@ export function NotificationsSheet({
               ) : null}
             </View>
             <Text style={styles.hint}>
-              Messages et commentaires — le compteur baisse dès qu’ils sont lus.
+              {unreadMessages > 0 || readThreads > 0
+                ? `${compactCount(unreadMessages)} non lu${unreadMessages > 1 ? "s" : ""} · ${compactCount(readThreads)} lu${readThreads > 1 ? "s" : ""} — le compteur baisse dès qu’ils sont lus.`
+                : "Messages et commentaires — le compteur baisse dès qu’ils sont lus."}
             </Text>
             <View style={styles.modeRow}>
               <Pressable
@@ -208,6 +235,42 @@ export function NotificationsSheet({
                 </Text>
               </Pressable>
             </View>
+            {tab === "messages" && conversations.length > 0 ? (
+              <View style={styles.filterRow}>
+                <Pressable
+                  onPress={() => setMessageFilter("all")}
+                  style={[
+                    styles.filterTab,
+                    messageFilter === "all" && styles.filterTabOn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      messageFilter === "all" && styles.filterTextOn,
+                    ]}
+                  >
+                    Tous · {compactCount(conversations.length)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setMessageFilter("unread")}
+                  style={[
+                    styles.filterTab,
+                    messageFilter === "unread" && styles.filterTabOn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      messageFilter === "unread" && styles.filterTextOn,
+                    ]}
+                  >
+                    Non lus · {compactCount(unreadThreads)}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             <ScrollView
               style={{ maxHeight: 420 }}
               contentContainerStyle={styles.list}
@@ -216,17 +279,17 @@ export function NotificationsSheet({
               {tab === "messages" ? (
                 conversations.length === 0 ? (
                   <Text style={styles.empty}>Aucun message</Text>
+                ) : visibleConversations.length === 0 ? (
+                  <Text style={styles.empty}>Aucun message non lu</Text>
                 ) : (
-                  conversations
-                    .slice(0, 12)
-                    .map((row) => (
-                      <MessageRow
-                        key={row.id}
-                        row={row}
-                        myId={myId}
-                        onPress={() => openThread(row.id)}
-                      />
-                    ))
+                  visibleConversations.map((row) => (
+                    <MessageRow
+                      key={row.id}
+                      row={row}
+                      myId={myId}
+                      onPress={() => openThread(row.id)}
+                    />
+                  ))
                 )
               ) : comments.length === 0 ? (
                 <Text style={styles.empty}>Aucun commentaire</Text>
@@ -295,31 +358,47 @@ function MessageRow({
 }) {
   const title = conversationTitle(row, myId);
   const uri = conversationAvatar(row, myId);
-  const unread = (row.unreadCount ?? 0) > 0;
+  const unreadCount = row.unreadCount ?? 0;
+  const unread = unreadCount > 0;
   const last = row.messages[0];
+  const badgeLabel = unreadCount > 99 ? "99+" : compactCount(unreadCount);
   return (
     <Pressable
       onPress={onPress}
       style={[styles.item, unread && styles.itemUnread]}
     >
-      {uri ? (
-        <Image
-          source={{ uri: mediaUrl(uri) ?? uri }}
-          style={styles.avatar}
-          contentFit="cover"
-        />
-      ) : (
-        <View style={styles.avatarFallback}>
-          <Text style={styles.letter}>{title.slice(0, 1).toUpperCase()}</Text>
-        </View>
-      )}
+      <View style={styles.avatarWrap}>
+        {uri ? (
+          <Image
+            source={{ uri: mediaUrl(uri) ?? uri }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Text style={styles.letter}>{title.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
+        {unread ? (
+          <View style={styles.avatarBadge}>
+            <Text style={styles.avatarBadgeText}>{badgeLabel}</Text>
+          </View>
+        ) : null}
+      </View>
       <View style={{ flex: 1 }}>
-        <Text
-          style={[styles.name, unread && styles.nameUnread]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
+        <View style={styles.rowTop}>
+          <Text
+            style={[styles.name, unread && styles.nameUnread]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          {unread ? (
+            <View style={styles.rowBadge}>
+              <Text style={styles.rowBadgeText}>{badgeLabel}</Text>
+            </View>
+          ) : null}
+        </View>
         {row.product ? (
           <Text style={styles.ctx} numberOfLines={1}>
             {row.product.title}
@@ -332,13 +411,6 @@ function MessageRow({
           {last?.body ?? "Nouvelle conversation"}
         </Text>
       </View>
-      {unread ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {(row.unreadCount ?? 0) > 9 ? "9+" : row.unreadCount}
-          </Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
@@ -465,6 +537,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   modeTextOn: { color: "#fff" },
+  filterRow: { flexDirection: "row", gap: 8 },
+  filterTab: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(127,127,140,0.22)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  filterTabOn: {
+    backgroundColor: "rgba(16,185,129,0.16)",
+    borderColor: "rgba(16,185,129,0.45)",
+  },
+  filterText: {
+    color: "rgba(255,255,255,0.72)",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  filterTextOn: { color: "#fff" },
   list: { gap: 10, paddingBottom: 8 },
   empty: {
     color: "rgba(255,255,255,0.72)",
@@ -482,31 +577,72 @@ const styles = StyleSheet.create({
   },
   itemUnread: { borderWidth: 1, borderColor: "rgba(255,77,141,0.35)" },
   deleteBtn: { alignSelf: "center", padding: 6 },
-  avatar: { width: 56, height: 68, borderRadius: 10, backgroundColor: "#222" },
+  avatarWrap: { position: "relative" },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#222",
+  },
   avatarFallback: {
-    width: 56,
-    height: 68,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.buyStart,
     alignItems: "center",
     justifyContent: "center",
   },
+  avatarBadge: {
+    position: "absolute",
+    right: -6,
+    top: -6,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    backgroundColor: "#FF2D55",
+    borderWidth: 2.5,
+    borderColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 4,
+    shadowColor: "#FF2D55",
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  avatarBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 13,
+  },
   letter: { color: "#fff", fontWeight: "800", fontSize: 18 },
-  name: { color: "#fff", fontWeight: "700" },
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  name: { flex: 1, color: "#fff", fontWeight: "700" },
   nameUnread: { fontWeight: "800" },
-  ctx: { color: colors.emerald, fontWeight: "700", fontSize: 12, marginTop: 2 },
-  preview: { color: colors.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
-  previewUnread: { color: "#fff", fontWeight: "600" },
-  badge: {
+  rowBadge: {
     minWidth: 22,
     height: 22,
     borderRadius: 11,
     paddingHorizontal: 6,
-    backgroundColor: colors.buyStart,
+    backgroundColor: "#FF2D55",
     alignItems: "center",
     justifyContent: "center",
   },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  rowBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  ctx: { color: colors.emerald, fontWeight: "700", fontSize: 12, marginTop: 2 },
+  preview: { color: colors.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  previewUnread: { color: "#fff", fontWeight: "600" },
   pay: {
     borderRadius: 999,
     minHeight: 54,

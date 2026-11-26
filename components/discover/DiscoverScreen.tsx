@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DiscoverCard } from "@/components/discover/DiscoverCard";
 import { DiscoverEventCard } from "@/components/discover/DiscoverEventCard";
 import { BuySheet } from "@/components/feed/Sheets";
+import { ProductWallImage } from "@/components/media/ProductWallImage";
 import { SearchField } from "@/components/ui/SearchField";
 import { api, mediaUrl } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
@@ -608,10 +609,10 @@ export function DiscoverScreen() {
               return (
                 <View key={item.id} style={styles.highlight}>
                   {cover ? (
-                    <Image
-                      source={{ uri: cover }}
+                    <ProductWallImage
+                      uri={cover}
                       style={StyleSheet.absoluteFill}
-                      contentFit="cover"
+                      recyclingKey={`highlight-${item.id}`}
                     />
                   ) : null}
                   <LinearGradient

@@ -38,10 +38,11 @@ export function ProductWallImage({
   const ratio =
     measured?.uri === uri ? measured.ratio : (ratioCache.get(uri) ?? null);
 
-  // Ratio inconnu → contain (pas de coupe G/D pendant le chargement).
+  // Cover tant que le ratio est inconnu (pas de clin d’œil au scroll / préchargement).
   const letterbox =
     contentFit == null &&
-    (ratio === null || wallNeedsContain(ratio, 1, PRODUCT_WALL_RATIO));
+    ratio !== null &&
+    wallNeedsContain(ratio, 1, PRODUCT_WALL_RATIO);
   const fit: ImageContentFit = contentFit ?? (letterbox ? "contain" : "cover");
 
   return (

@@ -113,9 +113,9 @@ export function ReelCover({ uri }: { uri: string }) {
   const ratio =
     measured?.uri === uri ? measured.ratio : (ratioCache.get(uri) ?? null);
 
-  // Tant que le ratio est inconnu → contain (évite une coupe G/D au 1er paint).
+  // Cover tant que le ratio est inconnu (évite un clin d’œil contain→cover au scroll).
   const letterbox =
-    ratio === null || wallNeedsContain(ratio, 1, PRODUCT_WALL_RATIO);
+    ratio !== null && wallNeedsContain(ratio, 1, PRODUCT_WALL_RATIO);
 
   return (
     <View style={[styles.videoLayer, styles.wallCanvas]} pointerEvents="none">

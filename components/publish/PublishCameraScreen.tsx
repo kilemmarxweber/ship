@@ -45,9 +45,9 @@ type ModeItem = {
 };
 
 const MODES: ModeItem[] = [
-  { id: "60s", label: "60 s", kind: "video", duration: 60 },
-  { id: "30s", label: "30 s", kind: "video", duration: 30 },
-  { id: "15s", label: "15 s", kind: "video", duration: 15 },
+  { id: "60s", label: "60s", kind: "video", duration: 60 },
+  { id: "30s", label: "30s", kind: "video", duration: 30 },
+  { id: "15s", label: "15s", kind: "video", duration: 15 },
   { id: "photo", label: "PHOTO", kind: "photo" },
   { id: "texte", label: "TEXTE", kind: "texte" },
 ];

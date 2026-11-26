@@ -387,7 +387,7 @@ function BuySheetContent({ product, onClose, onAdded }: BuySheetProps) {
             </View>
             <View style={styles.pagerPill}>
               <Text style={styles.pagerText}>
-                {imageIndex + 1}/{gallery.length}
+                {`${imageIndex + 1}/${gallery.length}`}
               </Text>
             </View>
           </View>
@@ -785,15 +785,19 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: "#fff", height: 3.5 },
   segmentOff: { backgroundColor: "rgba(255,255,255,0.35)" },
   pagerPill: {
-    backgroundColor: "rgba(0,0,0,0.55)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 999,
+    minWidth: 52,
+    alignItems: "center",
   },
   pagerText: {
     color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    includeFontPadding: false,
     fontVariant: ["tabular-nums"],
   },
   panel: {

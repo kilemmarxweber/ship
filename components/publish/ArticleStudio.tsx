@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -41,7 +42,7 @@ import {
 } from "@/components/publish/PublishCameraScreen";
 import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import { VIDEO_STYLE_MODELS, type VideoStyleModel } from "@/src/image-style";
-import { pickMediaLibrary } from "@/src/pick-media";
+import { pickFromCamera, pickMediaLibrary } from "@/src/pick-media";
 import type { ProductFilterSelection } from "@/src/product-filters";
 import {
     encodeSlideMotion,
@@ -76,7 +77,7 @@ const EMPTY_CAPTURE_MODES: {
   { id: "video-30", label: "30s" },
   { id: "video-15", label: "15s" },
   { id: "upload", label: "+" },
-  { id: "photo", label: "photo" },
+  { id: "photo", label: "camera" },
 ];
 
 const EMPTY_MODE_W = 78;
@@ -148,15 +149,10 @@ function EmptyCaptureChip({
           ) : (
             <Ionicons name="add" size={36} color="#FFFFFF" />
           )
+        ) : item.id === "photo" ? (
+          <Ionicons name="camera" size={26} color="#FFFFFF" />
         ) : (
-          <Text
-            style={[
-              styles.modeChipText,
-              item.id === "photo" && styles.modeChipTextPhoto,
-            ]}
-          >
-            {item.label}
-          </Text>
+          <Text style={styles.modeChipText}>{item.label}</Text>
         )}
       </Animated.View>
     </Pressable>
@@ -471,6 +467,34 @@ export function ArticleStudio({
       return;
     }
 
+    // Android : la caméra système se lance vraiment (CameraView embarquée échoue souvent).
+    if (Platform.OS === "android") {
+      const video =
+        mode === "video-15" || mode === "video-30" || mode === "video-60";
+      const maxDuration =
+        mode === "video-15" ? 15 : mode === "video-30" ? 30 : 60;
+      setMediaBusy(true);
+      try {
+        const picked = await pickFromCamera({
+          kind: video ? "videos" : "images",
+          facing: "front",
+          videoMaxDuration: maxDuration,
+        });
+        if (!picked.length) {
+          setMediaBusy(false);
+          return;
+        }
+        await ingest(picked);
+      } catch (cause) {
+        setMediaBusy(false);
+        showToast(
+          cause instanceof Error ? cause.message : "Caméra impossible",
+          "error",
+        );
+      }
+      return;
+    }
+
     const nextMode: PublishCameraModeId =
       mode === "photo"
         ? "photo"
@@ -480,10 +504,7 @@ export function ArticleStudio({
             ? "30s"
             : "60s";
     setCameraMode(nextMode);
-    // Laisse le rendu précédent se fermer avant d’ouvrir la caméra (Android).
-    requestAnimationFrame(() => {
-      setCameraOpen(true);
-    });
+    setCameraOpen(true);
   }
 
   async function addMedia(kind: "mixed" | "videos" = "mixed") {
@@ -565,8 +586,7 @@ export function ArticleStudio({
 
   function captureFilterVideo() {
     setFiltersOpen(false);
-    setCameraMode("60s");
-    setCameraOpen(true);
+    void captureMedia("video-60");
   }
 
   async function handleMontageSave(result: MontageSave) {
@@ -1144,14 +1164,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modeChipPhoto: {
-    backgroundColor: "rgba(255,255,255,0.12)",
+    width: 56,
+    paddingHorizontal: 0,
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.28)",
+    borderColor: "rgba(255,255,255,0.4)",
   },
   modeChipText: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 14,
     fontWeight: "800",
+    includeFontPadding: false,
   },
   modeChipTextPhoto: { color: "#FFFFFF", fontSize: 13 },
   emptyTitle: {

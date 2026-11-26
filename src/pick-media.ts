@@ -28,13 +28,14 @@ function mediaTypesOf(kind: PickKind) {
   return ["images", "videos"] as const;
 }
 
-async function ensureLibraryPermission(ImagePicker: Picker) {
+async function ensureIosLibraryPermission(ImagePicker: Picker) {
+  if (Platform.OS !== "ios") return;
   const current = await ImagePicker.getMediaLibraryPermissionsAsync();
   if (current.granted || current.accessPrivileges === "limited") return;
   const asked = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!asked.granted && asked.accessPrivileges !== "limited") {
     throw new Error(
-      "Autorise l’accès aux photos et vidéos pour parcourir ta galerie.",
+      "Autorise l’accès aux photos et vidéos pour parcourir tes fichiers.",
     );
   }
 }
@@ -72,7 +73,7 @@ export async function pickMediaLibrary(opts: {
   crop?: boolean;
 }) {
   const ImagePicker = await imagePicker();
-  await ensureLibraryPermission(ImagePicker);
+  await ensureIosLibraryPermission(ImagePicker);
 
   const crop = Boolean(opts.crop);
   const remaining = Math.max(1, opts.limit);

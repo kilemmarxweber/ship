@@ -4,30 +4,31 @@ import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
+  ActivityIndicator,
+  FlatList,
     Keyboard,
     KeyboardAvoidingView,
     Linking,
-    Modal,
+  Modal,
     Platform,
-    Pressable,
+  Pressable,
     ScrollView,
     Share,
-    StyleSheet,
-    Text,
-    TextInput,
+  StyleSheet,
+  Text,
+  TextInput,
     useWindowDimensions,
-    View,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ToastHost } from "@/components/Toast";
 import { ShopLiveAvatar } from "@/components/feed/ShopLiveAvatar";
 import { ShopQrButton } from "@/components/shop/ShopQrButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Face } from "@/components/ui/Face";
 import { SheetReduce } from "@/components/ui/SheetReduce";
-import { api, apiOrigin } from "@/src/api";
+import { api, apiOrigin, mediaUrl } from "@/src/api";
 import { compactCount, formatMoney } from "@/src/format";
 import { useMe } from "@/src/me";
 import { coverOf } from "@/src/media";
@@ -37,7 +38,7 @@ import { persistComments } from "@/src/offline/persist";
 import { requestOrQueue } from "@/src/offline/writes";
 import { usePrefs } from "@/src/prefs";
 import { useSession } from "@/src/session";
-import { colors, HAIRLINE } from "@/src/theme";
+import { colors } from "@/src/theme";
 import { showToast } from "@/src/toast";
 import type { CommentItem, Product, ShopCard } from "@/src/types";
 import { useColors } from "@/src/use-colors";
@@ -302,14 +303,11 @@ function CommentsBody({
   }
 
   const ready = Boolean(body.trim());
-  const sheetHeight = Math.max(320, Math.round(height * 0.74));
-  // Comme les messages : peu de marge quand le clavier est ouvert.
-  const dockPad = keyboard > 0 ? 8 : Math.max(12, insets.bottom + 8);
 
   return (
     <KeyboardAvoidingView
       style={styles.frame}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
     >
       <Pressable style={styles.backdrop} onPress={onClose} />
@@ -318,8 +316,8 @@ function CommentsBody({
           styles.sheet,
           {
             backgroundColor: c.background,
-            height: sheetHeight,
-            paddingBottom: 0,
+            height: Math.max(320, Math.round(height * 0.74) - keyboard),
+            paddingBottom: Math.max(12, insets.bottom + 8),
           },
         ]}
       >
@@ -366,7 +364,7 @@ function CommentsBody({
                     selectable
                     style={[styles.commentBody, { color: c.text }]}
                   >
-                    {item.body}
+              {item.body}
                   </Text>
                   <View style={styles.commentMeta}>
                     <Text style={[styles.commentTime, { color: c.textMuted }]}>
@@ -441,69 +439,48 @@ function CommentsBody({
             </Text>
           }
         />
+        {replyName ? (
+          <Text style={[styles.replyHint, { color: c.textMuted }]}>
+            Réponse à {replyName}
+          </Text>
+        ) : null}
         <View
           style={[
-            styles.composerDock,
-            {
-              paddingBottom: dockPad,
-              borderTopColor: dark ? "rgba(255,255,255,0.08)" : HAIRLINE,
-              backgroundColor: c.background,
-            },
+            styles.composerRow,
+            keyboard > 0 ? { marginBottom: 4 } : null,
           ]}
         >
-          {replyName ? (
-            <View style={styles.replyBar}>
-              <Text
-                style={[styles.replyHint, { color: c.textMuted, flex: 1 }]}
-                numberOfLines={1}
-              >
-                Réponse à {replyName}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  setReplyName(null);
-                  setBody((current) => current.replace(/^@\S+\s+/, ""));
-                }}
-                hitSlop={8}
-                accessibilityLabel="Annuler la réponse"
-              >
-                <Ionicons name="close" size={16} color={c.textMuted} />
-              </Pressable>
-            </View>
-          ) : null}
-          <View style={styles.composerRow}>
-            <Face uri={myImage} name={myName} size={30} />
-            <TextInput
-              ref={inputRef}
-              value={body}
-              onChangeText={setBody}
-              placeholder="Ajouter un commentaire…"
-              placeholderTextColor={dark ? "rgba(255,255,255,0.35)" : "#8E8E93"}
-              style={[
-                styles.composerInput,
-                {
-                  backgroundColor: dark ? "#1C1C1E" : "#F2F2F7",
-                  color: dark ? "#fff" : c.text,
-                  ...(Platform.OS === "web"
-                    ? ({ outlineStyle: "none", outlineWidth: 0 } as object)
-                    : null),
-                },
-              ]}
-              multiline
-              textAlignVertical="center"
-              autoFocus
-              blurOnSubmit={false}
-            />
-            <Pressable
-              onPress={() => void send()}
-              disabled={!ready}
-              accessibilityRole="button"
-              accessibilityLabel="Publier le commentaire"
-              style={[styles.composerSend, { opacity: ready ? 1 : 0.35 }]}
-            >
-              <Ionicons name="send" size={18} color="#fff" />
-            </Pressable>
-          </View>
+          <Face uri={myImage} name={myName} size={30} />
+          <TextInput
+            ref={inputRef}
+            value={body}
+            onChangeText={setBody}
+            placeholder="Ajouter un commentaire…"
+            placeholderTextColor={dark ? "rgba(255,255,255,0.35)" : "#8E8E93"}
+            style={[
+              styles.composerInput,
+              {
+                backgroundColor: dark ? "#1C1C1E" : "#F2F2F7",
+                color: dark ? "#fff" : c.text,
+                ...(Platform.OS === "web"
+                  ? ({ outlineStyle: "none", outlineWidth: 0 } as object)
+                  : null),
+              },
+            ]}
+            multiline
+            textAlignVertical="center"
+            autoFocus
+            blurOnSubmit={false}
+          />
+          <Pressable
+            onPress={() => void send()}
+            disabled={!ready}
+            accessibilityRole="button"
+            accessibilityLabel="Publier le commentaire"
+            style={[styles.composerSend, { opacity: ready ? 1 : 0.35 }]}
+          >
+            <Ionicons name="send" size={18} color="#fff" />
+          </Pressable>
         </View>
       </View>
       <ConfirmDialog
@@ -567,16 +544,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   replyHint: { fontSize: 12, fontWeight: "600" },
-  replyBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  composerDock: {
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   composerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   composerInput: {
     flex: 1,
@@ -797,22 +764,17 @@ const shopProfileStyles = StyleSheet.create({
   moreProductsText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   follow: {
     width: "100%",
-    minHeight: 52,
+    minHeight: 48,
     borderRadius: 999,
     backgroundColor: colors.buyEnd,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
   },
   followOff: { backgroundColor: "#DC2626" },
   followText: {
     color: "#fff",
     fontWeight: "800",
-    fontSize: 15,
-    letterSpacing: 0.2,
-    includeFontPadding: false,
-    textAlign: "center",
+    fontSize: 14,
     flexShrink: 0,
   },
   error: { color: "#ff9c9c", fontSize: 12, textAlign: "center" },
@@ -1294,13 +1256,9 @@ function ShopProfileBody({
             accessibilityRole="button"
             accessibilityLabel={followed ? "Ne plus suivre" : "Suivre"}
           >
-            <Text
-              style={shopProfileStyles.followText}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.9}
-            >
+            <Text style={shopProfileStyles.followText}>
               {followed ? "Ne plus suivre" : "Suivre"}
+              {"\u00A0"}
             </Text>
           </Pressable>
         </ScrollView>

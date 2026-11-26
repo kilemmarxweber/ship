@@ -6,6 +6,7 @@ import {
     ActivityIndicator,
     Dimensions,
     FlatList,
+    Platform,
     Pressable,
     StyleSheet,
     Text,
@@ -131,6 +132,8 @@ export function PublishCameraScreen({
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [micReady, setMicReady] = useState(Platform.OS === "web");
   const scrollX = useSharedValue(0);
   const { pose } = useLiveFacePose({ enabled: true, hz: 20 });
 
@@ -155,30 +158,60 @@ export function PublishCameraScreen({
   }, [permission, requestPermission]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      listRef.current?.scrollToOffset({
-        offset: modeIndex * MODE_W,
-        animated: false,
-      });
-      scrollX.value = modeIndex * MODE_W;
-    }, 40);
+    let alive = true;
+    void (async () => {
+      if (Platform.OS === "web") {
+        if (alive) setMicReady(true);
+        return;
+      }
+      try {
+        const Audio = await import("expo-audio");
+        const current = await Audio.getRecordingPermissionsAsync();
+        if (current.granted) {
+          if (alive) setMicReady(true);
+          return;
+        }
+        const asked = await Audio.requestRecordingPermissionsAsync();
+        if (alive) setMicReady(asked.granted);
+      } catch {
+        if (alive) setMicReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(
+      () => {
+        listRef.current?.scrollToOffset({
+          offset: modeIndex * MODE_W,
+          animated: false,
+        });
+        scrollX.value = modeIndex * MODE_W;
+      },
+      Platform.OS === "android" ? 120 : 40,
+    );
     return () => clearTimeout(t);
   }, [modeIndex, scrollX]);
 
   const selectMode = useCallback(
     (id: PublishCameraModeId, index: number, animated = true) => {
+      if (id !== modeId) setCameraReady(false);
       setModeId(id);
       listRef.current?.scrollToOffset({
         offset: index * MODE_W,
         animated,
       });
+      // eslint-disable-next-line react-hooks/immutability
       scrollX.value = index * MODE_W;
       if (id === "texte") {
         onTexte?.();
         showToast("Ajoute du texte après la capture", "info");
       }
     },
-    [onTexte, scrollX],
+    [modeId, onTexte, scrollX],
   );
 
   function onModeMomentum(e: {
@@ -199,6 +232,10 @@ export function PublishCameraScreen({
 
   async function shutter() {
     if (!cameraRef.current || busy) return;
+    if (!cameraReady) {
+      showToast("Caméra en cours d’ouverture…", "info");
+      return;
+    }
     if (activeMode.kind === "texte") {
       onTexte?.();
       showToast("Passe en PHOTO ou 15 s / 60 s pour capturer", "info");
@@ -210,7 +247,7 @@ export function PublishCameraScreen({
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.88,
-          skipProcessing: false,
+          skipProcessing: Platform.OS === "android",
         });
         if (!photo?.uri) throw new Error("Capture impossible");
         onCaptured({
@@ -229,6 +266,11 @@ export function PublishCameraScreen({
       return;
     }
 
+    if (!micReady) {
+      showToast("Autorise le micro pour filmer une vidéo.", "info");
+      return;
+    }
+
     if (recording) {
       setBusy(true);
       try {
@@ -244,6 +286,10 @@ export function PublishCameraScreen({
     setBusy(true);
     setRecording(true);
     try {
+      // Android : laisse le mode vidéo se stabiliser avant recordAsync.
+      if (Platform.OS === "android") {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+      }
       const video = await cameraRef.current.recordAsync({ maxDuration });
       setRecording(false);
       if (!video?.uri) throw new Error("Enregistrement impossible");
@@ -303,14 +349,23 @@ export function PublishCameraScreen({
     );
   }
 
+  const cameraMode = activeMode.kind === "video" ? "video" : "picture";
+
   return (
     <View style={styles.root}>
       <CameraView
+        key={`${cameraMode}-${facing}`}
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
-        mode={activeMode.kind === "video" ? "video" : "picture"}
+        mode={cameraMode}
         mirror={facing === "front"}
+        mute={false}
+        onCameraReady={() => setCameraReady(true)}
+        onMountError={() => {
+          setCameraReady(false);
+          showToast("Ouverture caméra impossible sur cet appareil", "error");
+        }}
       />
 
       {filterId !== "none" ? (
@@ -338,7 +393,10 @@ export function PublishCameraScreen({
             <Text style={styles.soundText}>Ajouter un son</Text>
           </Pressable>
           <Pressable
-            onPress={() => setFacing((f) => (f === "front" ? "back" : "front"))}
+            onPress={() => {
+              setCameraReady(false);
+              setFacing((f) => (f === "front" ? "back" : "front"));
+            }}
             style={styles.iconHit}
             accessibilityLabel="Retourner la caméra"
           >
@@ -443,8 +501,12 @@ export function PublishCameraScreen({
             <View style={styles.shutterSide} />
             <Pressable
               onPress={() => void shutter()}
-              disabled={busy && !recording}
-              style={[styles.shutterOuter, recording && styles.shutterRec]}
+              disabled={(busy && !recording) || !cameraReady}
+              style={[
+                styles.shutterOuter,
+                recording && styles.shutterRec,
+                !cameraReady && { opacity: 0.45 },
+              ]}
               accessibilityLabel={
                 activeMode.kind === "photo" ? "Prendre une photo" : "Filmer"
               }

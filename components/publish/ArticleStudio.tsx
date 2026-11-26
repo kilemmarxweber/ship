@@ -41,7 +41,7 @@ import {
 } from "@/components/publish/PublishCameraScreen";
 import { api, apiUpload, isVideoUrl, mediaUrl } from "@/src/api";
 import { VIDEO_STYLE_MODELS, type VideoStyleModel } from "@/src/image-style";
-import { pickBrowseFiles } from "@/src/pick-media";
+import { pickMediaLibrary } from "@/src/pick-media";
 import type { ProductFilterSelection } from "@/src/product-filters";
 import {
     encodeSlideMotion,
@@ -129,7 +129,7 @@ function EmptyCaptureChip({
       style={styles.emptyModeItem}
       accessibilityLabel={
         upload
-          ? "Importer photos ou vidéos"
+          ? "Ouvrir la galerie"
           : item.id === "photo"
             ? "Caméra photo"
             : `Caméra vidéo ${item.label}`
@@ -200,6 +200,7 @@ function EmptyCaptureStrip({
       offset: clamped * EMPTY_MODE_W,
       animated: true,
     });
+    // eslint-disable-next-line react-hooks/immutability
     scrollX.value = clamped * EMPTY_MODE_W;
   }
 
@@ -440,7 +441,7 @@ export function ArticleStudio({
     [onImages, setMediaBusy],
   );
 
-  /** + = upload · 15s/30s/60s/photo = ouvre caméra TikTok */
+  /** + = galerie · 15s/30s/60s/photo = ouvre la caméra */
   async function captureMedia(
     mode: "upload" | "video-60" | "video-30" | "video-15" | "photo",
   ) {
@@ -454,7 +455,7 @@ export function ArticleStudio({
       const limit = Math.max(1, 12 - images.length);
       setMediaBusy(true);
       try {
-        const picked = await pickBrowseFiles({ kind: "mixed", limit });
+        const picked = await pickMediaLibrary({ kind: "mixed", limit });
         if (!picked.length) {
           setMediaBusy(false);
           return;
@@ -463,7 +464,7 @@ export function ArticleStudio({
       } catch (cause) {
         setMediaBusy(false);
         showToast(
-          cause instanceof Error ? cause.message : "Import impossible",
+          cause instanceof Error ? cause.message : "Galerie impossible",
           "error",
         );
       }
@@ -479,7 +480,10 @@ export function ArticleStudio({
             ? "30s"
             : "60s";
     setCameraMode(nextMode);
-    setCameraOpen(true);
+    // Laisse le rendu précédent se fermer avant d’ouvrir la caméra (Android).
+    requestAnimationFrame(() => {
+      setCameraOpen(true);
+    });
   }
 
   async function addMedia(kind: "mixed" | "videos" = "mixed") {
@@ -803,7 +807,7 @@ export function ArticleStudio({
               disabled={!canContinue}
               onPress={onStory}
               accessibilityRole="button"
-              accessibilityLabel="Ma Story"
+              accessibilityLabel="Ma story"
             >
               {shopLogoUrl ? (
                 <Image
@@ -822,7 +826,14 @@ export function ArticleStudio({
                   <Ionicons name="person" size={14} color={c.ink} />
                 </View>
               )}
-              <Text style={[styles.storyText, { color: c.ink }]}>Ma Story</Text>
+              <Text
+                style={[styles.storyText, { color: c.ink }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
+                Ma story
+              </Text>
             </Pressable>
 
             <Pressable
@@ -836,7 +847,12 @@ export function ArticleStudio({
               accessibilityRole="button"
               accessibilityLabel="Suivant"
             >
-              <Text style={[styles.nextText, { color: c.primaryForeground }]}>
+              <Text
+                style={[styles.nextText, { color: c.primaryForeground }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
                 {mediaBusy ? "Upload…" : "Suivant"}
               </Text>
             </Pressable>
@@ -1045,21 +1061,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   storyBtn: {
-    flex: 1,
-    minHeight: 48,
+    flex: 1.15,
+    minHeight: 52,
     borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    overflow: "visible",
   },
-  storyText: { fontWeight: "800", fontSize: 15 },
+  storyText: {
+    flexShrink: 1,
+    fontWeight: "800",
+    fontSize: 15,
+    letterSpacing: 0.2,
+    includeFontPadding: false,
+    textAlign: "center",
+  },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
+    flexShrink: 0,
   },
   avatarFallback: {
     backgroundColor: "#E8E8ED",
@@ -1068,13 +1094,21 @@ const styles = StyleSheet.create({
   },
   nextBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    overflow: "visible",
   },
-  nextText: { fontWeight: "800", fontSize: 15 },
+  nextText: {
+    fontWeight: "800",
+    fontSize: 15,
+    letterSpacing: 0.2,
+    includeFontPadding: false,
+    textAlign: "center",
+  },
   disabled: { opacity: 0.45 },
   empty: {
     flex: 1,
